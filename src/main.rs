@@ -6,8 +6,12 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio::time::sleep;
 
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
+const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
+const MAX_RETRIES: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 enum ModelType {
@@ -34,6 +38,7 @@ impl ModelType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Message {
     role: String,
+    #[serde(default)]
     content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_calls: Option<Vec<ToolCall>>,
@@ -80,6 +85,13 @@ struct ChatRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct Usage {
+    prompt_tokens: usize,
+    completion_tokens: usize,
+    total_tokens: usize,
+}
+
+#[derive(Debug, Deserialize)]
 struct ChatResponse {
     choices: Vec<Choice>,
     #[serde(default)]
@@ -91,7 +103,7 @@ struct ChatResponse {
     #[serde(default)]
     model: Option<String>,
     #[serde(default)]
-    usage: Option<serde_json::Value>,
+    usage: Option<Usage>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +157,7 @@ struct KimiChat {
     client: reqwest::Client,
     messages: Vec<Message>,
     current_model: ModelType,
+    total_tokens_used: usize,
 }
 
 impl KimiChat {
@@ -155,6 +168,7 @@ impl KimiChat {
             client: reqwest::Client::new(),
             messages: Vec::new(),
             current_model: ModelType::Kimi,
+            total_tokens_used: 0,
         };
 
         // Add system message to inform the model about capabilities
@@ -384,7 +398,51 @@ impl KimiChat {
         }
     }
 
-    async fn call_api(&self, messages: &[Message]) -> Result<Message> {
+    fn trim_history_if_needed(&mut self) {
+        // Rough estimate: average 4 characters per token
+        let estimated_tokens: usize = self.messages.iter()
+            .map(|m| m.content.len() / 4)
+            .sum();
+
+        if estimated_tokens > MAX_CONTEXT_TOKENS {
+            println!(
+                "{} Context is getting large (~{} tokens). Trimming older messages...",
+                "✂️".yellow(),
+                estimated_tokens
+            );
+
+            // Always keep the system message (first message)
+            let system_message = self.messages.first().cloned();
+
+            // Keep the last 50% of messages to stay well under the limit
+            let keep_count = (self.messages.len() / 2).max(10);
+            let messages_to_keep: Vec<Message> = self.messages
+                .iter()
+                .rev()
+                .take(keep_count)
+                .rev()
+                .cloned()
+                .collect();
+
+            self.messages.clear();
+            if let Some(sys_msg) = system_message {
+                self.messages.push(sys_msg);
+            }
+            self.messages.extend(messages_to_keep);
+
+            let new_estimated: usize = self.messages.iter()
+                .map(|m| m.content.len() / 4)
+                .sum();
+            println!(
+                "{} Trimmed to {} messages (~{} tokens)",
+                "✅".green(),
+                self.messages.len(),
+                new_estimated
+            );
+        }
+    }
+
+    async fn call_api(&self, messages: &[Message]) -> Result<(Message, Option<Usage>)> {
         let request = ChatRequest {
             model: self.current_model.as_str().to_string(),
             messages: messages.to_vec(),
@@ -392,26 +450,51 @@ impl KimiChat {
             tool_choice: "auto".to_string(),
         };
 
-        let response = self
-            .client
-            .post(GROQ_API_URL)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(&request)
-            .send()
-            .await?
-            .error_for_status()?;
+        // Retry logic with exponential backoff
+        let mut retry_count = 0;
+        loop {
+            let response = self
+                .client
+                .post(GROQ_API_URL)
+                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Content-Type", "application/json")
+                .json(&request)
+                .send()
+                .await?;
 
-        let response_text = response.text().await?;
-        let chat_response: ChatResponse = serde_json::from_str(&response_text)
-            .with_context(|| format!("Failed to parse API response: {}", response_text))?;
+            // Handle rate limiting with exponential backoff
+            if response.status() == 429 {
+                if retry_count >= MAX_RETRIES {
+                    anyhow::bail!("Rate limit exceeded after {} retries", MAX_RETRIES);
+                }
 
-        chat_response
-            .choices
-            .into_iter()
-            .next()
-            .map(|c| c.message)
-            .context("No response from API")
+                let wait_time = Duration::from_secs(2u64.pow(retry_count));
+                println!(
+                    "{} Rate limited. Waiting {} seconds before retry {}/{}...",
+                    "⏳".yellow(),
+                    wait_time.as_secs(),
+                    retry_count + 1,
+                    MAX_RETRIES
+                );
+                sleep(wait_time).await;
+                retry_count += 1;
+                continue;
+            }
+
+            let response = response.error_for_status()?;
+            let response_text = response.text().await?;
+            let chat_response: ChatResponse = serde_json::from_str(&response_text)
+                .with_context(|| format!("Failed to parse API response: {}", response_text))?;
+
+            let message = chat_response
+                .choices
+                .into_iter()
+                .next()
+                .map(|c| c.message)
+                .context("No response from API")?;
+
+            return Ok((message, chat_response.usage));
+        }
     }
 
     async fn chat(&mut self, user_message: &str) -> Result<String> {
@@ -424,7 +507,23 @@ impl KimiChat {
         });
 
         loop {
-            let response = self.call_api(&self.messages).await?;
+            // Trim history if needed before making API call
+            self.trim_history_if_needed();
+
+            let (response, usage) = self.call_api(&self.messages).await?;
+
+            // Display token usage
+            if let Some(usage) = &usage {
+                self.total_tokens_used += usage.total_tokens;
+                println!(
+                    "{} Prompt: {} | Completion: {} | Total: {} | Session: {}",
+                    "📊".bright_black(),
+                    usage.prompt_tokens.to_string().bright_black(),
+                    usage.completion_tokens.to_string().bright_black(),
+                    usage.total_tokens.to_string().bright_black(),
+                    self.total_tokens_used.to_string().cyan()
+                );
+            }
 
             if let Some(tool_calls) = &response.tool_calls {
                 self.messages.push(response.clone());
@@ -471,8 +570,8 @@ async fn main() -> Result<()> {
     let api_key = env::var("GROQ_API_KEY")
         .context("GROQ_API_KEY environment variable not set")?;
 
-    let work_dir = env::current_dir()?.join("workspace");
-    fs::create_dir_all(&work_dir)?;
+    // Use current directory as work_dir so the AI can see project files
+    let work_dir = env::current_dir()?;
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
