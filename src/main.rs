@@ -18,8 +18,8 @@ enum ModelType {
 impl ModelType {
     fn as_str(&self) -> &'static str {
         match self {
-            ModelType::Kimi => "kimi-k2-instruct-0905",
-            ModelType::GptOss => "gpt-oss-120b",
+            ModelType::Kimi => "moonshotai/kimi-k2-instruct-0905",
+            ModelType::GptOss => "openai/gpt-oss-120b",
         }
     }
 
@@ -82,11 +82,27 @@ struct ChatRequest {
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
     choices: Vec<Choice>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    object: Option<String>,
+    #[serde(default)]
+    created: Option<i64>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    usage: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 struct Choice {
     message: Message,
+    #[serde(default)]
+    index: Option<i32>,
+    #[serde(default)]
+    finish_reason: Option<String>,
+    #[serde(default)]
+    logprobs: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -386,7 +402,9 @@ impl KimiChat {
             .await?
             .error_for_status()?;
 
-        let chat_response: ChatResponse = response.json().await?;
+        let response_text = response.text().await?;
+        let chat_response: ChatResponse = serde_json::from_str(&response_text)
+            .with_context(|| format!("Failed to parse API response: {}", response_text))?;
 
         chat_response
             .choices
@@ -447,6 +465,9 @@ impl KimiChat {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Load environment variables from .env file if it exists
+    dotenvy::dotenv().ok();
+
     let api_key = env::var("GROQ_API_KEY")
         .context("GROQ_API_KEY environment variable not set")?;
 
