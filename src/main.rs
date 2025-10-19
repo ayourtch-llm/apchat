@@ -407,48 +407,126 @@ impl KimiChat {
         }
     }
 
-    fn trim_history_if_needed(&mut self) {
-        // Rough estimate: average 4 characters per token
-        let estimated_tokens: usize = self.messages.iter()
-            .map(|m| m.content.len() / 4)
-            .sum();
+    async fn summarize_and_trim_history(&mut self) -> Result<()> {
+        const MAX_MESSAGES_BEFORE_SUMMARY: usize = 20;
+        const KEEP_RECENT_MESSAGES: usize = 5;
 
-        if estimated_tokens > MAX_CONTEXT_TOKENS {
-            println!(
-                "{} Context is getting large (~{} tokens). Trimming older messages...",
-                "✂️".yellow(),
-                estimated_tokens
-            );
+        // Only summarize if we have enough messages
+        if self.messages.len() <= MAX_MESSAGES_BEFORE_SUMMARY {
+            return Ok(());
+        }
 
-            // Always keep the system message (first message)
-            let system_message = self.messages.first().cloned();
+        println!("{} History getting long ({} messages). Summarizing...", "📝".yellow(), self.messages.len());
 
-            // Keep the last 50% of messages to stay well under the limit
-            let keep_count = (self.messages.len() / 2).max(10);
-            let messages_to_keep: Vec<Message> = self.messages
-                .iter()
-                .rev()
-                .take(keep_count)
-                .rev()
-                .cloned()
-                .collect();
+        // Keep system message and recent messages
+        let system_message = self.messages.first().cloned();
+        let recent_messages: Vec<Message> = self.messages
+            .iter()
+            .rev()
+            .take(KEEP_RECENT_MESSAGES)
+            .rev()
+            .cloned()
+            .collect();
 
-            self.messages.clear();
+        // Get messages to summarize (everything except system and recent)
+        let to_summarize: Vec<Message> = self.messages
+            .iter()
+            .skip(1) // Skip system
+            .take(self.messages.len() - KEEP_RECENT_MESSAGES - 1)
+            .cloned()
+            .collect();
+
+        // Build summary request
+        let mut summary_history = vec![Message {
+            role: "system".to_string(),
+            content: "You are a helpful assistant that summarizes conversation history concisely.".to_string(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+
+        // Format the conversation to summarize
+        let conversation_text = to_summarize.iter()
+            .map(|m| {
+                let role = &m.role;
+                let content = if m.content.len() > 500 {
+                    format!("{}... [truncated]", &m.content[..500])
+                } else {
+                    m.content.clone()
+                };
+                format!("{}: {}", role, content)
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        summary_history.push(Message {
+            role: "user".to_string(),
+            content: format!(
+                "Summarize this conversation history in 2-3 concise sentences, focusing on key context, decisions, and file changes:\n\n{}",
+                conversation_text
+            ),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        });
+
+        // Call API to get summary
+        let request = ChatRequest {
+            model: self.current_model.as_str().to_string(),
+            messages: summary_history,
+            tools: vec![],
+            tool_choice: "none".to_string(),
+        };
+
+        let response = self.client
+            .post(GROQ_API_URL)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            // If summarization fails, just trim without summarizing
+            println!("{} Summarization failed, doing simple trim", "⚠️".yellow());
+            self.messages = vec![system_message.unwrap()];
+            self.messages.extend(recent_messages);
+            return Ok(());
+        }
+
+        let response_text = response.text().await?;
+        let chat_response: ChatResponse = serde_json::from_str(&response_text)?;
+
+        if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
+            // Rebuild history with summary
+            let mut new_history = vec![];
+
             if let Some(sys_msg) = system_message {
-                self.messages.push(sys_msg);
+                new_history.push(sys_msg);
             }
-            self.messages.extend(messages_to_keep);
 
-            let new_estimated: usize = self.messages.iter()
-                .map(|m| m.content.len() / 4)
-                .sum();
+            // Add summary as a system-level context message
+            new_history.push(Message {
+                role: "system".to_string(),
+                content: format!("Previous conversation summary: {}", summary_msg.content),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+
+            // Add recent messages
+            new_history.extend(recent_messages);
+
+            self.messages = new_history;
+
             println!(
-                "{} Trimmed to {} messages (~{} tokens)",
+                "{} History summarized and trimmed to {} messages",
                 "✅".green(),
-                self.messages.len(),
-                new_estimated
+                self.messages.len()
             );
         }
+
+        Ok(())
     }
 
     async fn call_api(&self, messages: &[Message]) -> Result<(Message, Option<Usage>)> {
@@ -540,8 +618,8 @@ impl KimiChat {
         });
 
         loop {
-            // Trim history if needed before making API call
-            self.trim_history_if_needed();
+            // Summarize and trim history to keep context manageable
+            self.summarize_and_trim_history().await?;
 
             let (response, usage) = self.call_api(&self.messages).await?;
 
