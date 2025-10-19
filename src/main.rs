@@ -167,7 +167,7 @@ impl KimiChat {
             work_dir,
             client: reqwest::Client::new(),
             messages: Vec::new(),
-            current_model: ModelType::GptOss,
+            current_model: ModelType::Kimi,
             total_tokens_used: 0,
         };
 
@@ -240,7 +240,7 @@ impl KimiChat {
                 tool_type: "function".to_string(),
                 function: FunctionDef {
                     name: "edit_file".to_string(),
-                    description: "Edit a file by replacing old_content with new_content".to_string(),
+                    description: "Edit a file by replacing old_content with new_content. IMPORTANT: old_content must not be empty - provide the exact text to replace. To add new content, use write_file instead.".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
@@ -250,7 +250,7 @@ impl KimiChat {
                             },
                             "old_content": {
                                 "type": "string",
-                                "description": "The content to be replaced"
+                                "description": "The exact content to be replaced (must not be empty)"
                             },
                             "new_content": {
                                 "type": "string",
@@ -320,15 +320,36 @@ impl KimiChat {
     }
 
     fn edit_file(&self, file_path: &str, old_content: &str, new_content: &str) -> Result<String> {
+        // Prevent empty old_content which would cause catastrophic replacement
+        if old_content.is_empty() {
+            anyhow::bail!(
+                "edit_file requires non-empty old_content to find and replace. \
+                To add new content, use write_file instead, or provide the actual content to replace."
+            );
+        }
+
         let current_content = self.read_file(file_path)?;
 
         if !current_content.contains(old_content) {
-            anyhow::bail!("Old content not found in file");
+            anyhow::bail!(
+                "Old content not found in file. Make sure the old_content exactly matches \
+                the text you want to replace (including whitespace and indentation)."
+            );
+        }
+
+        // Count occurrences to warn about multiple replacements
+        let occurrences = current_content.matches(old_content).count();
+        if occurrences > 1 {
+            eprintln!(
+                "{} Warning: Found {} occurrences of old_content. All will be replaced.",
+                "⚠️".yellow(),
+                occurrences
+            );
         }
 
         let updated_content = current_content.replace(old_content, new_content);
         self.write_file(file_path, &updated_content)?;
-        Ok(format!("Successfully edited {}", file_path))
+        Ok(format!("Successfully edited {} ({} replacement(s))", file_path, occurrences))
     }
 
     fn list_files(&self, pattern: &str) -> Result<String> {
