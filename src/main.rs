@@ -437,7 +437,18 @@ impl KimiChat {
             return Ok(());
         }
 
-        println!("{} History getting long ({} messages). Summarizing...", "📝".yellow(), self.messages.len());
+        // Use the "other" model for summarization
+        let summary_model = match self.current_model {
+            ModelType::Kimi => ModelType::GptOss,
+            ModelType::GptOss => ModelType::Kimi,
+        };
+
+        println!(
+            "{} History getting long ({} messages). Asking {} to summarize...",
+            "📝".yellow(),
+            self.messages.len(),
+            summary_model.display_name()
+        );
 
         // Keep system message and recent messages
         let system_message = self.messages.first().cloned();
@@ -460,7 +471,13 @@ impl KimiChat {
         // Build summary request
         let mut summary_history = vec![Message {
             role: "system".to_string(),
-            content: "You are a helpful assistant that summarizes conversation history concisely.".to_string(),
+            content: format!(
+                "You are {}. You are being asked to summarize a conversation that was handled by {}. \
+                After summarizing, you may recommend switching to yourself if you believe you would be \
+                better suited for the ongoing work based on the context.",
+                summary_model.display_name(),
+                self.current_model.display_name()
+            ),
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -483,7 +500,9 @@ impl KimiChat {
         summary_history.push(Message {
             role: "user".to_string(),
             content: format!(
-                "Summarize this conversation history in 2-3 concise sentences, focusing on key context, decisions, and file changes:\n\n{}",
+                "Summarize this conversation history in 2-3 concise sentences, focusing on key context, decisions, and file changes:\n\n{}\n\n\
+                Then, based on the recent context and what seems to be the ongoing work, add a separate line starting with 'RECOMMENDATION: ' \
+                followed by either 'STAY' (keep current model) or 'SWITCH' (switch to you) and briefly explain why in one sentence.",
                 conversation_text
             ),
             tool_calls: None,
@@ -491,9 +510,9 @@ impl KimiChat {
             name: None,
         });
 
-        // Call API to get summary
+        // Call API to get summary using the OTHER model
         let request = ChatRequest {
-            model: self.current_model.as_str().to_string(),
+            model: summary_model.as_str().to_string(),
             messages: summary_history,
             tools: vec![],
             tool_choice: "none".to_string(),
@@ -519,6 +538,19 @@ impl KimiChat {
         let chat_response: ChatResponse = serde_json::from_str(&response_text)?;
 
         if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
+            let full_response = summary_msg.content;
+
+            // Parse recommendation
+            let (summary, recommendation_text) = if let Some(rec_pos) = full_response.find("RECOMMENDATION:") {
+                let summary = full_response[..rec_pos].trim().to_string();
+                let recommendation = full_response[rec_pos..].trim().to_string();
+
+                println!("{} {}", "💡".bright_cyan(), recommendation);
+                (summary, Some(recommendation))
+            } else {
+                (full_response, None)
+            };
+
             // Rebuild history with summary
             let mut new_history = vec![];
 
@@ -529,7 +561,7 @@ impl KimiChat {
             // Add summary as a system-level context message
             new_history.push(Message {
                 role: "system".to_string(),
-                content: format!("Previous conversation summary: {}", summary_msg.content),
+                content: format!("Previous conversation summary: {}", summary),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -545,6 +577,106 @@ impl KimiChat {
                 "✅".green(),
                 self.messages.len()
             );
+
+            // If there's a SWITCH recommendation, ask the current model to decide
+            if let Some(rec_text) = recommendation_text {
+                if rec_text.contains("SWITCH") {
+                    println!(
+                        "{} {} suggests switching. Asking {} to decide...",
+                        "🤔".yellow(),
+                        summary_model.display_name(),
+                        self.current_model.display_name()
+                    );
+
+                    // Ask current model to decide
+                    let decision_prompt = vec![
+                        Message {
+                            role: "system".to_string(),
+                            content: format!(
+                                "You are {}. You have been handling this conversation.",
+                                self.current_model.display_name()
+                            ),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                        },
+                        Message {
+                            role: "user".to_string(),
+                            content: format!(
+                                "{} has reviewed the conversation history and made the following recommendation:\n\n{}\n\n\
+                                Based on this recommendation and your understanding of the current context, do you agree to switch to {}? \
+                                Respond with only 'AGREE' or 'DECLINE' followed by a brief one-sentence explanation.",
+                                summary_model.display_name(),
+                                rec_text,
+                                summary_model.display_name()
+                            ),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                        },
+                    ];
+
+                    let decision_request = ChatRequest {
+                        model: self.current_model.as_str().to_string(),
+                        messages: decision_prompt,
+                        tools: vec![],
+                        tool_choice: "none".to_string(),
+                    };
+
+                    let decision_response = self.client
+                        .post(GROQ_API_URL)
+                        .header("Authorization", format!("Bearer {}", self.api_key))
+                        .header("Content-Type", "application/json")
+                        .json(&decision_request)
+                        .send()
+                        .await?;
+
+                    if decision_response.status().is_success() {
+                        let decision_text = decision_response.text().await?;
+                        if let Ok(decision_chat) = serde_json::from_str::<ChatResponse>(&decision_text) {
+                            if let Some(decision_msg) = decision_chat.choices.into_iter().next().map(|c| c.message) {
+                                let decision = decision_msg.content;
+                                println!("{} {} says: {}", "💬".bright_green(), self.current_model.display_name(), decision);
+
+                                if decision.to_uppercase().contains("AGREE") {
+                                    println!(
+                                        "{} Switching to {} by mutual agreement",
+                                        "🔄".bright_cyan(),
+                                        summary_model.display_name()
+                                    );
+                                    self.current_model = summary_model;
+
+                                    // Update system message
+                                    if let Some(sys_msg) = self.messages.first_mut() {
+                                        if sys_msg.role == "system" {
+                                            sys_msg.content = format!(
+                                                "You are an AI assistant with access to file operations and model switching capabilities. \
+                                                You are currently running as {}. You can switch to other models when appropriate:\n\
+                                                - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
+                                                - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
+                                                Available tools (use ONLY these exact names):\n\
+                                                - read_file: Read file contents\n\
+                                                - write_file: Write/create a file\n\
+                                                - edit_file: Edit existing file by replacing content\n\
+                                                - list_files: List files (single-level patterns only, no **)\n\
+                                                - switch_model: Switch between models\n\n\
+                                                IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
+                                                self.current_model.display_name()
+                                            );
+                                        }
+                                    }
+                                } else {
+                                    println!(
+                                        "{} Staying with {}",
+                                        "✋".yellow(),
+                                        self.current_model.display_name()
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
