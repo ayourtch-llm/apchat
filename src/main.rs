@@ -327,24 +327,78 @@ impl KimiChat {
     }
 
     fn list_files(&self, pattern: &str) -> Result<String> {
+        use std::collections::HashMap;
+        const MAX_PER_DIR: usize = 15;
+
         let glob_pattern = self.work_dir.join(pattern);
-        let mut files = Vec::new();
+        let mut dir_files: HashMap<String, Vec<String>> = HashMap::new();
 
         for entry in glob::glob(glob_pattern.to_str().unwrap())? {
             if let Ok(path) = entry {
-                if path.is_file() {
-                    if let Ok(relative) = path.strip_prefix(&self.work_dir) {
-                        files.push(relative.display().to_string());
-                    }
+                if let Ok(relative) = path.strip_prefix(&self.work_dir) {
+                    let path_str = relative.display().to_string();
+
+                    // Get directory (or "." for root files)
+                    let dir = if let Some(parent) = relative.parent() {
+                        if parent.as_os_str().is_empty() {
+                            ".".to_string()
+                        } else {
+                            parent.display().to_string()
+                        }
+                    } else {
+                        ".".to_string()
+                    };
+
+                    dir_files.entry(dir).or_insert_with(Vec::new).push(path_str);
                 }
             }
         }
 
-        if files.is_empty() {
-            Ok("No files found matching pattern".to_string())
-        } else {
-            Ok(files.join("\n"))
+        if dir_files.is_empty() {
+            return Ok("No files found matching pattern".to_string());
         }
+
+        let mut result = Vec::new();
+        let mut total_files = 0;
+        let mut total_hidden = 0;
+
+        // Sort directories for consistent output
+        let mut dirs: Vec<_> = dir_files.keys().cloned().collect();
+        dirs.sort();
+
+        for dir in dirs {
+            if let Some(files) = dir_files.get(&dir) {
+                let count = files.len();
+                total_files += count;
+
+                if count > MAX_PER_DIR {
+                    // Show first MAX_PER_DIR files
+                    result.push(format!("{}/ ({} files, showing first {}):", dir, count, MAX_PER_DIR));
+                    for file in files.iter().take(MAX_PER_DIR) {
+                        result.push(format!("  {}", file));
+                    }
+                    result.push(format!("  ... and {} more files in this directory", count - MAX_PER_DIR));
+                    total_hidden += count - MAX_PER_DIR;
+                } else {
+                    // Show all files
+                    if count > 1 {
+                        result.push(format!("{}/ ({} files):", dir, count));
+                    }
+                    for file in files {
+                        result.push(format!("  {}", file));
+                    }
+                }
+                result.push("".to_string()); // Empty line between directories
+            }
+        }
+
+        if total_hidden > 0 {
+            result.push(format!("Total: {} files ({} hidden for brevity)", total_files, total_hidden));
+        } else {
+            result.push(format!("Total: {} files", total_files));
+        }
+
+        Ok(result.join("\n"))
     }
 
     fn switch_model(&mut self, model_str: &str, reason: &str) -> Result<String> {
