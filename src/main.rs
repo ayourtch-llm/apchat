@@ -540,7 +540,31 @@ impl KimiChat {
                 Ok(result)
             }
             _ => {
-                Ok("Command cancelled".to_string())
+                // Allow user to comment when declining tool usage
+                println!("{} {}", "Command cancelled".yellow(), "- you can comment on why you declined".bright_black());
+                
+                // Ask if user wants to add a comment
+                print!("{} (y/N): ", "Add comment?".yellow());
+                std::io::stdout().flush()?;
+                
+                let mut comment_input = String::new();
+                std::io::stdin().read_line(&mut comment_input)?;
+                
+                if comment_input.trim().to_lowercase().as_str() == "y" || comment_input.trim().to_lowercase().as_str() == "yes" {
+                    print!("{}: ", "Comment".yellow());
+                    std::io::stdout().flush()?;
+                    
+                    let mut comment = String::new();
+                    std::io::stdin().read_line(&mut comment)?;
+                    
+                    if !comment.trim().is_empty() {
+                        Ok(format!("Command cancelled - {}", comment.trim()))
+                    } else {
+                        Ok("Command cancelled".to_string())
+                    }
+                } else {
+                    Ok("Command cancelled".to_string())
+                }
             }
         }
     }
