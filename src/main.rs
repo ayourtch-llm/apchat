@@ -1142,8 +1142,8 @@ async fn main() -> Result<()> {
     let api_key = env::var("GROQ_API_KEY")
         .context("GROQ_API_KEY environment variable not set")?;
 
-    // Use current directory as work_dir so the AI can see project files
-    let work_dir = env::current_dir()?;
+    // Use the 'workspace' subdirectory as work_dir so the AI can see project files and logs are stored there
+    let work_dir = env::current_dir()?.join("workspace");
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());

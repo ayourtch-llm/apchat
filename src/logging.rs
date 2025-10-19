@@ -1,58 +1,71 @@
-use std::fs::File;
-use std::io::{Write, BufWriter};
-use std::path::PathBuf;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+use serde_json;
+use anyhow::Result;
+use std::path::{Path, PathBuf};
+use tokio::fs::{self, OpenOptions};
+use tokio::io::AsyncWriteExt;
+
+#[derive(Serialize)]
+struct LogEntry {
+    timestamp: String, // ISO‑8601 UTC
+    role: String,
+    content: String,
+    model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    is_binary: Option<bool>,
+}
 
 pub struct ConversationLogger {
-    // Buffered writer for efficiency
-    writer: Option<BufWriter<File>>,
+    file_path: PathBuf,
+    file: Option<tokio::fs::File>,
 }
 
 impl ConversationLogger {
-    /// Create a new logger that writes to a file named `conversation.log`
-    /// inside the provided working directory.
-    ///
-    /// This function is async to match the usage in `main.rs`, but the
-    /// underlying file operations are synchronous because they are fast and
-    /// performed only once during initialization.
-    pub async fn new(work_dir: &PathBuf) -> Result<Self, std::io::Error> {
-        let log_path = work_dir.join("conversation.log");
-        // Ensure the parent directory exists
-        if let Some(parent) = log_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let file = File::create(&log_path)?;
-        let writer = BufWriter::new(file);
-        Ok(Self { writer: Some(writer) })
+    /// Create a new logger; generates the file name based on the current UTC time.
+    pub async fn new(workspace: &Path) -> Result<Self> {
+        // Ensure workspace exists
+        fs::create_dir_all(workspace).await?;
+        let now: DateTime<Utc> = Utc::now();
+        let filename = format!(
+            "kchat-{}.jsonl",
+            now.format("%Y-%m-%d-%H%M%S")
+        );
+        let file_path = workspace.join(filename);
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&file_path)
+            .await?;
+        Ok(Self { file_path, file: Some(file) })
     }
 
-    /// Log a message.
-    ///
-    /// The original code expected a simple `log(message)` method, but the
-    /// caller now passes a role and a few extra arguments. To stay compatible
-    /// we accept those extra parameters and ignore them – they are only used
-    /// for future extensions.
-    pub async fn log(
-        &mut self,
-        _role: &str,
-        message: &str,
-        _extra: Option<String>,
-        _flag: bool,
-    ) -> Result<(), std::io::Error> {
-        if let Some(writer) = &mut self.writer {
-            writeln!(writer, "{}", message)?;
-            writer.flush()?;
+    /// Append a single log entry.
+    pub async fn log(&mut self, role: &str, content: &str, model: Option<&str>, is_binary: bool) {
+        let entry = LogEntry {
+            timestamp: Utc::now().to_rfc3339(),
+            role: role.to_string(),
+            content: content.to_string(),
+            model: model.map(|s| s.to_string()),
+            is_binary: if is_binary { Some(true) } else { None },
+        };
+        if let Some(file) = &mut self.file {
+            if let Ok(json) = serde_json::to_string(&entry) {
+                // Write the JSON line
+                if let Err(e) = file.write_all(json.as_bytes()).await {
+                    eprintln!("[Logging error] {}", e);
+                } else if let Err(e) = file.write_all(b"\n").await {
+                    eprintln!("[Logging error] {}", e);
+                }
+            }
         }
-        Ok(())
     }
 
-    /// Gracefully shutdown the logger, flushing any buffered data.
-    pub async fn shutdown(&mut self) -> Result<(), std::io::Error> {
-        if let Some(writer) = self.writer.take() {
-            // Dropping the writer flushes the buffer; we explicitly flush
-            // to surface any I/O errors before the object is dropped.
-            let mut w = writer;
-            w.flush()?;
+    /// Close the logger (explicit drop). Called on graceful shutdown.
+    pub async fn shutdown(&mut self) {
+        if let Some(file) = self.file.take() {
+            // Ensure data is flushed
+            let _ = file.sync_all().await;
         }
-        Ok(())
     }
 }
