@@ -96,6 +96,11 @@ cargo run
 ./target/release/kimichat
 ```
 
+## Important Notes
+
+- When searching for source files, use specific patterns like `"src/*.rs"` instead of `"*.rs"` to locate files in the src directory
+- If your history already has a file read, do not read it again - as this will overload the history. Worst case - ask the user to restart the conversation.
+
 ## Key Functions
 
 - **summarize_and_trim_history**: Manages conversation history with automatic summarization

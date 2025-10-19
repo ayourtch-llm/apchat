@@ -12,6 +12,7 @@ use std::io::BufReader;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::Write;
+use std::ops::RangeInclusive;
 
 
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
@@ -172,6 +173,15 @@ struct SearchFilesArgs {
     case_insensitive: bool,
     #[serde(default)]
     max_results: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenFileArgs {
+    file_path: String,
+    #[serde(default)]
+    start_line: usize,
+    #[serde(default)]
+    end_line: usize,
 }
 
 fn default_max_results() -> u32 { 100 }
