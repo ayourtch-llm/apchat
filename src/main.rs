@@ -1151,6 +1151,30 @@ async fn main() -> Result<()> {
     println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
 
     let mut chat = KimiChat::new(api_key, work_dir);
+    // Initialize logger (async) – logs go into the workspace directory
+    chat.logger = match ConversationLogger::new(&chat.work_dir).await {
+        Ok(l) => Some(l),
+        Err(e) => {
+            eprintln!("Logging disabled: {}", e);
+            None
+        }
+    };
+
+    // If logger was created, log the initial system message that KimiChat::new added
+    if let Some(logger) = &mut chat.logger {
+        // The first message in chat.messages is the system prompt
+        if let Some(sys_msg) = chat.messages.first() {
+            logger
+                .log(
+                    "system",
+                    &sys_msg.content,
+                    None,
+                    false,
+                )
+                .await;
+        }
+    }
+
     let mut rl = DefaultEditor::new()?;
 
     // Read kimi.md if it exists to get project context
@@ -1163,13 +1187,20 @@ async fn main() -> Result<()> {
     };
 
     if !kimi_context.is_empty() {
-        chat.messages.push(Message {
+        let sys_msg = Message {
             role: "system".to_string(),
             content: format!("Project context: {}", kimi_context),
             tool_calls: None,
             tool_call_id: None,
             name: None,
-        });
+        };
+        // Log this system addition
+        if let Some(logger) = &mut chat.logger {
+            logger
+                .log("system", &sys_msg.content, None, false)
+                .await;
+        }
+        chat.messages.push(sys_msg);
     }
 
     loop {
@@ -1191,8 +1222,17 @@ async fn main() -> Result<()> {
 
                 rl.add_history_entry(line)?;
 
+                // Log the user message before sending
+                if let Some(logger) = &mut chat.logger {
+                    logger.log("user", line, None, false).await;
+                }
+
                 match chat.chat(line).await {
                     Ok(response) => {
+                        // Log assistant response
+                        if let Some(logger) = &mut chat.logger {
+                            logger.log("assistant", &response, None, false).await;
+                        }
                         let model_name = format!("[{}]", chat.current_model.display_name()).bright_magenta();
                         println!("\n{} {} {}\n", model_name, "Assistant:".bright_blue().bold(), response);
                     }
@@ -1214,6 +1254,11 @@ async fn main() -> Result<()> {
                 break;
             }
         }
+    }
+
+    // Graceful shutdown of logger (flush & close)
+    if let Some(logger) = &mut chat.logger {
+        logger.shutdown().await;
     }
 
     Ok(())
