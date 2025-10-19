@@ -264,6 +264,31 @@ impl KimiChat {
             Tool {
                 tool_type: "function".to_string(),
                 function: FunctionDef {
+                    name: "open_file".to_string(),
+                    description: "Open a file and display its contents with optional line range".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "file_path": {
+                                "type": "string",
+                                "description": "Path to the file relative to the work directory"
+                            },
+                            "start_line": {
+                                "type": "integer",
+                                "description": "Starting line number (1-based)"
+                            },
+                            "end_line": {
+                                "type": "integer",
+                                "description": "Ending line number (1-based)"
+                            }
+                        },
+                        "required": ["file_path"]
+                    }),
+                },
+            },
+            Tool {
+                tool_type: "function".to_string(),
+                function: FunctionDef {
                     name: "read_file".to_string(),
                     description: "Read the contents of a file from the work directory".to_string(),
                     parameters: serde_json::json!({
