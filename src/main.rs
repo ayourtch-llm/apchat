@@ -8,6 +8,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::sleep;
+use std::io::BufReader;
+use std::fs::File;
+use std::io::prelude::*;
+
 
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
@@ -150,6 +154,21 @@ struct SwitchModelArgs {
     model: String,
     reason: String,
 }
+
+#[derive(Debug, Deserialize)]
+struct SearchFilesArgs {
+    query: String,
+    #[serde(default = "default_pattern")]
+    pattern: String,
+    #[serde(default)]
+    regex: bool,
+    #[serde(default)]
+    case_insensitive: bool,
+    #[serde(default)]
+    max_results: u32,
+}
+
+fn default_max_results() -> u32 { 100 }
 
 struct KimiChat {
     api_key: String,
@@ -302,6 +321,40 @@ impl KimiChat {
             Tool {
                 tool_type: "function".to_string(),
                 function: FunctionDef {
+                    name: "search_files".to_string(),
+                    description: "Search for a string or regular-expression across files matching a glob pattern. Returns lines with file:line:content format.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "pattern": {
+                                "type": "string",
+                                "description": "Single-level glob pattern (e.g., 'src/*.rs'). Defaults to '*' (all files)."
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Text or regex to search for (required)"
+                            },
+                            "regex": {
+                                "type": "boolean",
+                                "description": "Treat 'query' as a Rust regex. Default false."
+                            },
+                            "case_insensitive": {
+                                "type": "boolean",
+                                "description": "Plain-text case-insensitive search (ignored when 'regex' is true). Default false."
+                            },
+                            "max_results": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Maximum number of matches to return. Default 100."
+                            }
+                        },
+                        "required": ["query"]
+                    }),
+                },
+            },
+            Tool {
+                tool_type: "function".to_string(),
+                function: FunctionDef {
                     name: "switch_model".to_string(),
                     description: "Switch to a different AI model. Use this when the current model thinks another model would be better suited for the task. Available models: 'kimi' (Kimi-K2-Instruct-0905 - good for general tasks and coding) and 'gpt-oss' (GPT-OSS-120B - good for complex reasoning and analysis).".to_string(),
                     parameters: serde_json::json!({
@@ -423,6 +476,72 @@ impl KimiChat {
         ))
     }
 
+    fn search_files(
+        &self,
+        pattern: &str,
+        query: &str,
+        regex: bool,
+        case_insensitive: bool,
+        max_results: usize,
+    ) -> Result<String> {
+        // Guard against recursive patterns
+        if pattern.contains("**") {
+            return Ok("Recursive patterns (**) are not allowed. Use single-level patterns like 'src/*' or 'src/*.rs' instead.".to_string());
+        }
+
+        let glob_pattern = self.work_dir.join(pattern);
+        let mut results = Vec::new();
+
+        // Compile regex if requested
+        let re = if regex {
+            Some(regex::Regex::new(query)
+                .with_context(|| format!("Invalid regex pattern: {}", query))?)
+        } else {
+            None
+        };
+
+        for entry in glob::glob(glob_pattern.to_str().unwrap())? {
+            if let Ok(path) = entry {
+                let relative_path = path.strip_prefix(&self.work_dir)?.display().to_string();
+
+                let file = fs::File::open(&path)?;
+                let reader = std::io::BufReader::new(file);
+
+                for (idx, line) in reader.lines().enumerate() {
+                    let line = line?;
+                    let is_match = if let Some(re) = &re {
+                        re.is_match(&line)
+                    } else if case_insensitive {
+                        line.to_lowercase().contains(&query.to_lowercase())
+                    } else {
+                        line.contains(query)
+                    };
+
+                    if is_match {
+                        results.push(format!("{}:{}: {}", relative_path, idx + 1, line.trim_end()));
+                        if results.len() >= max_results {
+                            break;
+                        }
+                    }
+                }
+
+                if results.len() >= max_results {
+                    break;
+                }
+            }
+        }
+
+        if results.is_empty() {
+            Ok("No matches found.".to_string())
+        } else {
+            let mut out = results.join("\n");
+            if results.len() == max_results {
+                out.push_str("\n... (truncated, maximum number of results reached)");
+            }
+            Ok(out)
+        }
+    }
+
     fn execute_tool(&mut self, name: &str, arguments: &str) -> Result<String> {
         match name {
             "read_file" => {
@@ -440,6 +559,16 @@ impl KimiChat {
             "list_files" => {
                 let args: ListFilesArgs = serde_json::from_str(arguments)?;
                 self.list_files(&args.pattern)
+            }
+            "search_files" => {
+                let args: SearchFilesArgs = serde_json::from_str(arguments)?;
+                self.search_files(
+                    &args.pattern,
+                    &args.query,
+                    args.regex,
+                    args.case_insensitive,
+                    args.max_results as usize,
+                )
             }
             "switch_model" => {
                 let args: SwitchModelArgs = serde_json::from_str(arguments)?;
