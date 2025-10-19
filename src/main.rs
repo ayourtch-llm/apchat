@@ -135,7 +135,7 @@ struct ListFilesArgs {
 }
 
 fn default_pattern() -> String {
-    "**/*".to_string()
+    "*".to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,7 +167,7 @@ impl KimiChat {
             work_dir,
             client: reqwest::Client::new(),
             messages: Vec::new(),
-            current_model: ModelType::Kimi,
+            current_model: ModelType::GptOss,
             total_tokens_used: 0,
         };
 
@@ -179,8 +179,13 @@ impl KimiChat {
                 You are currently running as {}. You can switch to other models when appropriate:\n\
                 - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
                 - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                Use the switch_model tool when you believe another model would be better suited for the user's request. \
-                The conversation history will be preserved when switching models.",
+                Available tools (use ONLY these exact names):\n\
+                - read_file: Read file contents\n\
+                - write_file: Write/create a file\n\
+                - edit_file: Edit existing file by replacing content\n\
+                - list_files: List files (single-level patterns only, no **)\n\
+                - switch_model: Switch between models\n\n\
+                IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
                 chat.current_model.display_name()
             ),
             tool_calls: None,

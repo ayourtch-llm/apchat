@@ -53,13 +53,13 @@ Or use the release build:
 
 The application will:
 1. Create a `workspace` directory in the current directory if it doesn't exist
-2. Start an interactive chat session with Kimi-K2-Instruct-0905 as the default model
+2. Start an interactive chat session with GPT-OSS-120B as the default model
 3. Allow you to chat with AI models that can perform file operations and switch between models
 
 ### Available Models
 
-- **Kimi-K2-Instruct-0905**: Good for general tasks, coding, and quick responses (default)
-- **GPT-OSS-120B**: Good for complex reasoning, analysis, and advanced problem-solving
+- **Kimi-K2-Instruct-0905**: Good for general tasks, coding, and quick responses
+- **GPT-OSS-120B**: Good for complex reasoning, analysis, and advanced problem-solving (default)
 
 Models can automatically switch to the most appropriate model for your request using the `switch_model` tool.
 
