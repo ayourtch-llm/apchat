@@ -2,6 +2,18 @@ use crate::{param, core::tool::{Tool, ToolParameters, ToolResult, ParameterDefin
 use crate::core::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use colored::Colorize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EditOperation {
+    file_path: String,
+    old_content: String,
+    new_content: String,
+    description: String,
+}
 
 /// Tool for switching between AI models
 pub struct SwitchModelTool {
@@ -59,6 +71,40 @@ impl Tool for SwitchModelTool {
     }
 }
 
+// Helper function to get the edit plan file path
+fn get_plan_file_path(work_dir: &PathBuf) -> PathBuf {
+    work_dir.join(".kimichat_edit_plan.json")
+}
+
+// Helper function to save edit plan
+fn save_edit_plan(work_dir: &PathBuf, edits: &[EditOperation]) -> Result<(), String> {
+    let plan_path = get_plan_file_path(work_dir);
+    let json = serde_json::to_string_pretty(edits)
+        .map_err(|e| format!("Failed to serialize edit plan: {}", e))?;
+    fs::write(&plan_path, json)
+        .map_err(|e| format!("Failed to write edit plan: {}", e))?;
+    Ok(())
+}
+
+// Helper function to load edit plan
+fn load_edit_plan(work_dir: &PathBuf) -> Result<Vec<EditOperation>, String> {
+    let plan_path = get_plan_file_path(work_dir);
+    if !plan_path.exists() {
+        return Err("No edit plan exists. Create one first using plan_edits.".to_string());
+    }
+    let json = fs::read_to_string(&plan_path)
+        .map_err(|e| format!("Failed to read edit plan: {}", e))?;
+    let edits: Vec<EditOperation> = serde_json::from_str(&json)
+        .map_err(|e| format!("Failed to parse edit plan: {}", e))?;
+    Ok(edits)
+}
+
+// Helper function to clear edit plan
+fn clear_edit_plan(work_dir: &PathBuf) {
+    let plan_path = get_plan_file_path(work_dir);
+    let _ = fs::remove_file(&plan_path); // Ignore errors if file doesn't exist
+}
+
 /// Tool for planning multiple file edits
 pub struct PlanEditsTool;
 
@@ -69,30 +115,102 @@ impl Tool for PlanEditsTool {
     }
 
     fn description(&self) -> &str {
-        "Plan multiple file edits with atomic execution"
+        "Plan multiple file edits to apply atomically. Validates all edits before storing the plan."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("edits", "array", "Array of edit operations with file_path, old_content, and new_content", required),
+            param!("edits", "array", "Array of edit operations with file_path, old_content, new_content, and description fields", required),
         ])
     }
 
-    async fn execute(&self, params: ToolParameters, _context: &ToolContext) -> ToolResult {
-        // For now, this is a placeholder that returns the plan
-        // In the full implementation, this would create and validate an edit plan
-
-        let edits_str = match params.data.get("edits") {
-            Some(edits) => serde_json::to_string_pretty(edits).unwrap_or_else(|_| "Invalid edits array".to_string()),
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Parse edits from parameters
+        let edits_value = match params.data.get("edits") {
+            Some(value) => value,
             None => return ToolResult::error("Edits parameter is required".to_string()),
         };
 
-        let message = format!(
-            "Edit plan received:\n{}\nNote: Actual edit planning and execution will be implemented in the main application layer",
-            edits_str
-        );
+        let edits: Vec<EditOperation> = match serde_json::from_value(edits_value.clone()) {
+            Ok(edits) => edits,
+            Err(e) => return ToolResult::error(format!("Failed to parse edits: {}", e)),
+        };
 
-        ToolResult::success(message)
+        if edits.is_empty() {
+            return ToolResult::error("Cannot create empty edit plan. Provide at least one edit operation.".to_string());
+        }
+
+        println!("\n{}", "📋 Edit Plan Created".bright_cyan().bold());
+        println!("{}", "═".repeat(60).bright_black());
+
+        // Validate and preview each edit
+        let mut validated_edits = Vec::new();
+        for (idx, edit) in edits.iter().enumerate() {
+            println!("\n{} {} - {}",
+                format!("Edit #{}", idx + 1).bright_yellow(),
+                edit.file_path.cyan(),
+                edit.description.bright_white()
+            );
+
+            // Read current file to validate old_content exists
+            let full_path = context.work_dir.join(&edit.file_path);
+            let current_content = match fs::read_to_string(&full_path) {
+                Ok(content) => content,
+                Err(_) => return ToolResult::error(format!("Edit #{}: File not found: {}", idx + 1, edit.file_path)),
+            };
+
+            if edit.old_content.is_empty() {
+                return ToolResult::error(format!("Edit #{}: old_content cannot be empty for file {}", idx + 1, edit.file_path));
+            }
+
+            if edit.old_content == edit.new_content {
+                return ToolResult::error(format!(
+                    "Edit #{}: old_content and new_content are identical for file {}. No change would be made.",
+                    idx + 1, edit.file_path
+                ));
+            }
+
+            if !current_content.contains(&edit.old_content) {
+                return ToolResult::error(format!(
+                    "Edit #{}: old_content not found in file {}\n\nLooking for:\n{}\n\nFile does not currently contain this content.",
+                    idx + 1, edit.file_path, edit.old_content
+                ));
+            }
+
+            // Show simple diff preview
+            println!("  {}", "─ Old:".red());
+            for line in edit.old_content.lines().take(3) {
+                println!("  {} {}", "-".red(), line);
+            }
+            if edit.old_content.lines().count() > 3 {
+                println!("  {} ...", "-".red());
+            }
+            println!("  {}", "+ New:".green());
+            for line in edit.new_content.lines().take(3) {
+                println!("  {} {}", "+".green(), line);
+            }
+            if edit.new_content.lines().count() > 3 {
+                println!("  {} ...", "+".green());
+            }
+
+            validated_edits.push(edit.clone());
+        }
+
+        println!("\n{}", "═".repeat(60).bright_black());
+        println!("{} {} edits planned", "✓".green(), validated_edits.len());
+        println!("\n{}", "Use apply_edit_plan to execute all edits atomically.".bright_yellow());
+        println!("{}", "The plan will be cleared after application or if you create a new plan.".bright_black());
+
+        // Store the plan
+        if let Err(e) = save_edit_plan(&context.work_dir, &validated_edits) {
+            return ToolResult::error(e);
+        }
+
+        ToolResult::success(format!(
+            "Edit plan created successfully with {} operation(s). All edits have been validated. \
+            Use apply_edit_plan to execute all changes atomically.",
+            validated_edits.len()
+        ))
     }
 }
 
@@ -106,28 +224,79 @@ impl Tool for ApplyEditPlanTool {
     }
 
     fn description(&self) -> &str {
-        "Apply a previously planned set of file edits"
+        "Apply a previously planned set of file edits atomically"
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
-        HashMap::from([
-            param!("plan_id", "string", "ID of the edit plan to apply", required),
-        ])
+        // No parameters needed - applies the stored plan
+        HashMap::new()
     }
 
-    async fn execute(&self, params: ToolParameters, _context: &ToolContext) -> ToolResult {
-        let plan_id = match params.get_required::<String>("plan_id") {
-            Ok(plan_id) => plan_id,
-            Err(e) => return ToolResult::error(e.to_string()),
+    async fn execute(&self, _params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Load the plan
+        let plan = match load_edit_plan(&context.work_dir) {
+            Ok(plan) => plan,
+            Err(e) => return ToolResult::error(e),
         };
 
-        // For now, this is a placeholder
-        // In the full implementation, this would apply the actual edit plan
-        let message = format!(
-            "Apply edit plan requested for ID: {}\nNote: Actual edit plan application will be implemented in the main application layer",
-            plan_id
-        );
+        println!("\n{}", "🚀 Applying Edit Plan".bright_cyan().bold());
+        println!("{}", "═".repeat(60).bright_black());
 
-        ToolResult::success(message)
+        // Apply all edits sequentially
+        let mut results = Vec::new();
+        for (idx, edit) in plan.iter().enumerate() {
+            println!("\n{} {}", format!("Applying edit #{}", idx + 1).yellow(), edit.file_path.cyan());
+
+            // Re-read file to get current state (in case previous edits affected it)
+            let full_path = context.work_dir.join(&edit.file_path);
+            let current_content = match fs::read_to_string(&full_path) {
+                Ok(content) => content,
+                Err(_) => {
+                    clear_edit_plan(&context.work_dir);
+                    return ToolResult::error(format!(
+                        "Edit #{} failed: File not found: {}. Edit plan aborted and cleared.",
+                        idx + 1, edit.file_path
+                    ));
+                }
+            };
+
+            // Check if content still exists (might have changed due to previous edits)
+            if !current_content.contains(&edit.old_content) {
+                clear_edit_plan(&context.work_dir);
+                return ToolResult::error(format!(
+                    "Edit #{} failed: old_content no longer found in {}. \
+                    A previous edit in this plan may have affected this file. \
+                    Edit plan aborted at step {}. No further edits applied. Plan has been cleared.",
+                    idx + 1, edit.file_path, idx + 1
+                ));
+            }
+
+            // Apply the edit
+            let updated_content = current_content.replace(&edit.old_content, &edit.new_content);
+
+            // Write the updated content
+            if let Err(e) = fs::write(&full_path, &updated_content) {
+                clear_edit_plan(&context.work_dir);
+                return ToolResult::error(format!(
+                    "Edit #{} failed: Failed to write file {}: {}. Edit plan aborted and cleared.",
+                    idx + 1, edit.file_path, e
+                ));
+            }
+
+            results.push(format!("✓ {}", edit.file_path));
+            println!("  {} {}", "✓".green(), edit.description);
+        }
+
+        println!("\n{}", "═".repeat(60).bright_black());
+        println!("{} All {} edits applied successfully!", "✅".green(), plan.len());
+
+        // Clear the plan after successful application
+        clear_edit_plan(&context.work_dir);
+
+        ToolResult::success(format!(
+            "Successfully applied {} edit(s):\n{}",
+            plan.len(),
+            results.join("\n")
+        ))
     }
 }

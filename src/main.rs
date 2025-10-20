@@ -1222,16 +1222,8 @@ impl KimiChat {
                 let args: SwitchModelArgs = serde_json::from_str(arguments)?;
                 self.switch_model(&args.model, &args.reason)
             }
-            "plan_edits" => {
-                let args: PlanEditsArgs = serde_json::from_str(arguments)?;
-                self.plan_edits(args.edits)
-            }
-            "apply_edit_plan" => {
-                let _args: ApplyEditPlanArgs = serde_json::from_str(arguments)?;
-                self.apply_edit_plan()
-            }
             _ => {
-                // Use the tool registry for all other tools
+                // Use the tool registry for all tools (including plan_edits and apply_edit_plan)
                 let params = ToolParameters::from_json(arguments)
                     .with_context(|| format!("Failed to parse tool arguments for '{}': {}", name, arguments))?;
 
