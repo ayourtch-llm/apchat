@@ -379,6 +379,38 @@ struct KimiChat {
 }
 
 impl KimiChat {
+    /// Generate system prompt based on current model
+    fn get_system_prompt(model: &ModelType) -> String {
+        let base_prompt = format!(
+            "You are an AI assistant with access to file operations and model switching capabilities. \
+            You are currently running as {}. You can switch to other models when appropriate:\n\
+            - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
+            - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
+            Available tools (use ONLY these exact names):\n\
+            - read_file: Read file contents (shows full content for files ≤500 lines, preview for larger files)\n\
+            - open_file: Read specific line range from a file (use this for large files or when you need specific sections)\n\
+            - write_file: Write/create a file\n\
+            - edit_file: Edit existing file by replacing content\n\
+            - list_files: List files (single-level patterns only, no **)\n\
+            - switch_model: Switch between models\n\n",
+            model.display_name()
+        );
+
+        if *model == ModelType::GptOss {
+            format!(
+                "{}CRITICAL WARNING: If you attempt to call ANY tool not listed above (such as 'edit', 'repo_browser.search', \
+                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the Kimi model \
+                and your request will be retried. Use ONLY the exact tool names listed above.",
+                base_prompt
+            )
+        } else {
+            format!(
+                "{}IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
+                base_prompt
+            )
+        }
+    }
+
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let mut chat = Self {
             api_key,
@@ -391,39 +423,7 @@ impl KimiChat {
         };
 
         // Add system message to inform the model about capabilities
-        let system_content = if chat.current_model == ModelType::GptOss {
-            format!(
-                "You are an AI assistant with access to file operations and model switching capabilities. \
-                You are currently running as {}. You can switch to other models when appropriate:\n\
-                - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
-                - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                Available tools (use ONLY these exact names):\n\
-                - read_file: Read file contents\n\
-                - write_file: Write/create a file\n\
-                - edit_file: Edit existing file by replacing content\n\
-                - list_files: List files (single-level patterns only, no **)\n\
-                - switch_model: Switch between models\n\n\
-                CRITICAL WARNING: If you attempt to call ANY tool not listed above (such as 'edit', 'repo_browser.search', \
-                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the Kimi model \
-                and your request will be retried. Use ONLY the exact tool names listed above.",
-                chat.current_model.display_name()
-            )
-        } else {
-            format!(
-                "You are an AI assistant with access to file operations and model switching capabilities. \
-                You are currently running as {}. You can switch to other models when appropriate:\n\
-                - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
-                - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                Available tools (use ONLY these exact names):\n\
-                - read_file: Read file contents\n\
-                - write_file: Write/create a file\n\
-                - edit_file: Edit existing file by replacing content\n\
-                - list_files: List files (single-level patterns only, no **)\n\
-                - switch_model: Switch between models\n\n\
-                IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
-                chat.current_model.display_name()
-            )
-        };
+        let system_content = Self::get_system_prompt(&chat.current_model);
 
         chat.messages.push(Message {
             role: "system".to_string(),
@@ -627,17 +627,19 @@ impl KimiChat {
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len();
 
-        // Show only first 10 lines with total count
-        const PREVIEW_LINES: usize = 10;
+        // Smart preview: show full content for small-to-medium files,
+        // preview for very large files
+        const FULL_CONTENT_THRESHOLD: usize = 500;
+        const PREVIEW_LINES: usize = 50;
 
-        if total_lines <= PREVIEW_LINES {
-            // File is short enough, show it all
+        if total_lines <= FULL_CONTENT_THRESHOLD {
+            // File is small/medium, show it all
             Ok(format!("{}\n\n[Total: {} lines]", content, total_lines))
         } else {
-            // Show preview with indication there's more
+            // File is very large, show substantial preview
             let preview: Vec<&str> = lines.iter().take(PREVIEW_LINES).copied().collect();
             Ok(format!(
-                "{}\n... ({} more lines)\n\n[Total: {} lines. Use open_file with start_line/end_line to read specific ranges]",
+                "{}\n... ({} more lines omitted)\n\n[Total: {} lines. IMPORTANT: This file is too large to show fully. Use open_file with start_line/end_line to read specific ranges. DO NOT attempt to edit this file without reading the full content first using open_file!]",
                 preview.join("\n"),
                 total_lines - PREVIEW_LINES,
                 total_lines
@@ -677,6 +679,36 @@ impl KimiChat {
         output
     }
 
+    fn calculate_similarity(&self, s1: &str, s2: &str) -> f64 {
+        // Simple similarity calculation based on matching characters
+        let len1 = s1.len();
+        let len2 = s2.len();
+
+        if len1 == 0 && len2 == 0 {
+            return 1.0;
+        }
+
+        if len1 == 0 || len2 == 0 {
+            return 0.0;
+        }
+
+        // Count matching characters
+        let chars1: Vec<char> = s1.chars().collect();
+        let chars2: Vec<char> = s2.chars().collect();
+
+        let mut matches = 0;
+        let min_len = len1.min(len2);
+
+        for i in 0..min_len {
+            if chars1.get(i) == chars2.get(i) {
+                matches += 1;
+            }
+        }
+
+        // Normalize by the longer length
+        matches as f64 / len1.max(len2) as f64
+    }
+
     fn edit_file(&self, file_path: &str, old_content: &str, new_content: &str) -> Result<String> {
         // Prevent empty old_content which would cause catastrophic replacement
         if old_content.is_empty() {
@@ -710,20 +742,34 @@ impl KimiChat {
                 let first_search_line = search_lines[0].trim();
                 println!("\n{}", "Searching for similar content...".bright_cyan());
 
+                let mut found_candidates = Vec::new();
+
                 for (i, line) in lines.iter().enumerate() {
                     if line.trim().contains(first_search_line) {
-                        let start = i.saturating_sub(2);
-                        let end = (i + 5).min(lines.len());
-                        println!("\n{} Found similar at line {}:", "💡".bright_cyan(), i + 1);
-                        for (j, ctx_line) in lines[start..end].iter().enumerate() {
-                            let line_num = start + j + 1;
-                            if line_num == i + 1 {
-                                println!("{}", format!("{:4} > {}", line_num, ctx_line).bright_yellow());
-                            } else {
-                                println!("{}", format!("{:4}   {}", line_num, ctx_line).bright_black());
-                            }
-                        }
+                        // Extract a context block of similar size to old_content
+                        let start = i;
+                        let end = (i + search_lines.len()).min(lines.len());
+                        let candidate = lines[start..end].join("\n");
+                        found_candidates.push((i + 1, candidate));
                     }
+                }
+
+                for (line_num, candidate) in found_candidates.iter().take(3) { // Show max 3 candidates
+                    println!("\n{} Found similar content at line {}:", "💡".bright_cyan(), line_num);
+                    println!("{}", "─".repeat(60).bright_black());
+
+                    // Show diff between what was searched for and what was found
+                    let diff = self.show_diff(old_content, candidate, 1);
+                    print!("{}", diff);
+                    println!("{}", "─".repeat(60).bright_black());
+
+                    // Calculate similarity score
+                    let similarity = self.calculate_similarity(old_content, candidate);
+                    println!("{} Similarity: {:.0}%", "📊".bright_black(), similarity * 100.0);
+                }
+
+                if found_candidates.is_empty() {
+                    println!("{}", "No similar content found. The file content might be very different.".yellow());
                 }
             }
 
@@ -1286,20 +1332,7 @@ impl KimiChat {
                                     // Update system message
                                     if let Some(sys_msg) = self.messages.first_mut() {
                                         if sys_msg.role == "system" {
-                                            sys_msg.content = format!(
-                                                "You are an AI assistant with access to file operations and model switching capabilities. \
-                                                You are currently running as {}. You can switch to other models when appropriate:\n\
-                                                - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
-                                                - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                                                Available tools (use ONLY these exact names):\n\
-                                                - read_file: Read file contents\n\
-                                                - write_file: Write/create a file\n\
-                                                - edit_file: Edit existing file by replacing content\n\
-                                                - list_files: List files (single-level patterns only, no **)\n\
-                                                - switch_model: Switch between models\n\n\
-                                                IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
-                                                self.current_model.display_name()
-                                            );
+                                            sys_msg.content = Self::get_system_prompt(&self.current_model);
                                         }
                                     }
                                 } else {
@@ -1481,20 +1514,7 @@ impl KimiChat {
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
                             if sys_msg.role == "system" {
-                                sys_msg.content = format!(
-                                    "You are an AI assistant with access to file operations and model switching capabilities. \
-                                    You are currently running as {}. You can switch to other models when appropriate:\n\
-                                    - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
-                                    - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                                    Available tools (use ONLY these exact names):\n\
-                                    - read_file: Read file contents\n\
-                                    - write_file: Write/create a file\n\
-                                    - edit_file: Edit existing file by replacing content\n\
-                                    - list_files: List files (single-level patterns only, no **)\n\
-                                    - switch_model: Switch between models\n\n\
-                                    IMPORTANT: Only use the exact tool names listed above. Do not make up tool names.",
-                                    current_model.display_name()
-                                );
+                                sys_msg.content = Self::get_system_prompt(&current_model);
                             }
                         }
 
@@ -1516,22 +1536,7 @@ impl KimiChat {
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
                             if sys_msg.role == "system" {
-                                sys_msg.content = format!(
-                                    "You are an AI assistant with access to file operations and model switching capabilities. \
-                                    You are currently running as {}. You can switch to other models when appropriate:\n\
-                                    - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
-                                    - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\n\
-                                    Available tools (use ONLY these exact names):\n\
-                                    - read_file: Read file contents\n\
-                                    - write_file: Write/create a file\n\
-                                    - edit_file: Edit existing file by replacing content\n\
-                                    - list_files: List files (single-level patterns only, no **)\n\
-                                    - switch_model: Switch between models\n\n\
-                                    CRITICAL WARNING: If you attempt to call ANY tool not listed above (such as 'edit', 'repo_browser.search', \
-                                    'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the Kimi model \
-                                    and your request will be retried. Use ONLY the exact tool names listed above.",
-                                    current_model.display_name()
-                                );
+                                sys_msg.content = Self::get_system_prompt(&current_model);
                             }
                         }
 
