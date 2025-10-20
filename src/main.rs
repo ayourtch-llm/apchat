@@ -824,11 +824,27 @@ impl KimiChat {
             }
         }
 
+        // Check if this would actually make any changes
+        if old_content == new_content {
+            return Ok(format!(
+                "No changes needed: The content you want to replace and the replacement are identical. \
+                The file already contains the desired content. No edit was performed."
+            ));
+        }
+
         // Count occurrences
         let occurrences = current_content.matches(old_content).count();
 
         // Generate the updated content
         let updated_content = current_content.replace(old_content, new_content);
+
+        // Check if the edit would result in no actual file changes
+        if current_content == updated_content {
+            return Ok(format!(
+                "No changes needed: The file content would remain unchanged after this edit. \
+                The file already contains the desired state."
+            ));
+        }
 
         // Show diff
         println!("\n{}", format!("📝 Proposed changes to {}:", file_path).bright_cyan().bold());
