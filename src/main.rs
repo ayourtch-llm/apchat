@@ -727,10 +727,45 @@ impl KimiChat {
                 }
             }
 
-            anyhow::bail!(
-                "Old content not found in file '{}'. The model should read the file first to get the exact content to replace.",
-                file_path
-            );
+            // Ask user what to do
+            println!("\n{}", "Would you like to:".bright_yellow().bold());
+            println!("  {} - Manually provide the correct old_content", "1".bright_cyan());
+            println!("  {} - Cancel this edit", "2".bright_cyan());
+            println!("\n{}", "Choose [1/2]:".bright_green().bold());
+
+            let mut rl = DefaultEditor::new()?;
+            let response = rl.readline(">>> ")?;
+            let response = response.trim();
+
+            match response {
+                "1" => {
+                    // Allow manual editing
+                    println!("{}", "Enter the corrected old_content to find (multiple lines ok, end with empty line):".yellow());
+                    let mut manual_old = String::new();
+                    loop {
+                        match rl.readline("") {
+                            Ok(line) if line.is_empty() => break,
+                            Ok(line) => {
+                                if !manual_old.is_empty() {
+                                    manual_old.push('\n');
+                                }
+                                manual_old.push_str(&line);
+                            }
+                            Err(_) => break,
+                        }
+                    }
+
+                    if !manual_old.is_empty() {
+                        // Retry with manual input
+                        return self.edit_file(file_path, &manual_old, new_content);
+                    } else {
+                        anyhow::bail!("Edit cancelled - no content provided")
+                    }
+                }
+                _ => {
+                    anyhow::bail!("Edit cancelled by user")
+                }
+            }
         }
 
         // Count occurrences
