@@ -368,6 +368,24 @@ struct OpenFileArgs {
 
 fn default_max_results() -> u32 { 100 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct EditOperation {
+    file_path: String,
+    old_content: String,
+    new_content: String,
+    description: String,  // Human-readable description of what this edit does
+}
+
+#[derive(Debug, Deserialize)]
+struct PlanEditsArgs {
+    edits: Vec<EditOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplyEditPlanArgs {
+    // No args needed - applies the stored plan
+}
+
 struct KimiChat {
     api_key: String,
     work_dir: PathBuf,
@@ -376,6 +394,7 @@ struct KimiChat {
     current_model: ModelType,
     total_tokens_used: usize,
     logger: Option<ConversationLogger>,
+    pending_edit_plan: Option<Vec<EditOperation>>,
 }
 
 impl KimiChat {
@@ -390,9 +409,16 @@ impl KimiChat {
             - read_file: Read entire file contents (always returns full file)\n\
             - open_file: Read specific line range from a file (use when you only need a section)\n\
             - write_file: Write/create a file\n\
-            - edit_file: Edit existing file by replacing content\n\
+            - edit_file: Edit existing file by replacing content (for single edits)\n\
+            - plan_edits: Plan multiple file edits to apply atomically (RECOMMENDED for multiple related changes)\n\
+            - apply_edit_plan: Apply the previously created edit plan\n\
             - list_files: List files (single-level patterns only, no **)\n\
-            - switch_model: Switch between models\n\n",
+            - switch_model: Switch between models\n\n\
+            IMPORTANT WORKFLOW for multiple edits:\n\
+            1. When making multiple changes to files, use plan_edits to create a complete plan\n\
+            2. Review the plan validation output\n\
+            3. Use apply_edit_plan to execute all changes atomically\n\
+            This prevents issues where you lose track of file state between sequential edits.\n\n",
             model.display_name()
         );
 
@@ -420,6 +446,7 @@ impl KimiChat {
             current_model: ModelType::Kimi,
             total_tokens_used: 0,
             logger: None,
+            pending_edit_plan: None,
         };
 
         // Add system message to inform the model about capabilities
@@ -613,6 +640,57 @@ impl KimiChat {
                             }
                         },
                         "required": ["command"]
+                    }),
+                },
+            },
+            Tool {
+                tool_type: "function".to_string(),
+                function: FunctionDef {
+                    name: "plan_edits".to_string(),
+                    description: "Create a plan of multiple file edits to be applied atomically. Use this when making multiple related changes to files. The plan will validate all edits upfront before applying any. This prevents issues with sequential edits where the model loses track of file state.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "edits": {
+                                "type": "array",
+                                "description": "Array of edit operations to perform",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "file_path": {
+                                            "type": "string",
+                                            "description": "Path to the file relative to work directory"
+                                        },
+                                        "old_content": {
+                                            "type": "string",
+                                            "description": "Exact content to find and replace (must not be empty)"
+                                        },
+                                        "new_content": {
+                                            "type": "string",
+                                            "description": "Content to replace with"
+                                        },
+                                        "description": {
+                                            "type": "string",
+                                            "description": "Human-readable description of what this edit does"
+                                        }
+                                    },
+                                    "required": ["file_path", "old_content", "new_content", "description"]
+                                }
+                            }
+                        },
+                        "required": ["edits"]
+                    }),
+                },
+            },
+            Tool {
+                tool_type: "function".to_string(),
+                function: FunctionDef {
+                    name: "apply_edit_plan".to_string(),
+                    description: "Apply the previously created edit plan. All edits will be applied sequentially. If any edit fails, the process stops and reports which edit failed.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {},
+                        "required": []
                     }),
                 },
             },
@@ -897,6 +975,126 @@ impl KimiChat {
         }
     }
 
+    fn plan_edits(&mut self, edits: Vec<EditOperation>) -> Result<String> {
+        if edits.is_empty() {
+            anyhow::bail!("Cannot create empty edit plan. Provide at least one edit operation.");
+        }
+
+        println!("\n{}", "📋 Edit Plan Created".bright_cyan().bold());
+        println!("{}", "═".repeat(60).bright_black());
+
+        // Validate and preview each edit
+        let mut validated_edits = Vec::new();
+        for (idx, edit) in edits.iter().enumerate() {
+            println!("\n{} {} - {}",
+                format!("Edit #{}", idx + 1).bright_yellow(),
+                edit.file_path.cyan(),
+                edit.description.bright_white()
+            );
+
+            // Read current file to validate old_content exists
+            let current_content = self.read_file(&edit.file_path)?;
+
+            if edit.old_content.is_empty() {
+                anyhow::bail!("Edit #{}: old_content cannot be empty for file {}", idx + 1, edit.file_path);
+            }
+
+            if edit.old_content == edit.new_content {
+                anyhow::bail!("Edit #{}: old_content and new_content are identical for file {}. No change would be made.",
+                    idx + 1, edit.file_path);
+            }
+
+            if !current_content.contains(&edit.old_content) {
+                anyhow::bail!(
+                    "Edit #{}: old_content not found in file {}\n\nLooking for:\n{}\n\nFile does not currently contain this content.",
+                    idx + 1, edit.file_path, edit.old_content
+                );
+            }
+
+            // Show preview
+            println!("{}", "  Old:".red());
+            for line in edit.old_content.lines().take(3) {
+                println!("    {}", line.red());
+            }
+            if edit.old_content.lines().count() > 3 {
+                println!("    {}", format!("... ({} more lines)", edit.old_content.lines().count() - 3).bright_black());
+            }
+
+            println!("{}", "  New:".green());
+            for line in edit.new_content.lines().take(3) {
+                println!("    {}", line.green());
+            }
+            if edit.new_content.lines().count() > 3 {
+                println!("    {}", format!("... ({} more lines)", edit.new_content.lines().count() - 3).bright_black());
+            }
+
+            validated_edits.push(edit.clone());
+        }
+
+        println!("\n{}", "═".repeat(60).bright_black());
+        println!("{} {} edits planned", "✓".green(), validated_edits.len());
+        println!("\n{}", "Use apply_edit_plan to execute all edits atomically.".bright_yellow());
+        println!("{}", "The plan will be cleared after application or if you create a new plan.".bright_black());
+
+        // Store the plan
+        self.pending_edit_plan = Some(validated_edits);
+
+        Ok(format!(
+            "Edit plan created successfully with {} operation(s). All edits have been validated. \
+            Use apply_edit_plan to execute all changes atomically.",
+            edits.len()
+        ))
+    }
+
+    fn apply_edit_plan(&mut self) -> Result<String> {
+        let plan = self.pending_edit_plan.take()
+            .ok_or_else(|| anyhow::anyhow!("No edit plan exists. Create one first using plan_edits."))?;
+
+        println!("\n{}", "🚀 Applying Edit Plan".bright_cyan().bold());
+        println!("{}", "═".repeat(60).bright_black());
+
+        // Apply all edits sequentially
+        let mut results = Vec::new();
+        for (idx, edit) in plan.iter().enumerate() {
+            println!("\n{} {}", format!("Applying edit #{}", idx + 1).yellow(), edit.file_path.cyan());
+
+            // Re-read file to get current state (in case previous edits affected it)
+            let current_content = self.read_file(&edit.file_path)?;
+
+            // Check if content still exists (might have changed due to previous edits)
+            if !current_content.contains(&edit.old_content) {
+                anyhow::bail!(
+                    "Edit #{} failed: old_content no longer found in {}. \
+                    A previous edit in this plan may have affected this file. \
+                    Edit plan aborted at step {}. No further edits applied.",
+                    idx + 1, edit.file_path, idx + 1
+                );
+            }
+
+            // Apply the edit
+            let updated_content = current_content.replace(&edit.old_content, &edit.new_content);
+
+            // Write the updated content
+            let full_path = self.work_dir.join(&edit.file_path);
+            fs::write(&full_path, &updated_content)
+                .with_context(|| format!("Failed to write file: {}", full_path.display()))?;
+
+            let num_replacements = current_content.matches(&edit.old_content).count();
+            println!("  {} {} replacement(s) made", "✓".green(), num_replacements);
+
+            results.push(format!("Edit #{}: {} - {} replacement(s)", idx + 1, edit.file_path, num_replacements));
+        }
+
+        println!("\n{}", "═".repeat(60).bright_black());
+        println!("{} All {} edits applied successfully", "✓".bright_green().bold(), results.len());
+
+        Ok(format!(
+            "Successfully applied {} edit(s):\n{}",
+            results.len(),
+            results.join("\n")
+        ))
+    }
+
     fn list_files(&self, pattern: &str) -> Result<String> {
         // Disallow recursive patterns to prevent massive output
         if pattern.contains("**") {
@@ -1132,6 +1330,14 @@ impl KimiChat {
             "run_command" => {
                 let args: RunCommandArgs = serde_json::from_str(arguments)?;
                 self.run_command(&args.command)
+            }
+            "plan_edits" => {
+                let args: PlanEditsArgs = serde_json::from_str(arguments)?;
+                self.plan_edits(args.edits)
+            }
+            "apply_edit_plan" => {
+                let _args: ApplyEditPlanArgs = serde_json::from_str(arguments)?;
+                self.apply_edit_plan()
             }
             _ => anyhow::bail!("Unknown tool: {}", name),
         }
