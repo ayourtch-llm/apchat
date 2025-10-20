@@ -107,10 +107,16 @@ impl ConversationLogger {
         };
         if let Some(file) = &mut self.file {
             if let Ok(json) = serde_json::to_string(&entry) {
+                if std::env::var("DEBUG_LOG").is_ok() {
+                    eprintln!("[DEBUG] Writing tool_calls log entry: {}", &json[..json.len().min(100)]);
+                }
                 if let Err(e) = file.write_all(json.as_bytes()).await {
                     eprintln!("[Logging error] {}", e);
                 } else if let Err(e) = file.write_all(b"\n").await {
                     eprintln!("[Logging error] {}", e);
+                } else {
+                    // Flush to ensure it's written
+                    let _ = file.flush().await;
                 }
             }
         }
@@ -135,10 +141,16 @@ impl ConversationLogger {
         };
         if let Some(file) = &mut self.file {
             if let Ok(json) = serde_json::to_string(&entry) {
+                if std::env::var("DEBUG_LOG").is_ok() {
+                    eprintln!("[DEBUG] Writing tool result for {}: {}", tool_name, &content[..content.len().min(50)]);
+                }
                 if let Err(e) = file.write_all(json.as_bytes()).await {
                     eprintln!("[Logging error] {}", e);
                 } else if let Err(e) = file.write_all(b"\n").await {
                     eprintln!("[Logging error] {}", e);
+                } else {
+                    // Flush to ensure it's written
+                    let _ = file.flush().await;
                 }
             }
         }
