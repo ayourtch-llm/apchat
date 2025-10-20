@@ -105,6 +105,67 @@ fn clear_edit_plan(work_dir: &PathBuf) {
     let _ = fs::remove_file(&plan_path); // Ignore errors if file doesn't exist
 }
 
+// Helper function to show unified diff
+fn show_unified_diff(old_content: &str, new_content: &str) -> Vec<String> {
+    let old_lines: Vec<&str> = old_content.lines().collect();
+    let new_lines: Vec<&str> = new_content.lines().collect();
+
+    let mut result = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+
+    while i < old_lines.len() || j < new_lines.len() {
+        if i < old_lines.len() && j < new_lines.len() && old_lines[i] == new_lines[j] {
+            // Context line (unchanged)
+            result.push(format!("  {}", old_lines[i]));
+            i += 1;
+            j += 1;
+        } else {
+            // Find next matching line
+            let mut found_match = false;
+
+            // Try to find where lines sync up again (look ahead up to 3 lines)
+            for offset in 1..=3 {
+                if i + offset < old_lines.len() && j < new_lines.len() && old_lines[i + offset] == new_lines[j] {
+                    // Lines were removed
+                    for k in 0..offset {
+                        if i + k < old_lines.len() {
+                            result.push(format!("{} {}", "-".red(), old_lines[i + k]));
+                        }
+                    }
+                    i += offset;
+                    found_match = true;
+                    break;
+                } else if j + offset < new_lines.len() && i < old_lines.len() && old_lines[i] == new_lines[j + offset] {
+                    // Lines were added
+                    for k in 0..offset {
+                        if j + k < new_lines.len() {
+                            result.push(format!("{} {}", "+".green(), new_lines[j + k]));
+                        }
+                    }
+                    j += offset;
+                    found_match = true;
+                    break;
+                }
+            }
+
+            if !found_match {
+                // No match found, treat as replacement
+                if i < old_lines.len() {
+                    result.push(format!("{} {}", "-".red(), old_lines[i]));
+                    i += 1;
+                }
+                if j < new_lines.len() {
+                    result.push(format!("{} {}", "+".green(), new_lines[j]));
+                    j += 1;
+                }
+            }
+        }
+    }
+
+    result
+}
+
 /// Tool for planning multiple file edits
 pub struct PlanEditsTool;
 
@@ -177,20 +238,10 @@ impl Tool for PlanEditsTool {
                 ));
             }
 
-            // Show simple diff preview
-            println!("  {}", "─ Old:".red());
-            for line in edit.old_content.lines().take(3) {
-                println!("  {} {}", "-".red(), line);
-            }
-            if edit.old_content.lines().count() > 3 {
-                println!("  {} ...", "-".red());
-            }
-            println!("  {}", "+ New:".green());
-            for line in edit.new_content.lines().take(3) {
-                println!("  {} {}", "+".green(), line);
-            }
-            if edit.new_content.lines().count() > 3 {
-                println!("  {} ...", "+".green());
+            // Show unified diff preview
+            let diff_lines = show_unified_diff(&edit.old_content, &edit.new_content);
+            for line in diff_lines {
+                println!("  {}", line);
             }
 
             validated_edits.push(edit.clone());
