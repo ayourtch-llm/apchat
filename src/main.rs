@@ -2086,6 +2086,15 @@ async fn main() -> Result<()> {
 
         let mut chat = KimiChat::new_with_agents(api_key, work_dir, cli.agents);
 
+        // Initialize logger for task mode
+        chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
+            Ok(l) => Some(l),
+            Err(e) => {
+                eprintln!("Task logging disabled: {}", e);
+                None
+            }
+        };
+
         let response = if chat.use_agents && chat.agent_coordinator.is_some() {
             // Use agent system
             match chat.process_with_agents(&task_text).await {

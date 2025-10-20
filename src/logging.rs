@@ -58,6 +58,29 @@ impl ConversationLogger {
         Ok(Self { file_path, file: Some(file) })
     }
 
+    /// Create a new logger for task mode; generates the file name with "-task" suffix.
+    pub async fn new_task_mode(workspace: &Path) -> Result<Self> {
+        // Ensure workspace exists
+        fs::create_dir_all(workspace).await?;
+
+        // Create logs subdirectory if it doesn't exist
+        let logs_dir = workspace.join("logs");
+        fs::create_dir_all(&logs_dir).await?;
+
+        let now_local = Local::now();
+        let filename = format!(
+            "kchat-{}-task.jsonl",
+            now_local.format("%Y-%m-%d-%H%M%S")
+        );
+        let file_path = logs_dir.join(filename);
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&file_path)
+            .await?;
+        Ok(Self { file_path, file: Some(file) })
+    }
+
     /// Append a single log entry.
     pub async fn log(&mut self, role: &str, content: &str, model: Option<&str>, is_binary: bool) {
         let entry = LogEntry {
