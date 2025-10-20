@@ -26,6 +26,7 @@ struct JsonlEntry {
     valid: bool,
     timestamp: Option<String>,
     entry_type: Option<String>,
+    recent_message: Option<String>,
 }
 
 #[derive(Default)]
@@ -62,7 +63,7 @@ impl App {
         self.entries = content
             .lines()
             .enumerate()
-            .map(|(i, line)| {
+            .map(|(_i, line)| {
                 let trimmed = line.trim();
                 if trimmed.is_empty() {
                     stats.total += 1;
@@ -72,11 +73,12 @@ impl App {
                         valid: true,
                         timestamp: None,
                         entry_type: None,
+                        recent_message: None,
                     }
                 } else {
                     match serde_json::from_str::<Value>(trimmed) {
                         Ok(value) => {
-                            let (timestamp, entry_type) = extract_entry_metadata(&value);
+                            let (timestamp, entry_type, recent_message) = extract_entry_metadata(&value);
                             stats.total += 1;
                             stats.valid += 1;
                             if let Some(ref et) = entry_type {
@@ -88,6 +90,7 @@ impl App {
                                 valid: true,
                                 timestamp,
                                 entry_type,
+                                recent_message,
                             }
                         }
                         Err(_) => {
@@ -99,6 +102,7 @@ impl App {
                                 valid: false,
                                 timestamp: None,
                                 entry_type: None,
+                                recent_message: None,
                             }
                         }
                     }
@@ -168,7 +172,7 @@ impl App {
     }
 }
 
-fn extract_entry_metadata(value: &Value) -> (Option<String>, Option<String>) {
+fn extract_entry_metadata(value: &Value) -> (Option<String>, Option<String>, Option<String>) {
     let timestamp = value.get("timestamp")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
@@ -181,7 +185,77 @@ fn extract_entry_metadata(value: &Value) -> (Option<String>, Option<String>) {
             .and_then(|v| v.as_str()))
         .map(|s| s.to_string());
     
-    (timestamp, entry_type)
+    // Extract the most recent message content
+    let message_content = extract_recent_message(value);
+    
+    (timestamp, entry_type, message_content)
+}
+
+fn extract_recent_message(value: &Value) -> Option<String> {
+    // Try different common patterns for message content
+    
+    // 1. Direct content field
+    if let Some(content) = value.get("content")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty()) {
+        return Some(truncate_message(content));
+    }
+    
+    // 2. Message field
+    if let Some(message) = value.get("message")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty()) {
+        return Some(truncate_message(message));
+    }
+    
+    // 3. Nested content in choices
+    if let Some(choices) = value.get("choices").and_then(|v| v.as_array()) {
+        if let Some(choice) = choices.first() {
+            if let Some(content) = choice.get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty()) {
+                return Some(truncate_message(content));
+            }
+        }
+    }
+    
+    // 4. Delta content in streaming responses
+    if let Some(choices) = value.get("choices").and_then(|v| v.as_array()) {
+        if let Some(choice) = choices.first() {
+            if let Some(content) = choice.get("delta")
+                .and_then(|d| d.get("content"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty()) {
+                return Some(truncate_message(content));
+            }
+        }
+    }
+    
+    // 5. Response field
+    if let Some(response) = value.get("response")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty()) {
+        return Some(truncate_message(response));
+    }
+    
+    // 6. Text field
+    if let Some(text) = value.get("text")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty()) {
+        return Some(truncate_message(text));
+    }
+    
+    None
+}
+
+fn truncate_message(content: &str) -> String {
+    let trimmed = content.trim();
+    if trimmed.len() <= 60 {
+        trimmed.to_string()
+    } else {
+        format!("{}...", &trimmed[..57])
+    }
 }
 
 fn draw_entry_list(entries: &[JsonlEntry], selected: usize, show_only_invalid: bool) -> Vec<Line> {
@@ -204,6 +278,12 @@ fn draw_entry_list(entries: &[JsonlEntry], selected: usize, show_only_invalid: b
             
             let mut parts = vec![];
             
+            // Show recent message content first, if available
+            if let Some(ref recent_msg) = entry.recent_message {
+                parts.push(recent_msg.clone());
+            }
+            
+            // Then show timestamp and type
             if let Some(ref timestamp) = entry.timestamp {
                 // Show only time portion without date
                 let time_part = if timestamp.contains('T') {
@@ -236,7 +316,7 @@ fn draw_entry_list(entries: &[JsonlEntry], selected: usize, show_only_invalid: b
             }
             
             let preview = if !parts.is_empty() {
-                format!("{} {}", parts.join(" "), entry.content.chars().take(30).collect::<String>())
+                format!("{}", parts.join(" "))
             } else {
                 entry.content.chars().take(50).collect::<String>()
             };
