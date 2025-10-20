@@ -16,11 +16,26 @@ kimi-chat is a Rust-based CLI application that provides a Claude Code-like exper
 kimichat/
 ├── Cargo.toml          # Dependencies and package configuration
 ├── src/
-│   ├── main.rs         # Main application with API integration
+│   ├── main.rs         # Main application with API integration and agent system
 │   ├── logging.rs      # Conversation logging with JSON format
 │   ├── open_file.rs    # File opening utilities with line range support
-│   └── preview.rs      # Two-word preview generation for tasks
-├── agents/             # Agent configurations
+│   ├── preview.rs      # Two-word preview generation for tasks
+│   ├── agents/         # 🤖 Multi-agent system implementation
+│   │   ├── coordinator.rs    # Task decomposition and agent dispatch
+│   │   ├── agent_factory.rs  # Agent creation and management
+│   │   ├── agent.rs          # Individual agent implementation
+│   │   ├── agent_config.rs   # Configuration parsing and validation
+│   │   ├── groq_client.rs    # LLM client interface
+│   │   └── task.rs           # Task definitions and execution
+│   ├── core/            # Core tool registry and execution
+│   │   ├── mod.rs
+│   │   └── tool_context.rs   # Tool execution context
+│   └── tools/           # Tool implementations
+│       ├── mod.rs
+│       ├── file_ops.rs      # File operation tools
+│       ├── search.rs        # Search functionality
+│       └── system.rs        # System operation tools
+├── agents/             # Agent configurations only
 │   └── configs/
 │       ├── code_analyzer.json
 │       ├── file_manager.json
@@ -32,6 +47,8 @@ kimichat/
 ├── .env.example       # Environment configuration template
 ├── .gitignore         # Git ignore rules
 ├── kimi.md            # This project documentation
+├── visibility.md      # Agent system visibility enhancement plan
+├── problem.md         # Problem analysis (corrected)
 ├── how_to_new_tool.md # Guide for adding new tools
 ├── subagent.md        # Subagent documentation
 ├── wishlist.md        # Feature wishlist
@@ -110,10 +127,15 @@ struct App {
 - Rate limiting protection with automatic retries
 - Error handling with model switching for tool-related issues
 
-### Agent System
-- Pre-configured agent types in `agents/configs/`
-- Specialized tool sets for different tasks (code analysis, file management, search, system operations)
-- Model preferences per agent type
+### Agent System 🤖
+- **FULLY IMPLEMENTED** multi-agent architecture in `src/agents/`
+- **PlanningCoordinator**: Task decomposition and intelligent agent dispatch
+- **AgentFactory**: Dynamic agent creation from JSON configurations
+- **Agent Types**: code_analyzer, file_manager, search_specialist, system_operator
+- **Specialized Tool Sets**: Each agent has restricted tool access per configuration
+- **Model Preferences**: Agents can prefer kimi or gpt_oss models
+- **Task Management**: Queue-based execution with progress tracking
+- **CLI Integration**: `--agents` flag enables multi-agent workflows
 
 ## Configuration
 
@@ -167,13 +189,15 @@ cp .env.example .env
 - Real-time conversation display
 - Model switching notifications
 
-## Agent Configurations
+## Agent Configurations ✅
 
-The system includes pre-configured agents optimized for different tasks:
-- **code_analyzer**: Code analysis with read/search tools
-- **file_manager**: File operations with full tool access
-- **search_specialist**: Search operations with regex support
-- **system_operator**: System operations with command execution
+The system includes **fully implemented** agents optimized for different tasks:
+- **code_analyzer**: `src/agents/coordinator.rs` - Code analysis with read/search tools
+- **file_manager**: `src/agents/coordinator.rs` - File operations with full tool access
+- **search_specialist**: `src/agents/coordinator.rs` - Search operations with regex support
+- **system_operator**: `src/agents/coordinator.rs` - System operations with command execution
+
+All agents are dynamically created from JSON configurations in `agents/configs/` and managed by the PlanningCoordinator.
 
 ## Dependencies
 
