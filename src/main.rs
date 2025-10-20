@@ -1856,7 +1856,23 @@ impl KimiChat {
                         &tool_call.function.arguments,
                     ).await {
                         Ok(r) => r,
-                        Err(e) => format!("Error: {}", e),
+                        Err(e) => {
+                            let error_msg = e.to_string();
+                            // Make cancellation errors very explicit to the model
+                            if error_msg.contains("cancelled by user") || error_msg.contains("Edit cancelled") {
+                                format!(
+                                    "OPERATION CANCELLED BY USER. The user explicitly cancelled this operation. \
+                                    DO NOT retry this same approach. Please acknowledge the cancellation and either:\n\
+                                    1. Ask the user what they would like to do instead\n\
+                                    2. Try a completely different approach\n\
+                                    3. Stop if this was the only viable option\n\
+                                    \nOriginal error: {}",
+                                    error_msg
+                                )
+                            } else {
+                                format!("Error: {}", error_msg)
+                            }
+                        }
                     };
 
                     println!("{} {}", "📋 Result:".green(), result.bright_black());
