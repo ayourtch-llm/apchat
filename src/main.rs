@@ -1362,6 +1362,88 @@ impl KimiChat {
         Ok(())
     }
 
+    /// Attempt to repair malformed tool calls using a separate API call to a model
+    async fn repair_tool_call_with_model(&self, tool_call: &ToolCall, error_msg: &str) -> Result<ToolCall> {
+        eprintln!("{} Attempting to repair tool call '{}' using AI...", "🔧".bright_yellow(), tool_call.function.name);
+
+        let repair_prompt = format!(
+            "A tool call failed with a validation error. Please fix the JSON arguments.\n\n\
+            Tool name: {}\n\
+            Original arguments (malformed): {}\n\
+            Error: {}\n\n\
+            Requirements:\n\
+            - Return ONLY the corrected JSON arguments as a valid JSON object\n\
+            - Do not include any explanation, markdown formatting, or extra text\n\
+            - Ensure all field types match the schema (integers as numbers, not strings)\n\
+            - Common issues: trailing quotes after numbers, string instead of integer values\n\n\
+            Corrected JSON arguments:",
+            tool_call.function.name,
+            tool_call.function.arguments,
+            error_msg
+        );
+
+        // Create a simple repair request using Kimi (fast and good at structured output)
+        let repair_request = ChatRequest {
+            model: ModelType::Kimi.as_str().to_string(),
+            messages: vec![
+                Message {
+                    role: "system".to_string(),
+                    content: "You are a JSON repair assistant. Return only valid JSON, no explanations.".to_string(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+                Message {
+                    role: "user".to_string(),
+                    content: repair_prompt,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            ],
+            tools: vec![], // No tools for repair request
+            tool_choice: "none".to_string(),
+        };
+
+        // Make API call
+        let response = self.client
+            .post(GROQ_API_URL)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .json(&repair_request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            anyhow::bail!("Repair API call failed: {}", error_text);
+        }
+
+        let api_response: ChatResponse = response.json().await?;
+
+        if let Some(choice) = api_response.choices.first() {
+            let repaired_json = choice.message.content.trim();
+
+            // Validate the repaired JSON
+            if let Ok(_) = serde_json::from_str::<serde_json::Value>(repaired_json) {
+                eprintln!("{} Successfully repaired tool call arguments", "✓".bright_green());
+
+                // Return repaired tool call
+                Ok(ToolCall {
+                    id: tool_call.id.clone(),
+                    tool_type: tool_call.tool_type.clone(),
+                    function: FunctionCall {
+                        name: tool_call.function.name.clone(),
+                        arguments: repaired_json.to_string(),
+                    },
+                })
+            } else {
+                anyhow::bail!("Repaired JSON is still invalid: {}", repaired_json)
+            }
+        } else {
+            anyhow::bail!("No response from repair API call")
+        }
+    }
+
     fn validate_and_fix_tool_calls(&self, messages: &mut Vec<Message>) -> Result<bool> {
         let mut fixed_any = false;
 
@@ -1538,7 +1620,46 @@ impl KimiChat {
                              error_body.contains("parameters for tool") ||
                              error_body.contains("did not match schema")) &&
                             current_model == ModelType::Kimi {
-                        eprintln!("{}", "🔄 Kimi-K2 generated malformed tool call (invalid JSON/parameters). Switching to GPT-OSS and retrying...".bright_cyan());
+                        eprintln!("{}", "❌ Kimi-K2 generated malformed tool call (invalid JSON/parameters).".red());
+
+                        // First, try to repair the tool call using AI
+                        let mut repaired = false;
+
+                        // Find the last assistant message with tool calls
+                        if let Some(last_assistant_msg) = messages.iter_mut().rev().find(|m| m.role == "assistant" && m.tool_calls.is_some()) {
+                            if let Some(tool_calls) = &last_assistant_msg.tool_calls {
+                                eprintln!("{} Attempting AI-powered repair before switching models...", "🔧".bright_yellow());
+
+                                // Try to repair each tool call
+                                let mut repaired_calls = Vec::new();
+                                for tc in tool_calls {
+                                    match self.repair_tool_call_with_model(tc, &error_body).await {
+                                        Ok(repaired_tc) => {
+                                            repaired_calls.push(repaired_tc);
+                                        }
+                                        Err(e) => {
+                                            eprintln!("{} Failed to repair tool call '{}': {}", "⚠️".yellow(), tc.function.name, e);
+                                            // If repair fails, keep original
+                                            repaired_calls.push(tc.clone());
+                                        }
+                                    }
+                                }
+
+                                // Update the message with repaired tool calls
+                                last_assistant_msg.tool_calls = Some(repaired_calls);
+                                repaired = true;
+                                eprintln!("{} Retrying with repaired tool calls...", "🔄".bright_cyan());
+                            }
+                        }
+
+                        if repaired {
+                            // Retry with repaired tool calls
+                            retry_count = 0;
+                            continue;
+                        }
+
+                        // If repair failed or wasn't possible, switch to GPT-OSS as fallback
+                        eprintln!("{}", "🔄 Repair failed. Switching to GPT-OSS and retrying...".bright_cyan());
 
                         // Switch to GPT-OSS
                         current_model = ModelType::GptOss;
