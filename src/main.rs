@@ -1,4 +1,3 @@
-// Test edit 1 - Added comment
 use anyhow::{Context, Result};
 use std::path::Path;
 use colored::Colorize;
@@ -42,7 +41,6 @@ const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
 const MAX_RETRIES: u32 = 3;
 
-// Test edit 3 - Added comment before Cli struct
 /// CLI arguments for kimi-chat
 #[derive(Parser)]
 #[command(name = "kimichat")]
@@ -2185,7 +2183,6 @@ impl KimiChat {
     }
 }
 
-// Test edit 5 - Added comment before main function
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file if it exists
