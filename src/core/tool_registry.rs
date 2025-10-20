@@ -4,6 +4,7 @@ use super::tool::{Tool, ToolParameters, ToolResult};
 use super::tool_context::ToolContext;
 
 /// Registry for managing and discovering tools
+#[derive(Clone)]
 pub struct ToolRegistry {
     tools: HashMap<String, Arc<dyn Tool>>,
     categories: HashMap<String, Vec<String>>,

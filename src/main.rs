@@ -29,10 +29,12 @@ mod open_file;
 mod preview;
 mod core;
 mod tools;
+mod agents;
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
 use core::tool_context::ToolContext;
 use tools::*;
+use agents::*;
 
 
 const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
@@ -51,7 +53,11 @@ struct Cli {
     /// Run in interactive mode (default)
     #[arg(short, long, action = clap::ArgAction::SetTrue)]
     interactive: bool,
-    
+
+    /// Enable multi-agent system for specialized task handling
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    agents: bool,
+
     /// Generate shell completions
     #[arg(long, value_enum)]
     generate: Option<Shell>,
@@ -401,6 +407,9 @@ struct KimiChat {
     logger: Option<ConversationLogger>,
     pending_edit_plan: Option<Vec<EditOperation>>,
     tool_registry: ToolRegistry,
+    // Agent system
+    agent_coordinator: Option<PlanningCoordinator>,
+    use_agents: bool,
 }
 
 impl KimiChat {
@@ -444,7 +453,16 @@ impl KimiChat {
     }
 
     fn new(api_key: String, work_dir: PathBuf) -> Self {
+        Self::new_with_agents(api_key, work_dir, false)
+    }
+
+    fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let tool_registry = Self::initialize_tool_registry();
+        let agent_coordinator = if use_agents {
+            Self::initialize_agent_system(&api_key, &tool_registry).ok()
+        } else {
+            None
+        };
 
         let mut chat = Self {
             api_key,
@@ -456,6 +474,8 @@ impl KimiChat {
             logger: None,
             pending_edit_plan: None,
             tool_registry,
+            agent_coordinator,
+            use_agents,
         };
 
         // Add system message to inform the model about capabilities
@@ -497,6 +517,48 @@ impl KimiChat {
         registry
     }
 
+    /// Initialize the agent system with configuration files
+    fn initialize_agent_system(api_key: &str, tool_registry: &ToolRegistry) -> Result<PlanningCoordinator> {
+        println!("{} Initializing agent system...", "🤖".blue());
+
+        // Create agent factory
+        let tool_registry_arc = std::sync::Arc::new((*tool_registry).clone());
+        let mut agent_factory = AgentFactory::new(tool_registry_arc);
+
+        // Register LLM clients
+        let kimi_client = std::sync::Arc::new(GroqLlmClient::new(
+            api_key.to_string(),
+            "kimi".to_string()
+        ));
+        let gpt_oss_client = std::sync::Arc::new(GroqLlmClient::new(
+            api_key.to_string(),
+            "gpt_oss".to_string()
+        ));
+
+        agent_factory.register_llm_client("kimi".to_string(), kimi_client);
+        agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
+
+        // Create coordinator
+        let agent_factory_arc = std::sync::Arc::new(agent_factory);
+        let mut coordinator = PlanningCoordinator::new(agent_factory_arc);
+
+        // Load agent configurations
+        let config_path = std::path::Path::new("agents/configs");
+        if config_path.exists() {
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(
+                    coordinator.load_agent_configs(config_path)
+                )
+            })?;
+            println!("{} Loaded agent configurations from {}", "📁".green(), config_path.display());
+        } else {
+            println!("{} Agent config directory not found: {}", "⚠️".yellow(), config_path.display());
+        }
+
+        println!("{} Agent system initialized successfully!", "✅".green());
+        Ok(coordinator)
+    }
+
     fn get_tools(&self) -> Vec<Tool> {
         // Convert new tool registry format to legacy Tool format for backward compatibility
         let registry_tools = self.tool_registry.get_openai_tool_definitions();
@@ -511,6 +573,67 @@ impl KimiChat {
                 },
             }
         }).collect()
+    }
+
+    /// Process user request using the agent system
+    async fn process_with_agents(&mut self, user_request: &str) -> Result<String> {
+        if let Some(coordinator) = &mut self.agent_coordinator {
+            // Create execution context for agents
+            let tool_registry_arc = std::sync::Arc::new(self.tool_registry.clone());
+            let llm_client = std::sync::Arc::new(GroqLlmClient::new(
+                self.api_key.clone(),
+                "kimi".to_string()
+            ));
+
+            // Convert message history to agent format
+            let conversation_history: Vec<ChatMessage> = self.messages.iter().map(|msg| {
+                ChatMessage {
+                    role: msg.role.clone(),
+                    content: msg.content.clone(),
+                    tool_calls: msg.tool_calls.clone().map(|calls| {
+                        calls.into_iter().map(|call| crate::agents::agent::ToolCall {
+                            id: call.id,
+                            function: crate::agents::agent::FunctionCall {
+                                name: call.function.name,
+                                arguments: call.function.arguments,
+                            },
+                        }).collect()
+                    }),
+                }
+            }).collect();
+
+            let context = ExecutionContext {
+                workspace_dir: self.work_dir.clone(),
+                session_id: format!("session_{}", chrono::Utc::now().timestamp()),
+                tool_registry: tool_registry_arc,
+                llm_client,
+                conversation_history,
+            };
+
+            // Process request through coordinator
+            let result = coordinator.process_user_request(user_request, &context).await?;
+
+            // Update message history
+            self.messages.push(Message {
+                role: "user".to_string(),
+                content: user_request.to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+
+            self.messages.push(Message {
+                role: "assistant".to_string(),
+                content: result.content.clone(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+
+            Ok(result.content)
+        } else {
+            Err(anyhow::anyhow!("Agent coordinator not initialized"))
+        }
     }
 
     fn read_file(&self, file_path: &str) -> Result<String> {
@@ -1949,6 +2072,59 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Handle task mode if requested
+    if let Some(task_text) = cli.task {
+        println!("{}", "🤖 Kimi Chat - Task Mode".bright_cyan().bold());
+        println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
+
+        if cli.agents {
+            println!("{}", "🚀 Multi-Agent System ENABLED".green().bold());
+        }
+
+        println!("{}", format!("Task: {}", task_text).bright_yellow());
+        println!();
+
+        let mut chat = KimiChat::new_with_agents(api_key, work_dir, cli.agents);
+
+        let response = if chat.use_agents && chat.agent_coordinator.is_some() {
+            // Use agent system
+            match chat.process_with_agents(&task_text).await {
+                Ok(response) => response,
+                Err(e) => {
+                    eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
+                    // Fallback to regular chat
+                    match chat.chat(&task_text).await {
+                        Ok(response) => response,
+                        Err(e) => {
+                            eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        } else {
+            // Use regular chat
+            match chat.chat(&task_text).await {
+                Ok(response) => response,
+                Err(e) => {
+                    eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                    return Ok(());
+                }
+            }
+        };
+
+        if cli.pretty {
+            println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+                "response": response,
+                "agents_used": chat.use_agents
+            })).unwrap_or_else(|_| response.to_string()));
+        } else {
+            println!("{}", response);
+        }
+
+        return Ok(());
+    }
+
     // If interactive flag is set (or default), proceed to REPL
     if !cli.interactive {
         // If not interactive and no subcommand, just exit
@@ -1959,9 +2135,14 @@ async fn main() -> Result<()> {
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
     println!("{}", "Models can switch between Kimi-K2-Instruct-0905 and GPT-OSS-120B automatically".bright_black());
+
+    if cli.agents {
+        println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
+    }
+
     println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
 
-    let mut chat = KimiChat::new(api_key, work_dir);
+    let mut chat = KimiChat::new_with_agents(api_key, work_dir, cli.agents);
     // Initialize logger (async) – logs go into the workspace directory
     chat.logger = match ConversationLogger::new(&chat.work_dir).await {
         Ok(l) => Some(l),
@@ -2038,19 +2219,39 @@ async fn main() -> Result<()> {
                     logger.log("user", line, None, false).await;
                 }
 
-                match chat.chat(line).await {
-                    Ok(response) => {
-                        // Log assistant response
-                        if let Some(logger) = &mut chat.logger {
-                            logger.log("assistant", &response, None, false).await;
+                let response = if chat.use_agents && chat.agent_coordinator.is_some() {
+                    // Use agent system
+                    match chat.process_with_agents(line).await {
+                        Ok(response) => response,
+                        Err(e) => {
+                            eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
+                            // Fallback to regular chat
+                            match chat.chat(line).await {
+                                Ok(response) => response,
+                                Err(e) => {
+                                    eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                                    continue;
+                                }
+                            }
                         }
-                        let model_name = format!("[{}]", chat.current_model.display_name()).bright_magenta();
-                        println!("\n{} {} {}\n", model_name, "Assistant:".bright_blue().bold(), response);
                     }
-                    Err(e) => {
-                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                } else {
+                    // Use regular chat
+                    match chat.chat(line).await {
+                        Ok(response) => response,
+                        Err(e) => {
+                            eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                            continue;
+                        }
                     }
+                };
+
+                // Log assistant response
+                if let Some(logger) = &mut chat.logger {
+                    logger.log("assistant", &response, None, false).await;
                 }
+                let model_name = format!("[{}]", chat.current_model.display_name()).bright_magenta();
+                println!("\n{} {} {}\n", model_name, "Assistant:".bright_blue().bold(), response);
             }
             Err(ReadlineError::Interrupted) => {
                 println!("{}", "^C".bright_black());

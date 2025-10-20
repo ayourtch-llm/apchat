@@ -1,0 +1,116 @@
+use crate::agents::agent::{LlmClient, LlmResponse, ChatMessage, ToolDefinition};
+use anyhow::Result;
+use async_trait::async_trait;
+use serde_json::Value;
+
+/// Groq LLM client implementation that bridges with the existing KimiChat system
+pub struct GroqLlmClient {
+    api_key: String,
+    model: String,
+    client: reqwest::Client,
+}
+
+impl GroqLlmClient {
+    pub fn new(api_key: String, model: String) -> Self {
+        Self {
+            api_key,
+            model,
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl LlmClient for GroqLlmClient {
+    async fn chat(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<LlmResponse> {
+        let request = self.build_chat_request(messages, tools).await?;
+
+        let response = self.client
+            .post(crate::GROQ_API_URL)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!("Groq API error: {}", error_text));
+        }
+
+        let response_text = response.text().await?;
+        let chat_response: crate::ChatResponse = serde_json::from_str(&response_text)?;
+
+        let message = if let Some(choice) = chat_response.choices.into_iter().next() {
+            ChatMessage {
+                role: choice.message.role,
+                content: choice.message.content,
+                tool_calls: choice.message.tool_calls.map(|calls| {
+                    calls.into_iter().map(|call| crate::agents::agent::ToolCall {
+                        id: call.id,
+                        function: crate::agents::agent::FunctionCall {
+                            name: call.function.name,
+                            arguments: call.function.arguments,
+                        },
+                    }).collect()
+                }),
+            }
+        } else {
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "No response generated".to_string(),
+                tool_calls: None,
+            }
+        };
+
+        Ok(LlmResponse {
+            message,
+            usage: chat_response.usage.map(|usage| crate::agents::agent::TokenUsage {
+                prompt_tokens: usage.prompt_tokens as u32,
+                completion_tokens: usage.completion_tokens as u32,
+                total_tokens: usage.total_tokens as u32,
+            }),
+        })
+    }
+}
+
+impl GroqLlmClient {
+    async fn build_chat_request(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<serde_json::Value> {
+        let chat_messages: Vec<crate::Message> = messages.into_iter().map(|msg| {
+            crate::Message {
+                role: msg.role,
+                content: msg.content,
+                tool_calls: msg.tool_calls.map(|calls| {
+                    calls.into_iter().map(|call| crate::ToolCall {
+                        id: call.id,
+                        tool_type: "function".to_string(),
+                        function: crate::FunctionCall {
+                            name: call.function.name,
+                            arguments: call.function.arguments,
+                        },
+                    }).collect()
+                }),
+                tool_call_id: None,
+                name: None,
+            }
+        }).collect();
+
+        let tool_definitions: Vec<crate::Tool> = tools.into_iter().map(|tool| {
+            crate::Tool {
+                tool_type: "function".to_string(),
+                function: crate::FunctionDef {
+                    name: tool.name,
+                    description: tool.description,
+                    parameters: tool.parameters,
+                },
+            }
+        }).collect();
+
+        Ok(serde_json::json!({
+            "model": self.model,
+            "messages": chat_messages,
+            "tools": tool_definitions,
+            "tool_choice": "auto"
+        }))
+    }
+}
