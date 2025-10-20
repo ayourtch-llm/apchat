@@ -1855,8 +1855,29 @@ impl KimiChat {
 
         let mut tool_call_iterations = 0;
         let mut recent_tool_calls: Vec<String> = Vec::new(); // Track recent tool calls
-        const MAX_TOOL_ITERATIONS: usize = 25; // Allow more iterations for complex tasks
+        const MAX_TOOL_ITERATIONS: usize = 100; // Increased limit with intelligent evaluation
         const LOOP_DETECTION_WINDOW: usize = 6; // Check last 6 tool calls
+        const PROGRESS_EVAL_INTERVAL: u32 = 15; // Evaluate progress every 15 tool calls
+
+        // Initialize progress evaluator if agents are enabled
+        let mut progress_evaluator = if self.use_agents && self.agent_coordinator.is_some() {
+            Some(crate::agents::progress_evaluator::ProgressEvaluator::new(
+                std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
+                    self.api_key.clone(),
+                    "kimi".to_string()
+                )),
+                0.6, // Minimum confidence threshold
+                PROGRESS_EVAL_INTERVAL,
+            ))
+        } else {
+            None
+        };
+
+        // Track tool calls for progress evaluation
+        let mut tool_call_history: Vec<crate::agents::progress_evaluator::ToolCallInfo> = Vec::new();
+        let mut files_changed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let start_time = std::time::Instant::now();
+        let mut errors_encountered: Vec<String> = Vec::new();
 
         loop {
             let (response, usage, current_model, messages) = self.call_api(&self.messages).await?;
@@ -1920,7 +1941,85 @@ impl KimiChat {
                     return Ok("Repeated tool call pattern detected. Please refine your request.".to_string());
                 }
 
-                // Hard limit check (fallback)
+                // Intelligent progress evaluation (replaces hard limit)
+                if let Some(ref mut evaluator) = progress_evaluator {
+                    if evaluator.should_evaluate(tool_call_iterations as u32) {
+                        println!("{}", format!("🧠 Evaluating progress after {} tool calls...", tool_call_iterations).bright_blue());
+
+                        // Create tool call summary
+                        let mut tool_usage = std::collections::HashMap::new();
+                        for call in &tool_call_history {
+                            *tool_usage.entry(call.tool_name.clone()).or_insert(0) += 1;
+                        }
+
+                        let summary = crate::agents::progress_evaluator::ToolCallSummary {
+                            total_calls: tool_call_iterations as u32,
+                            tool_usage,
+                            recent_calls: tool_call_history.iter().rev().take(10).cloned().collect(),
+                            current_task: "Executing user request with tools".to_string(),
+                            original_request: user_message.to_string(),
+                            elapsed_seconds: start_time.elapsed().as_secs(),
+                            errors: errors_encountered.clone(),
+                            files_changed: files_changed.iter().cloned().collect(),
+                        };
+
+                        match evaluator.evaluate_progress(&summary).await {
+                            Ok(evaluation) => {
+                                println!("{}", format!("🎯 Progress Evaluation: {:.0}% complete", evaluation.progress_percentage * 100.0).bright_green());
+                                println!("{}", format!("📊 Confidence: {:.0}%", evaluation.confidence * 100.0).bright_black());
+
+                                if !evaluation.recommendations.is_empty() {
+                                    println!("{}", "💡 Recommendations:".bright_cyan());
+                                    for rec in &evaluation.recommendations {
+                                        println!("  • {}", rec);
+                                    }
+                                }
+
+                                if !evaluation.should_continue {
+                                    println!("{}", "🛑 Agent evaluation suggests stopping or changing strategy".yellow());
+                                    self.messages.push(Message {
+                                        role: "assistant".to_string(),
+                                        content: format!(
+                                            "Based on progress evaluation: {}\n\nRecommendations:\n{}\n\nReasoning: {}",
+                                            if evaluation.change_strategy {
+                                                "I should change my approach."
+                                            } else {
+                                                "I should stop and ask for guidance."
+                                            },
+                                            evaluation.recommendations.join("\n"),
+                                            evaluation.reasoning
+                                        ),
+                                        tool_calls: None,
+                                        tool_call_id: None,
+                                        name: None,
+                                    });
+                                    return Ok("Intelligent progress evaluation suggested stopping this approach.".to_string());
+                                }
+
+                                if evaluation.change_strategy {
+                                    println!("{}", "🔄 Agent evaluation suggests changing strategy".bright_yellow());
+                                    self.messages.push(Message {
+                                        role: "system".to_string(),
+                                        content: format!(
+                                            "Progress evaluation suggests changing approach. Reasoning: {}\nRecommendations:\n{}",
+                                            evaluation.reasoning,
+                                            evaluation.recommendations.join("\n")
+                                        ),
+                                        tool_calls: None,
+                                        tool_call_id: None,
+                                        name: None,
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("{} Progress evaluation failed: {}", "⚠️".yellow(), e);
+                                // Continue with conservative fallback
+                            }
+                        }
+                    }
+                }
+
+                // Conservative hard limit as final fallback
                 if tool_call_iterations > MAX_TOOL_ITERATIONS {
                     eprintln!(
                         "{} Reached maximum tool call limit ({} iterations).",
@@ -1930,8 +2029,8 @@ impl KimiChat {
                     self.messages.push(Message {
                         role: "assistant".to_string(),
                         content: format!(
-                            "I've made {} tool calls for this request, which is quite a lot. \
-                            I may need you to break this down into smaller tasks or provide more specific direction.",
+                            "I've made {} tool calls for this request. Despite intelligent progress evaluation, \
+                            I've reached the safety limit. Please break this down into smaller tasks or provide more specific direction.",
                             tool_call_iterations
                         ),
                         tool_calls: None,
@@ -1979,6 +2078,7 @@ impl KimiChat {
                         MAX_TOOL_ITERATIONS
                     );
 
+                    let tool_start_time = std::time::Instant::now();
                     let result = match self.execute_tool(
                         &tool_call.function.name,
                         &tool_call.function.arguments,
@@ -1986,6 +2086,9 @@ impl KimiChat {
                         Ok(r) => r,
                         Err(e) => {
                             let error_msg = e.to_string();
+
+                            // Track error for progress evaluation
+                            errors_encountered.push(format!("{}: {}", tool_call.function.name, error_msg));
                             // Make cancellation errors very explicit to the model
                             if error_msg.contains("cancelled by user") ||
                                error_msg.contains("Edit cancelled") ||
@@ -2033,6 +2136,33 @@ impl KimiChat {
                             &tool_call.function.name,
                         ).await;
                     }
+
+                    // Track tool call for progress evaluation
+                    let duration = tool_start_time.elapsed();
+                    let result_summary = if result.len() > 200 {
+                        format!("{} (truncated)", &result[..200])
+                    } else {
+                        result.clone()
+                    };
+
+                    // Track files that were changed
+                    if tool_call.function.name.contains("write_file") ||
+                       tool_call.function.name.contains("edit_file") {
+                        if let Ok(args) = serde_json::from_str::<serde_json::Value>(&tool_call.function.arguments) {
+                            if let Some(file_path) = args.get("file_path").and_then(|v| v.as_str()) {
+                                files_changed.insert(file_path.to_string());
+                            }
+                        }
+                    }
+
+                    let call_info = crate::agents::progress_evaluator::ToolCallInfo {
+                        tool_name: tool_call.function.name.clone(),
+                        parameters: tool_call.function.arguments.clone(),
+                        success: !result.contains("failed") && !result.contains("cancelled"),
+                        duration_ms: duration.as_millis() as u64,
+                        result_summary: Some(result_summary),
+                    };
+                    tool_call_history.push(call_info);
 
                     self.messages.push(Message {
                         role: "tool".to_string(),

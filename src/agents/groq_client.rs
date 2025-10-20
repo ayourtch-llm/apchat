@@ -72,6 +72,38 @@ impl LlmClient for GroqLlmClient {
             }),
         })
     }
+
+    async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String> {
+        // For progress evaluation, make a simple API call without tools
+        let api_request = serde_json::json!({
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.3,
+            "max_tokens": 1000
+        });
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("https://api.groq.com/openai/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&api_request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!("API request failed: {}", response.status()));
+        }
+
+        let response_text = response.text().await?;
+        let chat_response: serde_json::Value = serde_json::from_str(&response_text)?;
+
+        if let Some(content) = chat_response["choices"][0]["message"]["content"].as_str() {
+            Ok(content.to_string())
+        } else {
+            Err(anyhow::anyhow!("No content in response"))
+        }
+    }
 }
 
 impl GroqLlmClient {

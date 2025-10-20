@@ -154,6 +154,9 @@ pub struct FunctionCall {
 #[async_trait]
 pub trait LlmClient: Send + Sync {
     async fn chat(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<LlmResponse>;
+
+    /// Simple chat completion without tools (for progress evaluation)
+    async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
