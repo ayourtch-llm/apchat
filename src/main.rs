@@ -40,7 +40,7 @@ struct Cli {
     command: Option<Commands>,
     
     /// Run in interactive mode (default)
-    #[arg(short, long)]
+    #[arg(short, long, action = clap::ArgAction::SetTrue)]
     interactive: bool,
     
     /// Generate shell completions
@@ -1337,6 +1337,23 @@ async fn main() -> Result<()> {
     // Use current directory as work_dir so the AI can see project files
     // NB: do NOT use the 'workspace' subdirectory as work_dir
     let work_dir = env::current_dir()?;
+
+    // Parse CLI arguments
+    let cli = Cli::parse();
+
+    // If a subcommand was provided, execute it and exit
+    if let Some(command) = cli.command {
+        let result = command.execute().await?;
+        println!("{}", result);
+        return Ok(());
+    }
+
+    // If interactive flag is set (or default), proceed to REPL
+    if !cli.interactive {
+        // If not interactive and no subcommand, just exit
+        println!("No subcommand provided and interactive mode not requested. Exiting.");
+        return Ok(());
+    }
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
