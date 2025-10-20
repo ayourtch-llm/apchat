@@ -27,6 +27,14 @@ struct LogEntry {
     tool_call_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_depth: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    agent_name: Option<String>,
 }
 
 pub struct ConversationLogger {
@@ -83,6 +91,21 @@ impl ConversationLogger {
 
     /// Append a single log entry.
     pub async fn log(&mut self, role: &str, content: &str, model: Option<&str>, is_binary: bool) {
+        self.log_with_task_context(role, content, model, is_binary, None, None, None, None).await;
+    }
+
+    /// Append a log entry with task context
+    pub async fn log_with_task_context(
+        &mut self,
+        role: &str,
+        content: &str,
+        model: Option<&str>,
+        is_binary: bool,
+        task_id: Option<&str>,
+        parent_task_id: Option<&str>,
+        task_depth: Option<usize>,
+        agent_name: Option<&str>,
+    ) {
         let entry = LogEntry {
             timestamp: Local::now().to_rfc3339(),
             role: role.to_string(),
@@ -92,6 +115,10 @@ impl ConversationLogger {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            task_id: task_id.map(|s| s.to_string()),
+            parent_task_id: parent_task_id.map(|s| s.to_string()),
+            task_depth,
+            agent_name: agent_name.map(|s| s.to_string()),
         };
         if let Some(file) = &mut self.file {
             if let Ok(json) = serde_json::to_string(&entry) {
@@ -113,6 +140,21 @@ impl ConversationLogger {
         model: Option<&str>,
         tool_calls: Vec<(String, String, String)>, // (id, name, arguments)
     ) {
+        self.log_with_tool_calls_and_task(role, content, model, tool_calls, None, None, None, None).await;
+    }
+
+    /// Log an assistant message with tool calls and task context
+    pub async fn log_with_tool_calls_and_task(
+        &mut self,
+        role: &str,
+        content: &str,
+        model: Option<&str>,
+        tool_calls: Vec<(String, String, String)>, // (id, name, arguments)
+        task_id: Option<&str>,
+        parent_task_id: Option<&str>,
+        task_depth: Option<usize>,
+        agent_name: Option<&str>,
+    ) {
         let tool_call_info: Vec<ToolCallInfo> = tool_calls
             .into_iter()
             .map(|(id, name, arguments)| ToolCallInfo { id, name, arguments })
@@ -127,6 +169,10 @@ impl ConversationLogger {
             tool_calls: Some(tool_call_info),
             tool_call_id: None,
             name: None,
+            task_id: task_id.map(|s| s.to_string()),
+            parent_task_id: parent_task_id.map(|s| s.to_string()),
+            task_depth,
+            agent_name: agent_name.map(|s| s.to_string()),
         };
         if let Some(file) = &mut self.file {
             if let Ok(json) = serde_json::to_string(&entry) {
@@ -152,6 +198,20 @@ impl ConversationLogger {
         tool_call_id: &str,
         tool_name: &str,
     ) {
+        self.log_tool_result_with_task(content, tool_call_id, tool_name, None, None, None, None).await;
+    }
+
+    /// Log a tool result with task context
+    pub async fn log_tool_result_with_task(
+        &mut self,
+        content: &str,
+        tool_call_id: &str,
+        tool_name: &str,
+        task_id: Option<&str>,
+        parent_task_id: Option<&str>,
+        task_depth: Option<usize>,
+        agent_name: Option<&str>,
+    ) {
         let entry = LogEntry {
             timestamp: Local::now().to_rfc3339(),
             role: "tool".to_string(),
@@ -161,6 +221,10 @@ impl ConversationLogger {
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
             name: Some(tool_name.to_string()),
+            task_id: task_id.map(|s| s.to_string()),
+            parent_task_id: parent_task_id.map(|s| s.to_string()),
+            task_depth,
+            agent_name: agent_name.map(|s| s.to_string()),
         };
         if let Some(file) = &mut self.file {
             if let Ok(json) = serde_json::to_string(&entry) {

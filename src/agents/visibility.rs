@@ -20,7 +20,7 @@ pub struct VisibilityManager {
     verbosity_level: VerbosityLevel,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AgentVisibilityInfo {
     pub name: String,
     pub capabilities: Vec<String>,
@@ -42,7 +42,7 @@ pub enum AgentStatus {
     Failed(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TaskVisibilityEvent {
     pub task_id: String,
     pub agent_name: String,
@@ -52,6 +52,9 @@ pub struct TaskVisibilityEvent {
     pub status: TaskStatus,
     pub result_summary: Option<String>,
     pub execution_metrics: ExecutionMetrics,
+    pub parent_task_id: Option<String>,
+    pub depth: usize,
+    pub subtask_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -63,7 +66,7 @@ pub enum TaskStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ExecutionMetrics {
     pub execution_time: Duration,
     pub tokens_used: Option<usize>,
@@ -72,7 +75,7 @@ pub struct ExecutionMetrics {
     pub memory_usage: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PerformanceMetrics {
     pub total_tasks: usize,
     pub successful_tasks: usize,
@@ -82,7 +85,7 @@ pub struct PerformanceMetrics {
     pub agent_performance: HashMap<String, AgentPerformance>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AgentPerformance {
     pub tasks_completed: usize,
     pub success_rate: f32,
@@ -183,9 +186,11 @@ impl VisibilityManager {
         if let Some(agent) = self.active_agents.get_mut(name) {
             agent.status = status;
             agent.current_task = task_description;
-            
+
+            // Clone agent for display to avoid borrow checker issues
             if self.verbosity_level == VerbosityLevel::Detailed || self.verbosity_level == VerbosityLevel::Debug {
-                self.display_agent_update(agent);
+                let agent_clone = agent.clone();
+                self.display_agent_update(&agent_clone);
             }
         }
     }
@@ -217,6 +222,18 @@ impl VisibilityManager {
     
     /// Record task start
     pub fn record_task_start(&mut self, task_id: String, agent_name: String, task_description: String) {
+        self.record_task_start_with_parent(task_id, agent_name, task_description, None, 0);
+    }
+
+    /// Record task start with parent tracking
+    pub fn record_task_start_with_parent(
+        &mut self,
+        task_id: String,
+        agent_name: String,
+        task_description: String,
+        parent_task_id: Option<String>,
+        depth: usize,
+    ) {
         let event = TaskVisibilityEvent {
             task_id: task_id.clone(),
             agent_name: agent_name.clone(),
@@ -232,23 +249,23 @@ impl VisibilityManager {
                 api_calls: 0,
                 memory_usage: None,
             },
+            parent_task_id: parent_task_id.clone(),
+            depth,
+            subtask_count: 0,
         };
-        
+
         self.task_history.push(event);
-        
+
         // Update agent status
         self.update_agent_status(
             &agent_name,
             AgentStatus::Executing,
-            Some(task_description)
+            Some(task_description.clone())
         );
-        
+
+        // Display with hierarchy
         if self.verbosity_level != VerbosityLevel::Minimal {
-            println!("{} {} started task: {}", 
-                "▶️".green(),
-                agent_name.bright_white(),
-                task_description.cyan()
-            );
+            self.display_task_start(&task_id, &agent_name, &task_description, depth);
         }
     }
     
@@ -271,7 +288,8 @@ impl VisibilityManager {
     
     /// Record task completion
     pub fn record_task_completion(&mut self, task_id: &str, result_summary: Option<String>, success: bool) {
-        if let Some(task) = self.task_history.iter_mut().find(|t| t.task_id == task_id) {
+        // First, update the task
+        let agent_name = if let Some(task) = self.task_history.iter_mut().find(|t| t.task_id == task_id) {
             task.end_time = Some(Instant::now());
             task.status = if success {
                 TaskStatus::Completed
@@ -279,28 +297,37 @@ impl VisibilityManager {
                 TaskStatus::Failed("Task execution failed".to_string())
             };
             task.result_summary = result_summary;
-            
-            // Update performance metrics
-            self.update_performance_metrics(task, success);
-            
+            Some(task.agent_name.clone())
+        } else {
+            None
+        };
+
+        // Then update metrics and agent status separately to avoid borrow checker issues
+        if let Some(ref name) = agent_name {
+            // Update performance metrics - clone task to avoid borrow checker issues
+            if let Some(task) = self.task_history.iter().find(|t| t.task_id == task_id) {
+                let task_clone = task.clone();
+                self.update_performance_metrics_from_task(&task_clone, success);
+            }
+
             // Update agent status
             self.update_agent_status(
-                &task.agent_name.clone(),
+                name,
                 if success { AgentStatus::Completed } else { AgentStatus::Failed("Task failed".to_string()) },
                 None
             );
         }
     }
     
-    /// Update performance metrics
-    fn update_performance_metrics(&mut self, task: &TaskVisibilityEvent, success: bool) {
+    /// Update performance metrics from task
+    fn update_performance_metrics_from_task(&mut self, task: &TaskVisibilityEvent, success: bool) {
         self.performance_metrics.total_tasks += 1;
         if success {
             self.performance_metrics.successful_tasks += 1;
         } else {
             self.performance_metrics.failed_tasks += 1;
         }
-        
+
         // Update agent-specific performance
         let agent_name = task.agent_name.clone();
         let performance = self.performance_metrics.agent_performance
@@ -311,7 +338,7 @@ impl VisibilityManager {
                 average_time: Duration::from_secs(0),
                 last_used: None,
             });
-        
+
         performance.tasks_completed += 1;
         performance.success_rate = self.performance_metrics.successful_tasks as f32 / self.performance_metrics.total_tasks as f32;
         performance.last_used = Some(Instant::now());
@@ -358,6 +385,190 @@ impl VisibilityManager {
         if self.task_history.len() > keep_last {
             let start_index = self.task_history.len() - keep_last;
             self.task_history = self.task_history.split_off(start_index);
+        }
+    }
+
+    /// Display task start with hierarchy indentation
+    fn display_task_start(&self, _task_id: &str, agent_name: &str, task_description: &str, depth: usize) {
+        let prefix = if depth == 0 {
+            "▶️".to_string()
+        } else {
+            format!("{}└─▶", "  ".repeat(depth.saturating_sub(1)))
+        };
+
+        println!(
+            "{} {} {} {} {}",
+            prefix.green(),
+            format!("[L{}]", depth).bright_black(),
+            agent_name.bright_white(),
+            "→".bright_black(),
+            task_description.cyan()
+        );
+    }
+
+    /// Display task hierarchy as a tree
+    pub fn display_task_hierarchy(&self) {
+        if self.task_history.is_empty() {
+            return;
+        }
+
+        println!();
+        println!("{}", "═".repeat(80).bright_blue());
+        println!("{}", "📊 TASK EXECUTION HIERARCHY".bright_blue().bold());
+        println!("{}", "═".repeat(80).bright_blue());
+        println!();
+
+        // Build parent-child mapping
+        let mut children: HashMap<String, Vec<&TaskVisibilityEvent>> = HashMap::new();
+        let mut roots = Vec::new();
+
+        for task in &self.task_history {
+            if let Some(parent_id) = &task.parent_task_id {
+                children.entry(parent_id.clone()).or_insert_with(Vec::new).push(task);
+            } else {
+                roots.push(task);
+            }
+        }
+
+        // Display tree recursively
+        for root in roots {
+            self.display_task_node(root, &children, 0, true);
+        }
+
+        println!();
+        println!("{}", "═".repeat(80).bright_blue());
+        println!();
+    }
+
+    /// Display a single task node in the tree
+    fn display_task_node(
+        &self,
+        task: &TaskVisibilityEvent,
+        children: &HashMap<String, Vec<&TaskVisibilityEvent>>,
+        depth: usize,
+        is_last: bool,
+    ) {
+        // Build tree connectors
+        let connector = if depth == 0 {
+            "".to_string()
+        } else if is_last {
+            "└── ".to_string()
+        } else {
+            "├── ".to_string()
+        };
+
+        let indent = "    ".repeat(depth.saturating_sub(1));
+
+        // Status icon
+        let status_icon = match &task.status {
+            TaskStatus::Started => "⏳",
+            TaskStatus::InProgress(_) => "⚙️",
+            TaskStatus::Completed => "✅",
+            TaskStatus::Failed(_) => "❌",
+            TaskStatus::Cancelled => "🚫",
+        };
+
+        // Duration
+        let duration = if let Some(end_time) = task.end_time {
+            format!("{:.2}s", end_time.duration_since(task.start_time).as_secs_f64())
+        } else {
+            "running".to_string()
+        };
+
+        println!(
+            "{}{}{} {} {} {} {}",
+            indent,
+            connector,
+            status_icon,
+            task.agent_name.bright_white(),
+            format!("[{}]", duration).bright_black(),
+            "→".bright_black(),
+            task.task_description.cyan()
+        );
+
+        // Display children
+        if let Some(child_tasks) = children.get(&task.task_id) {
+            let child_count = child_tasks.len();
+            for (i, child) in child_tasks.iter().enumerate() {
+                self.display_task_node(child, children, depth + 1, i == child_count - 1);
+            }
+        }
+    }
+
+    /// Display active task stack (breadcrumb trail)
+    pub fn display_task_stack(&self) {
+        let active_tasks: Vec<&TaskVisibilityEvent> = self
+            .task_history
+            .iter()
+            .filter(|t| matches!(t.status, TaskStatus::Started | TaskStatus::InProgress(_)))
+            .collect();
+
+        if active_tasks.is_empty() {
+            return;
+        }
+
+        println!();
+        println!("{}", "📍 ACTIVE TASK STACK".bright_yellow().bold());
+        println!("{}", "─".repeat(80).bright_yellow());
+
+        for task in &active_tasks {
+            let depth_indicator = "  ".repeat(task.depth);
+            let progress = match &task.status {
+                TaskStatus::InProgress(p) => format!(" {}%", (p * 100.0) as u32),
+                _ => String::new(),
+            };
+
+            println!(
+                "{}{} {} {} {}{}",
+                depth_indicator,
+                format!("[L{}]", task.depth).bright_black(),
+                task.agent_name.bright_white(),
+                "→".bright_black(),
+                task.task_description.cyan(),
+                progress.bright_yellow()
+            );
+        }
+
+        println!("{}", "─".repeat(80).bright_yellow());
+        println!();
+    }
+
+    /// Display task queue status
+    pub fn display_queue_status(&self, queue_size: usize, active_count: usize) {
+        if queue_size == 0 && active_count == 0 {
+            return;
+        }
+
+        println!(
+            "{} Queue: {} pending | {} active",
+            "📋".bright_cyan(),
+            queue_size.to_string().bright_yellow(),
+            active_count.to_string().bright_green()
+        );
+    }
+
+    /// Get task history for a specific agent
+    pub fn get_agent_tasks(&self, agent_name: &str) -> Vec<&TaskVisibilityEvent> {
+        self.task_history
+            .iter()
+            .filter(|t| t.agent_name == agent_name)
+            .collect()
+    }
+
+    /// Get current task depth (deepest active task)
+    pub fn get_current_depth(&self) -> usize {
+        self.task_history
+            .iter()
+            .filter(|t| matches!(t.status, TaskStatus::Started | TaskStatus::InProgress(_)))
+            .map(|t| t.depth)
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Increment subtask count for a parent task
+    pub fn increment_subtask_count(&mut self, parent_task_id: &str) {
+        if let Some(task) = self.task_history.iter_mut().find(|t| t.task_id == parent_task_id) {
+            task.subtask_count += 1;
         }
     }
 }
