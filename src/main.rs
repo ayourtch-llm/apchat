@@ -677,8 +677,22 @@ impl KimiChat {
         }
     }
 
-    fn execute_tool(&mut self, name: &str, arguments: &str) -> Result<String> {
+    async fn execute_tool(&mut self, name: &str, arguments: &str) -> Result<String> {
         match name {
+            "open_file" => {
+                let args: OpenFileArgs = serde_json::from_str(arguments)?;
+                let line_range = if args.start_line > 0 && args.end_line > 0 {
+                    Some(args.start_line..=args.end_line)
+                } else {
+                    None
+                };
+                
+                // Use the open_file module implementation
+                match open_file::open_file(&self.work_dir, &args.file_path, line_range).await {
+                    Ok(content) => Ok(content),
+                    Err(e) => Err(anyhow::anyhow!("Failed to open file: {}", e))
+                }
+            }
             "read_file" => {
                 let args: ReadFileArgs = serde_json::from_str(arguments)?;
                 self.read_file(&args.file_path)
@@ -1137,7 +1151,7 @@ impl KimiChat {
                     let result = match self.execute_tool(
                         &tool_call.function.name,
                         &tool_call.function.arguments,
-                    ) {
+                    ).await {
                         Ok(r) => r,
                         Err(e) => format!("Error: {}", e),
                     };
