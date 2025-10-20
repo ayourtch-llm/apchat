@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::Local;
 use serde::Serialize;
 use serde_json;
 use anyhow::Result;
@@ -15,7 +15,7 @@ struct ToolCallInfo {
 
 #[derive(Serialize)]
 struct LogEntry {
-    timestamp: String, // ISO‑8601 UTC
+    timestamp: String, // ISO‑8601 Local time
     role: String,
     content: String,
     model: Option<String>,
@@ -35,19 +35,19 @@ pub struct ConversationLogger {
 }
 
 impl ConversationLogger {
-    /// Create a new logger; generates the file name based on the current UTC time.
+    /// Create a new logger; generates the file name based on the current local time.
     pub async fn new(workspace: &Path) -> Result<Self> {
         // Ensure workspace exists
         fs::create_dir_all(workspace).await?;
-        
+
         // Create logs subdirectory if it doesn't exist
         let logs_dir = workspace.join("logs");
         fs::create_dir_all(&logs_dir).await?;
-        
-        let now: DateTime<Utc> = Utc::now();
+
+        let now_local = Local::now();
         let filename = format!(
             "kchat-{}.jsonl",
-            now.format("%Y-%m-%d-%H%M%S")
+            now_local.format("%Y-%m-%d-%H%M%S")
         );
         let file_path = logs_dir.join(filename);
         let file = OpenOptions::new()
@@ -61,7 +61,7 @@ impl ConversationLogger {
     /// Append a single log entry.
     pub async fn log(&mut self, role: &str, content: &str, model: Option<&str>, is_binary: bool) {
         let entry = LogEntry {
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Local::now().to_rfc3339(),
             role: role.to_string(),
             content: content.to_string(),
             model: model.map(|s| s.to_string()),
@@ -96,7 +96,7 @@ impl ConversationLogger {
             .collect();
 
         let entry = LogEntry {
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Local::now().to_rfc3339(),
             role: role.to_string(),
             content: content.to_string(),
             model: model.map(|s| s.to_string()),
@@ -130,7 +130,7 @@ impl ConversationLogger {
         tool_name: &str,
     ) {
         let entry = LogEntry {
-            timestamp: Utc::now().to_rfc3339(),
+            timestamp: Local::now().to_rfc3339(),
             role: "tool".to_string(),
             content: content.to_string(),
             model: None,
