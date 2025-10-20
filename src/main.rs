@@ -1011,21 +1011,14 @@ impl KimiChat {
                 );
             }
 
-            // Show preview
-            println!("{}", "  Old:".red());
-            for line in edit.old_content.lines().take(3) {
-                println!("    {}", line.red());
-            }
-            if edit.old_content.lines().count() > 3 {
-                println!("    {}", format!("... ({} more lines)", edit.old_content.lines().count() - 3).bright_black());
-            }
-
-            println!("{}", "  New:".green());
-            for line in edit.new_content.lines().take(3) {
-                println!("    {}", line.green());
-            }
-            if edit.new_content.lines().count() > 3 {
-                println!("    {}", format!("... ({} more lines)", edit.new_content.lines().count() - 3).bright_black());
+            // Show diff preview
+            let diff_output = self.show_diff(&edit.old_content, &edit.new_content, 2);
+            if !diff_output.is_empty() {
+                for line in diff_output.lines() {
+                    println!("  {}", line);
+                }
+            } else {
+                println!("  {}", "(No changes)".bright_black());
             }
 
             validated_edits.push(edit.clone());
