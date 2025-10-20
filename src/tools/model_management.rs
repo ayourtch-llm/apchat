@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
+use rustyline::DefaultEditor;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EditOperation {
@@ -259,6 +260,56 @@ impl Tool for ApplyEditPlanTool {
 
         println!("\n{}", "🚀 Applying Edit Plan".bright_cyan().bold());
         println!("{}", "═".repeat(60).bright_black());
+        println!("{} {} edit(s) will be applied:", "📋".cyan(), plan.len());
+
+        // Show summary of all edits
+        for (idx, edit) in plan.iter().enumerate() {
+            println!("  {}. {} - {}",
+                idx + 1,
+                edit.file_path.bright_white(),
+                edit.description.cyan()
+            );
+        }
+
+        println!("{}", "═".repeat(60).bright_black());
+
+        // Ask for confirmation
+        println!("\n{}", "Apply all these changes? [Y/n]".bright_green().bold());
+
+        let mut rl = match DefaultEditor::new() {
+            Ok(rl) => rl,
+            Err(e) => return ToolResult::error(format!("Failed to create readline editor: {}", e)),
+        };
+
+        let response = match rl.readline(">>> ") {
+            Ok(resp) => resp,
+            Err(_) => {
+                clear_edit_plan(&context.work_dir);
+                return ToolResult::error("Edit plan application cancelled by user".to_string());
+            }
+        };
+
+        let response = response.trim().to_lowercase();
+
+        match response.as_str() {
+            "" | "y" | "yes" => {
+                // Continue with applying edits
+                println!("\n{}", "Applying edits...".green());
+            }
+            _ => {
+                // Cancelled - ask for optional feedback
+                println!("{}", "Would you like to provide feedback to the model about why you rejected this? (optional)".bright_yellow());
+                println!("{}", "Press Enter to skip, or type your feedback:".bright_black());
+
+                let feedback = match rl.readline("") {
+                    Ok(fb) if !fb.trim().is_empty() => format!(" - {}", fb.trim()),
+                    _ => String::new(),
+                };
+
+                clear_edit_plan(&context.work_dir);
+                return ToolResult::error(format!("Edit plan application cancelled by user{}", feedback));
+            }
+        }
 
         // Apply all edits sequentially
         let mut results = Vec::new();
