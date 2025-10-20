@@ -624,13 +624,9 @@ impl KimiChat {
         let content = fs::read_to_string(&full_path)
             .with_context(|| format!("Failed to read file: {}", full_path.display()))?;
 
-        let lines: Vec<&str> = content.lines().collect();
-        let total_lines = lines.len();
-
-        // ALWAYS return full content with line count
-        // This ensures consistent, predictable behavior for the model
-        // If a file is too large for context, the API will handle it
-        Ok(format!("{}\n\n[Total: {} lines]", content, total_lines))
+        // Return just the content without any metadata
+        // This prevents the "[Total: X lines]" from being accidentally included in edits/writes
+        Ok(content)
     }
 
     fn write_file(&self, file_path: &str, content: &str) -> Result<String> {
