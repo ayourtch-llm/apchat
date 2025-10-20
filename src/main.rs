@@ -723,12 +723,11 @@ impl KimiChat {
             // Try fuzzy matching to suggest alternatives
             let lines: Vec<&str> = current_content.lines().collect();
             let search_lines: Vec<&str> = old_content.lines().collect();
+            let mut found_candidates = Vec::new();
 
             if !search_lines.is_empty() {
                 let first_search_line = search_lines[0].trim();
                 println!("\n{}", "Searching for similar content...".bright_cyan());
-
-                let mut found_candidates = Vec::new();
 
                 for (i, line) in lines.iter().enumerate() {
                     if line.trim().contains(first_search_line) {
@@ -740,8 +739,9 @@ impl KimiChat {
                     }
                 }
 
-                for (line_num, candidate) in found_candidates.iter().take(3) { // Show max 3 candidates
-                    println!("\n{} Found similar content at line {}:", "💡".bright_cyan(), line_num);
+                // Number the candidates for selection
+                for (idx, (line_num, candidate)) in found_candidates.iter().take(3).enumerate() { // Show max 3 candidates
+                    println!("\n{} Found similar content #{} at line {}:", "💡".bright_cyan(), idx + 1, line_num);
                     println!("{}", "─".repeat(60).bright_black());
 
                     // Show diff between what was searched for and what was found
@@ -761,17 +761,44 @@ impl KimiChat {
 
             // Ask user what to do
             println!("\n{}", "Would you like to:".bright_yellow().bold());
-            println!("  {} - Manually provide the correct old_content", "1".bright_cyan());
-            println!("  {} - Cancel this edit", "2".bright_cyan());
-            println!("\n{}", "Choose [1/2]:".bright_green().bold());
+
+            // Show numbered options for each candidate found
+            if !found_candidates.is_empty() {
+                for (idx, (line_num, _)) in found_candidates.iter().take(3).enumerate() {
+                    println!("  {} - Use similar content #{} (line {})",
+                        (idx + 1).to_string().bright_cyan(),
+                        idx + 1,
+                        line_num);
+                }
+            }
+
+            let manual_option = if found_candidates.is_empty() { "1".to_string() } else { (found_candidates.len().min(3) + 1).to_string() };
+            let cancel_option = if found_candidates.is_empty() { "2".to_string() } else { (found_candidates.len().min(3) + 2).to_string() };
+
+            println!("  {} - Manually provide the correct old_content", manual_option.bright_cyan());
+            println!("  {} - Cancel this edit", cancel_option.bright_cyan());
+
+            let options_str = if found_candidates.is_empty() {
+                "[1/2]"
+            } else {
+                &format!("[1-{}]", found_candidates.len().min(3) + 2)
+            };
+            println!("\n{} {}:", "Choose".bright_green().bold(), options_str.bright_green());
 
             let mut rl = DefaultEditor::new()?;
             let response = rl.readline(">>> ")?;
             let response = response.trim();
 
-            match response {
-                "1" => {
-                    // Allow manual editing
+            // Parse response
+            if let Ok(choice) = response.parse::<usize>() {
+                // Check if it's a candidate selection
+                if choice > 0 && choice <= found_candidates.len().min(3) {
+                    let (_line_num, candidate_content) = &found_candidates[choice - 1];
+                    println!("{} Using similar content #{}", "✓".bright_green(), choice);
+                    // Retry with the selected candidate
+                    return self.edit_file(file_path, candidate_content, new_content);
+                } else if response == manual_option {
+                    // Manual editing option
                     println!("{}", "Enter the corrected old_content to find (multiple lines ok, end with empty line):".yellow());
                     let mut manual_old = String::new();
                     loop {
@@ -793,10 +820,11 @@ impl KimiChat {
                     } else {
                         anyhow::bail!("Edit cancelled - no content provided")
                     }
-                }
-                _ => {
+                } else {
                     anyhow::bail!("Edit cancelled by user")
                 }
+            } else {
+                anyhow::bail!("Edit cancelled by user")
             }
         }
 
