@@ -95,6 +95,11 @@ struct Cli {
     #[arg(long, value_name = "MODEL")]
     model_grn_model: Option<String>,
 
+    /// Override both models with the same custom model name
+    /// This is a convenience flag that sets both --model-blu-model and --model-grn-model
+    #[arg(long, value_name = "MODEL")]
+    model: Option<String>,
+
     /// Auto-confirm all actions without asking (auto-pilot mode)
     #[arg(long)]
     auto_confirm: bool,
@@ -1877,12 +1882,13 @@ async fn main() -> Result<()> {
     }
 
     // Create client configuration from CLI arguments
+    // Priority: specific flags override general --model flag
     let client_config = ClientConfig {
         api_key: api_key.clone(),
         api_url_blu_model,
         api_url_grn_model,
-        model_blu_model_override: cli.model_blu_model.clone(),
-        model_grn_model_override: cli.model_grn_model.clone(),
+        model_blu_model_override: cli.model_blu_model.clone().or_else(|| cli.model.clone()),
+        model_grn_model_override: cli.model_grn_model.clone().or_else(|| cli.model.clone()),
     };
 
     // Create policy manager based on CLI arguments
