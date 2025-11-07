@@ -2,7 +2,7 @@
   "name": "file_manager",
   "description": "General-purpose file operations agent for reading, writing, and organizing files",
   "version": "1.0.0",
-  "model": "kimi",
+  "model": "blu_model",
   "tools": [
     "read_file",
     "write_file",

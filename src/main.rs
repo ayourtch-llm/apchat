@@ -73,27 +73,27 @@ struct Cli {
     pretty: bool,
 
     /// Use llama.cpp server for both models (e.g., http://localhost:8080)
-    /// This is a convenience flag that sets both --api-url-kimi and --api-url-gpt-oss
+    /// This is a convenience flag that sets both --api-url-blu-model and --api-url-grn-model
     #[arg(long, value_name = "URL")]
     llama_cpp_url: Option<String>,
 
-    /// API URL for the 'kimi' model (e.g., http://localhost:8080)
-    /// If set, uses llama.cpp for kimi; otherwise uses Groq
+    /// API URL for the 'blu_model' model (e.g., http://localhost:8080)
+    /// If set, uses llama.cpp for blu_model; otherwise uses Groq
     #[arg(long, value_name = "URL")]
-    api_url_kimi: Option<String>,
+    api_url_blu_model: Option<String>,
 
-    /// API URL for the 'gpt-oss' model (e.g., http://localhost:8081)
-    /// If set, uses llama.cpp for gpt-oss; otherwise uses Groq
+    /// API URL for the 'grn_model' model (e.g., http://localhost:8081)
+    /// If set, uses llama.cpp for grn_model; otherwise uses Groq
     #[arg(long, value_name = "URL")]
-    api_url_gpt_oss: Option<String>,
+    api_url_grn_model: Option<String>,
 
-    /// Override the 'kimi' model with a custom model name
+    /// Override the 'blu_model' model with a custom model name
     #[arg(long, value_name = "MODEL")]
-    model_kimi: Option<String>,
+    model_blu_model: Option<String>,
 
-    /// Override the 'gpt-oss' model with a custom model name
+    /// Override the 'grn_model' model with a custom model name
     #[arg(long, value_name = "MODEL")]
-    model_gpt_oss: Option<String>,
+    model_grn_model: Option<String>,
 
     /// Auto-confirm all actions without asking (auto-pilot mode)
     #[arg(long)]
@@ -330,32 +330,32 @@ impl Commands {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum ModelType {
-    Kimi,
-    GptOss,
+    BluModel,
+    GrnModel,
     Custom(String),
 }
 
 impl ModelType {
     fn as_str(&self) -> String {
         match self {
-            ModelType::Kimi => "moonshotai/kimi-k2-instruct-0905".to_string(),
-            ModelType::GptOss => "openai/gpt-oss-120b".to_string(),
+            ModelType::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
+            ModelType::GrnModel => "openai/gpt-oss-120b".to_string(),
             ModelType::Custom(name) => name.clone(),
         }
     }
 
     fn display_name(&self) -> String {
         match self {
-            ModelType::Kimi => "Kimi-K2-Instruct-0905".to_string(),
-            ModelType::GptOss => "GPT-OSS-120B".to_string(),
+            ModelType::BluModel => "Kimi-K2-Instruct-0905".to_string(),
+            ModelType::GrnModel => "GPT-OSS-120B".to_string(),
             ModelType::Custom(name) => name.clone(),
         }
     }
 
     fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "kimi" => ModelType::Kimi,
-            "gpt-oss" | "gptoss" | "gpt_oss" => ModelType::GptOss,
+            "blu_model" | "blu-model" | "blumodel" => ModelType::BluModel,
+            "grn_model" | "grn-model" | "grnmodel" => ModelType::GrnModel,
             _ => ModelType::Custom(s.to_string()),
         }
     }
@@ -513,14 +513,14 @@ fn default_max_results() -> u32 { 100 }
 struct ClientConfig {
     /// API key for authentication (not used for llama.cpp)
     api_key: String,
-    /// API URL for 'kimi' model - if Some, uses llama.cpp; if None, uses Groq
-    api_url_kimi: Option<String>,
-    /// API URL for 'gpt_oss' model - if Some, uses llama.cpp; if None, uses Groq
-    api_url_gpt_oss: Option<String>,
-    /// Override for 'kimi' model name
-    model_kimi_override: Option<String>,
-    /// Override for 'gpt_oss' model name
-    model_gpt_oss_override: Option<String>,
+    /// API URL for 'blu_model' - if Some, uses llama.cpp; if None, uses Groq
+    api_url_blu_model: Option<String>,
+    /// API URL for 'grn_model' - if Some, uses llama.cpp; if None, uses Groq
+    api_url_grn_model: Option<String>,
+    /// Override for 'blu_model' model name
+    model_blu_model_override: Option<String>,
+    /// Override for 'grn_model' model name
+    model_grn_model_override: Option<String>,
 }
 
 struct KimiChat {
@@ -547,8 +547,8 @@ impl KimiChat {
         let base_prompt = format!(
             "You are an AI assistant with access to file operations and model switching capabilities. \
             You are currently running as {}. You can switch to other models when appropriate:\n\
-            - gpt-oss (GPT-OSS-120B): **Preferred for cost efficiency** - significantly cheaper than Kimi while providing good performance for most tasks\n\
-            - kimi (Kimi-K2-Instruct-0905): Use when GPT-OSS struggles or when you need faster responses\n\n\
+            - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
+            - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\n\
             Available tools (use ONLY these exact names):\n\
             - read_file: Read entire file contents (always returns full file)\n\
             - open_file: Read specific line range from a file (use when you only need a section)\n\
@@ -566,10 +566,10 @@ impl KimiChat {
             model.display_name()
         );
 
-        if *model == ModelType::GptOss {
+        if *model == ModelType::GrnModel {
             format!(
                 "{}CRITICAL WARNING: If you attempt to call ANY tool not listed above (such as 'edit', 'repo_browser.search', \
-                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the Kimi model \
+                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the BluModel model \
                 and your request will be retried. Use ONLY the exact tool names listed above.",
                 base_prompt
             )
@@ -584,10 +584,10 @@ impl KimiChat {
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            api_url_kimi: None,
-            api_url_gpt_oss: None,
-            model_kimi_override: None,
-            model_gpt_oss_override: None,
+            api_url_blu_model: None,
+            api_url_grn_model: None,
+            model_blu_model_override: None,
+            model_grn_model_override: None,
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(config, work_dir, false, policy_manager)
@@ -596,10 +596,10 @@ impl KimiChat {
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            api_url_kimi: None,
-            api_url_gpt_oss: None,
-            model_kimi_override: None,
-            model_gpt_oss_override: None,
+            api_url_blu_model: None,
+            api_url_grn_model: None,
+            model_blu_model_override: None,
+            model_grn_model_override: None,
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(config, work_dir, use_agents, policy_manager)
@@ -627,7 +627,7 @@ impl KimiChat {
             messages: Vec::new(),
             // Default to GPT-OSS for cost efficiency - it's significantly cheaper than Kimi
             // while still providing good performance for most tasks
-            current_model: ModelType::GptOss,
+            current_model: ModelType::GrnModel,
             total_tokens_used: 0,
             logger: None,
             tool_registry,
@@ -688,45 +688,45 @@ impl KimiChat {
         let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
 
         // Determine model names with overrides
-        let kimi_model = client_config.model_kimi_override.clone()
-            .unwrap_or_else(|| ModelType::Kimi.as_str());
-        let gpt_oss_model = client_config.model_gpt_oss_override.clone()
-            .unwrap_or_else(|| ModelType::GptOss.as_str());
+        let blu_model = client_config.model_blu_model_override.clone()
+            .unwrap_or_else(|| ModelType::BluModel.as_str());
+        let grn_model = client_config.model_grn_model_override.clone()
+            .unwrap_or_else(|| ModelType::GrnModel.as_str());
 
         // Register LLM clients based on per-model configuration
 
-        // Configure kimi client
-        let kimi_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_kimi {
-            println!("{} Using llama.cpp for 'kimi' at: {}", "🦙".cyan(), api_url);
+        // Configure blu_model client
+        let blu_model_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_blu_model {
+            println!("{} Using llama.cpp for 'blu_model' at: {}", "🦙".cyan(), api_url);
             std::sync::Arc::new(LlamaCppClient::new(
                 api_url.clone(),
-                kimi_model
+                blu_model
             ))
         } else {
-            println!("{} Using Groq API for 'kimi'", "🚀".cyan());
+            println!("{} Using Groq API for 'blu_model'", "🚀".cyan());
             std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
-                kimi_model
+                blu_model
             ))
         };
 
-        // Configure gpt_oss client
-        let gpt_oss_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_gpt_oss {
-            println!("{} Using llama.cpp for 'gpt_oss' at: {}", "🦙".cyan(), api_url);
+        // Configure grn_model client
+        let grn_model_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_grn_model {
+            println!("{} Using llama.cpp for 'grn_model' at: {}", "🦙".cyan(), api_url);
             std::sync::Arc::new(LlamaCppClient::new(
                 api_url.clone(),
-                gpt_oss_model
+                grn_model
             ))
         } else {
-            println!("{} Using Groq API for 'gpt_oss'", "🚀".cyan());
+            println!("{} Using Groq API for 'grn_model'", "🚀".cyan());
             std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
-                gpt_oss_model
+                grn_model
             ))
         };
 
-        agent_factory.register_llm_client("kimi".to_string(), kimi_client);
-        agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
+        agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);
+        agent_factory.register_llm_client("grn_model".to_string(), grn_model_client);
 
         // Create coordinator
         let agent_factory_arc = std::sync::Arc::new(agent_factory);
@@ -840,9 +840,9 @@ impl KimiChat {
 
     fn switch_model(&mut self, model_str: &str, reason: &str) -> Result<String> {
         let new_model = match model_str.to_lowercase().as_str() {
-            "kimi" => ModelType::Kimi,
-            "gpt-oss" => ModelType::GptOss,
-            _ => anyhow::bail!("Unknown model: {}. Available: 'kimi', 'gpt-oss'", model_str),
+            "blu_model" | "blu-model" => ModelType::BluModel,
+            "grn_model" | "grn-model" => ModelType::GrnModel,
+            _ => anyhow::bail!("Unknown model: {}. Available: 'blu_model', 'grn_model'", model_str),
         };
 
         if new_model == self.current_model {
@@ -903,9 +903,9 @@ impl KimiChat {
 
         // Use the "other" model for summarization
         let summary_model = match self.current_model {
-            ModelType::Kimi => ModelType::GptOss,
-            ModelType::GptOss => ModelType::Kimi,
-            ModelType::Custom(_) => ModelType::Kimi, // Default to Kimi for custom models
+            ModelType::BluModel => ModelType::GrnModel,
+            ModelType::GrnModel => ModelType::BluModel,
+            ModelType::Custom(_) => ModelType::BluModel, // Default to BluModel for custom models
         };
 
         println!(
@@ -1156,7 +1156,7 @@ impl KimiChat {
 
         // Create a simple repair request using Kimi (fast and good at structured output)
         let repair_request = ChatRequest {
-            model: ModelType::Kimi.as_str().to_string(),
+            model: ModelType::BluModel.as_str().to_string(),
             messages: vec![
                 Message {
                     role: "system".to_string(),
@@ -1368,12 +1368,12 @@ impl KimiChat {
                     eprintln!("{}", "❌ Tool calling error detected!".red().bold());
                     eprintln!("{}", error_body.yellow());
 
-                    // Check for GPT-OSS hallucinating non-existent tools
-                    if error_body.contains("attempted to call tool") && current_model == ModelType::GptOss {
-                        eprintln!("{}", "🔄 GPT-OSS-120B attempted to use non-existent tool. Switching to Kimi and retrying...".bright_cyan());
+                    // Check for GrnModel hallucinating non-existent tools
+                    if error_body.contains("attempted to call tool") && current_model == ModelType::GrnModel {
+                        eprintln!("{}", "🔄 GrnModel attempted to use non-existent tool. Switching to BluModel and retrying...".bright_cyan());
 
-                        // Switch to Kimi
-                        current_model = ModelType::Kimi;
+                        // Switch to BluModel
+                        current_model = ModelType::BluModel;
 
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
@@ -1382,17 +1382,17 @@ impl KimiChat {
                             }
                         }
 
-                        // Retry with Kimi - continue the loop to retry
+                        // Retry with BluModel - continue the loop to retry
                         retry_count = 0; // Reset retry count for new model
                         continue;
                     }
-                    // Check for Kimi generating malformed tool calls
+                    // Check for BluModel generating malformed tool calls
                     else if (error_body.contains("Failed to call a function") ||
                              error_body.contains("tool call validation failed") ||
                              error_body.contains("parameters for tool") ||
                              error_body.contains("did not match schema")) &&
-                            current_model == ModelType::Kimi {
-                        eprintln!("{}", "❌ Kimi-K2 generated malformed tool call (invalid JSON/parameters).".red());
+                            current_model == ModelType::BluModel {
+                        eprintln!("{}", "❌ BluModel generated malformed tool call (invalid JSON/parameters).".red());
 
                         // First, try to repair the tool call using AI
                         let mut repaired = false;
@@ -1430,11 +1430,11 @@ impl KimiChat {
                             continue;
                         }
 
-                        // If repair failed or wasn't possible, switch to GPT-OSS as fallback
-                        eprintln!("{}", "🔄 Repair failed. Switching to GPT-OSS and retrying...".bright_cyan());
+                        // If repair failed or wasn't possible, switch to GrnModel as fallback
+                        eprintln!("{}", "🔄 Repair failed. Switching to GrnModel and retrying...".bright_cyan());
 
-                        // Switch to GPT-OSS
-                        current_model = ModelType::GptOss;
+                        // Switch to GrnModel
+                        current_model = ModelType::GrnModel;
 
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
@@ -1443,7 +1443,7 @@ impl KimiChat {
                             }
                         }
 
-                        // Retry with GPT-OSS - continue the loop to retry
+                        // Retry with GrnModel - continue the loop to retry
                         retry_count = 0; // Reset retry count for new model
                         continue;
                     }
@@ -1851,15 +1851,15 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Determine API URLs for each model
-    // Priority: specific flags (--api-url-kimi, --api-url-gpt-oss) override general flag (--llama-cpp-url)
-    let api_url_kimi = cli.api_url_kimi.or_else(|| cli.llama_cpp_url.clone());
-    let api_url_gpt_oss = cli.api_url_gpt_oss.or_else(|| cli.llama_cpp_url.clone());
+    // Priority: specific flags (--api-url-blu-model, --api-url-grn-model) override general flag (--llama-cpp-url)
+    let api_url_blu_model = cli.api_url_blu_model.or_else(|| cli.llama_cpp_url.clone());
+    let api_url_grn_model = cli.api_url_grn_model.or_else(|| cli.llama_cpp_url.clone());
 
     // API key is only required if at least one model uses Groq (no API URL specified)
-    let using_groq = api_url_kimi.is_none() || api_url_gpt_oss.is_none();
+    let using_groq = api_url_blu_model.is_none() || api_url_grn_model.is_none();
     let api_key = if using_groq {
         env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --api-url-kimi and/or --api-url-gpt-oss to use llama.cpp instead of Groq.")?
+            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model to use llama.cpp instead of Groq.")?
     } else {
         // Both models use llama.cpp, no API key needed
         String::new()
@@ -1879,10 +1879,10 @@ async fn main() -> Result<()> {
     // Create client configuration from CLI arguments
     let client_config = ClientConfig {
         api_key: api_key.clone(),
-        api_url_kimi,
-        api_url_gpt_oss,
-        model_kimi_override: cli.model_kimi.clone(),
-        model_gpt_oss_override: cli.model_gpt_oss.clone(),
+        api_url_blu_model,
+        api_url_grn_model,
+        model_blu_model_override: cli.model_blu_model.clone(),
+        model_grn_model_override: cli.model_grn_model.clone(),
     };
 
     // Create policy manager based on CLI arguments
@@ -1981,7 +1981,7 @@ async fn main() -> Result<()> {
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
-    println!("{}", "Default model: GPT-OSS-120B (cost-efficient) • Auto-switches to Kimi-K2-Instruct-0905 when needed".bright_black());
+    println!("{}", "Default model: GrnModel/GPT-OSS-120B (cost-efficient) • Auto-switches to BluModel/Kimi-K2-Instruct-0905 when needed".bright_black());
 
     if cli.agents {
         println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
