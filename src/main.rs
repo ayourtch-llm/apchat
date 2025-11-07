@@ -28,10 +28,12 @@ mod logging;
 mod open_file;
 mod preview;
 mod core;
+mod policy;
 mod tools;
 mod agents;
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
+use policy::{PolicyManager, ActionType, Decision};
 use core::tool_context::ToolContext;
 use tools::*;
 use agents::*;
@@ -92,6 +94,18 @@ struct Cli {
     /// Override the 'gpt-oss' model with a custom model name
     #[arg(long, value_name = "MODEL")]
     model_gpt_oss: Option<String>,
+
+    /// Auto-confirm all actions without asking (auto-pilot mode)
+    #[arg(long)]
+    auto_confirm: bool,
+
+    /// Path to policy file (default: policies.toml in project root)
+    #[arg(long, value_name = "PATH")]
+    policy_file: Option<String>,
+
+    /// Learn from user decisions and save them to policy file
+    #[arg(long)]
+    learn_policies: bool,
 }
 
 #[derive(Subcommand)]
@@ -182,7 +196,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = ReadFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -199,7 +213,7 @@ impl Commands {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
                     params.set("content", content);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = WriteFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -218,7 +232,7 @@ impl Commands {
                     params.set("file_path", file_path);
                     params.set("old_content", old_content);
                     params.set("new_content", new_content);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = EditFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -233,7 +247,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("pattern", pattern);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = ListFilesTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -256,7 +270,7 @@ impl Commands {
                     params.set("regex", regex);
                     params.set("case_insensitive", case_insensitive);
                     params.set("max_results", max_results as i64);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = SearchFilesTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -278,7 +292,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("command", command);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = RunCommandTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -301,7 +315,7 @@ impl Commands {
                     if let Some(end) = end_line {
                         params.set("end_line", end as i64);
                     }
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = OpenFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -523,6 +537,8 @@ struct KimiChat {
     use_agents: bool,
     // Client configuration
     client_config: ClientConfig,
+    // Policy manager
+    policy_manager: PolicyManager,
 }
 
 impl KimiChat {
@@ -573,7 +589,8 @@ impl KimiChat {
             model_kimi_override: None,
             model_gpt_oss_override: None,
         };
-        Self::new_with_config(config, work_dir, false)
+        let policy_manager = PolicyManager::new();
+        Self::new_with_config(config, work_dir, false, policy_manager)
     }
 
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
@@ -584,13 +601,14 @@ impl KimiChat {
             model_kimi_override: None,
             model_gpt_oss_override: None,
         };
-        Self::new_with_config(config, work_dir, use_agents)
+        let policy_manager = PolicyManager::new();
+        Self::new_with_config(config, work_dir, use_agents, policy_manager)
     }
 
-    fn new_with_config(client_config: ClientConfig, work_dir: PathBuf, use_agents: bool) -> Self {
+    fn new_with_config(client_config: ClientConfig, work_dir: PathBuf, use_agents: bool, policy_manager: PolicyManager) -> Self {
         let tool_registry = Self::initialize_tool_registry();
         let agent_coordinator = if use_agents {
-            match Self::initialize_agent_system(&client_config, &tool_registry) {
+            match Self::initialize_agent_system(&client_config, &tool_registry, &policy_manager) {
                 Ok(coordinator) => Some(coordinator),
                 Err(e) => {
                     eprintln!("{} Failed to initialize agent system: {}", "❌".red(), e);
@@ -616,6 +634,7 @@ impl KimiChat {
             agent_coordinator,
             use_agents,
             client_config,
+            policy_manager,
         };
 
         // Add system message to inform the model about capabilities
@@ -661,12 +680,12 @@ impl KimiChat {
     }
 
     /// Initialize the agent system with configuration files
-    fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry) -> Result<PlanningCoordinator> {
+    fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry, policy_manager: &PolicyManager) -> Result<PlanningCoordinator> {
         println!("{} Initializing agent system...", "🤖".blue());
 
         // Create agent factory
         let tool_registry_arc = std::sync::Arc::new((*tool_registry).clone());
-        let mut agent_factory = AgentFactory::new(tool_registry_arc);
+        let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
 
         // Determine model names with overrides
         let kimi_model = client_config.model_kimi_override.clone()
@@ -858,7 +877,8 @@ impl KimiChat {
 
                 let context = ToolContext::new(
                     self.work_dir.clone(),
-                    format!("session_{}", chrono::Utc::now().timestamp())
+                    format!("session_{}", chrono::Utc::now().timestamp()),
+                    self.policy_manager.clone()
                 );
 
                 let result = self.tool_registry.execute_tool(name, params, &context).await;
@@ -1865,6 +1885,31 @@ async fn main() -> Result<()> {
         model_gpt_oss_override: cli.model_gpt_oss.clone(),
     };
 
+    // Create policy manager based on CLI arguments
+    let policy_manager = if cli.auto_confirm {
+        eprintln!("{} Auto-confirm mode enabled - all actions will be approved automatically", "🚀".green());
+        PolicyManager::allow_all()
+    } else if cli.policy_file.is_some() || cli.learn_policies {
+        let policy_file = cli.policy_file.unwrap_or_else(|| "policies.toml".to_string());
+        let policy_path = work_dir.join(&policy_file);
+        match PolicyManager::from_file(&policy_path, cli.learn_policies) {
+            Ok(pm) => {
+                eprintln!("{} Loaded policy file: {}", "📋".cyan(), policy_path.display());
+                if cli.learn_policies {
+                    eprintln!("{} Policy learning enabled - user decisions will be saved to policy file", "📚".cyan());
+                }
+                pm
+            }
+            Err(e) => {
+                eprintln!("{} Failed to load policy file: {}", "⚠️".yellow(), e);
+                eprintln!("{} Using default policy (ask for confirmation)", "📋".cyan());
+                PolicyManager::new()
+            }
+        }
+    } else {
+        PolicyManager::new()
+    };
+
     // Handle task mode if requested
     if let Some(task_text) = cli.task {
         println!("{}", "🤖 Kimi Chat - Task Mode".bright_cyan().bold());
@@ -1877,7 +1922,7 @@ async fn main() -> Result<()> {
         println!("{}", format!("Task: {}", task_text).bright_yellow());
         println!();
 
-        let mut chat = KimiChat::new_with_config(client_config.clone(), work_dir.clone(), cli.agents);
+        let mut chat = KimiChat::new_with_config(client_config.clone(), work_dir.clone(), cli.agents, policy_manager.clone());
 
         // Initialize logger for task mode
         chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
@@ -1944,7 +1989,7 @@ async fn main() -> Result<()> {
 
     println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
 
-    let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents);
+    let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents, policy_manager);
     // Initialize logger (async) – logs go into the workspace directory
     chat.logger = match ConversationLogger::new(&chat.work_dir).await {
         Ok(l) => Some(l),

@@ -10,13 +10,15 @@ use colored::Colorize;
 pub struct AgentFactory {
     tool_registry: Arc<ToolRegistry>,
     llm_clients: HashMap<String, Arc<dyn LlmClient>>,
+    policy_manager: crate::policy::PolicyManager,
 }
 
 impl AgentFactory {
-    pub fn new(tool_registry: Arc<ToolRegistry>) -> Self {
+    pub fn new(tool_registry: Arc<ToolRegistry>, policy_manager: crate::policy::PolicyManager) -> Self {
         Self {
             tool_registry,
             llm_clients: HashMap::new(),
+            policy_manager,
         }
     }
 
@@ -39,6 +41,7 @@ impl AgentFactory {
             config.clone(),
             Arc::clone(&self.tool_registry),
             llm_client,
+            self.policy_manager.clone(),
         )?;
 
         Ok(Box::new(agent))
@@ -50,6 +53,7 @@ pub struct ConfigurableAgent {
     config: AgentConfig,
     tool_registry: Arc<ToolRegistry>,
     llm_client: Arc<dyn LlmClient>,
+    policy_manager: crate::policy::PolicyManager,
 }
 
 impl ConfigurableAgent {
@@ -57,6 +61,7 @@ impl ConfigurableAgent {
         config: AgentConfig,
         tool_registry: Arc<ToolRegistry>,
         llm_client: Arc<dyn LlmClient>,
+        policy_manager: crate::policy::PolicyManager,
     ) -> Result<Self> {
         // Validate that all required tools are available
         for tool_name in &config.tools {
@@ -69,6 +74,7 @@ impl ConfigurableAgent {
             config,
             tool_registry,
             llm_client,
+            policy_manager,
         })
     }
 
@@ -199,6 +205,7 @@ impl ConfigurableAgent {
                                         let tool_context = crate::core::tool_context::ToolContext::new(
                                             context.workspace_dir.clone(),
                                             context.session_id.clone(),
+                                            self.policy_manager.clone(),
                                         );
                                         tool.execute(params, &tool_context).await
                                     }

@@ -234,41 +234,24 @@ impl Tool for EditFileTool {
             println!("{}", format!("⚠️  Warning: {} occurrences will be replaced", occurrences).yellow());
         }
 
-        // Ask for confirmation
-        println!("\n{}", "Apply these changes? [Y/n]".bright_green().bold());
-
-        let mut rl = match DefaultEditor::new() {
-            Ok(rl) => rl,
-            Err(e) => return ToolResult::error(format!("Failed to create readline editor: {}", e)),
+        // Check permission using policy system
+        let approved = match context.check_permission(
+            crate::policy::ActionType::FileEdit,
+            &file_path,
+            "Apply these changes? [Y/n]"
+        ) {
+            Ok(approved) => approved,
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
         };
 
-        let response = match rl.readline(">>> ") {
-            Ok(resp) => resp,
-            Err(_) => return ToolResult::error("Edit cancelled by user".to_string()),
-        };
-
-        let response = response.trim().to_lowercase();
-
-        match response.as_str() {
-            "" | "y" | "yes" => {
-                // Write back to file
-                match fs::write(&full_path, new_content_full) {
-                    Ok(_) => ToolResult::success(format!("✅ Successfully edited {} ({} replacement(s))", file_path, occurrences)),
-                    Err(e) => ToolResult::error(format!("Failed to write file: {}", e)),
-                }
+        if approved {
+            // Write back to file
+            match fs::write(&full_path, new_content_full) {
+                Ok(_) => ToolResult::success(format!("✅ Successfully edited {} ({} replacement(s))", file_path, occurrences)),
+                Err(e) => ToolResult::error(format!("Failed to write file: {}", e)),
             }
-            _ => {
-                // Cancelled - ask for optional feedback
-                println!("{}", "Would you like to provide feedback to the model about why you rejected this? (optional)".bright_yellow());
-                println!("{}", "Press Enter to skip, or type your feedback:".bright_black());
-
-                let feedback = match rl.readline("") {
-                    Ok(fb) if !fb.trim().is_empty() => format!(" - {}", fb.trim()),
-                    _ => String::new(),
-                };
-
-                ToolResult::error(format!("Edit cancelled by user{}", feedback))
-            }
+        } else {
+            ToolResult::error("Edit cancelled by user or policy".to_string())
         }
     }
 }
