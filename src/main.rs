@@ -70,9 +70,20 @@ struct Cli {
     #[arg(long)]
     pretty: bool,
 
-    /// Use llama.cpp server instead of Groq (e.g., http://localhost:8080)
+    /// Use llama.cpp server for both models (e.g., http://localhost:8080)
+    /// This is a convenience flag that sets both --api-url-kimi and --api-url-gpt-oss
     #[arg(long, value_name = "URL")]
     llama_cpp_url: Option<String>,
+
+    /// API URL for the 'kimi' model (e.g., http://localhost:8080)
+    /// If set, uses llama.cpp for kimi; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    api_url_kimi: Option<String>,
+
+    /// API URL for the 'gpt-oss' model (e.g., http://localhost:8081)
+    /// If set, uses llama.cpp for gpt-oss; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    api_url_gpt_oss: Option<String>,
 
     /// Override the 'kimi' model with a custom model name
     #[arg(long, value_name = "MODEL")]
@@ -488,10 +499,10 @@ fn default_max_results() -> u32 { 100 }
 struct ClientConfig {
     /// API key for authentication (not used for llama.cpp)
     api_key: String,
-    /// Use llama.cpp server instead of Groq
-    use_llama_cpp: bool,
-    /// llama.cpp server base URL (e.g., http://localhost:8080)
-    llama_cpp_url: Option<String>,
+    /// API URL for 'kimi' model - if Some, uses llama.cpp; if None, uses Groq
+    api_url_kimi: Option<String>,
+    /// API URL for 'gpt_oss' model - if Some, uses llama.cpp; if None, uses Groq
+    api_url_gpt_oss: Option<String>,
     /// Override for 'kimi' model name
     model_kimi_override: Option<String>,
     /// Override for 'gpt_oss' model name
@@ -557,8 +568,8 @@ impl KimiChat {
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            use_llama_cpp: false,
-            llama_cpp_url: None,
+            api_url_kimi: None,
+            api_url_gpt_oss: None,
             model_kimi_override: None,
             model_gpt_oss_override: None,
         };
@@ -568,8 +579,8 @@ impl KimiChat {
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            use_llama_cpp: false,
-            llama_cpp_url: None,
+            api_url_kimi: None,
+            api_url_gpt_oss: None,
             model_kimi_override: None,
             model_gpt_oss_override: None,
         };
@@ -663,39 +674,40 @@ impl KimiChat {
         let gpt_oss_model = client_config.model_gpt_oss_override.clone()
             .unwrap_or_else(|| ModelType::GptOss.as_str());
 
-        // Register LLM clients based on configuration
-        if client_config.use_llama_cpp {
-            let base_url = client_config.llama_cpp_url.clone()
-                .unwrap_or_else(|| "http://localhost:8080".to_string());
+        // Register LLM clients based on per-model configuration
 
-            println!("{} Using llama.cpp server at: {}", "🦙".cyan(), base_url);
-
-            let kimi_client = std::sync::Arc::new(LlamaCppClient::new(
-                base_url.clone(),
+        // Configure kimi client
+        let kimi_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_kimi {
+            println!("{} Using llama.cpp for 'kimi' at: {}", "🦙".cyan(), api_url);
+            std::sync::Arc::new(LlamaCppClient::new(
+                api_url.clone(),
                 kimi_model
-            ));
-            let gpt_oss_client = std::sync::Arc::new(LlamaCppClient::new(
-                base_url.clone(),
-                gpt_oss_model
-            ));
-
-            agent_factory.register_llm_client("kimi".to_string(), kimi_client);
-            agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
+            ))
         } else {
-            println!("{} Using Groq API", "🚀".cyan());
-
-            let kimi_client = std::sync::Arc::new(GroqLlmClient::new(
+            println!("{} Using Groq API for 'kimi'", "🚀".cyan());
+            std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
                 kimi_model
-            ));
-            let gpt_oss_client = std::sync::Arc::new(GroqLlmClient::new(
+            ))
+        };
+
+        // Configure gpt_oss client
+        let gpt_oss_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_gpt_oss {
+            println!("{} Using llama.cpp for 'gpt_oss' at: {}", "🦙".cyan(), api_url);
+            std::sync::Arc::new(LlamaCppClient::new(
+                api_url.clone(),
+                gpt_oss_model
+            ))
+        } else {
+            println!("{} Using Groq API for 'gpt_oss'", "🚀".cyan());
+            std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
                 gpt_oss_model
-            ));
+            ))
+        };
 
-            agent_factory.register_llm_client("kimi".to_string(), kimi_client);
-            agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
-        }
+        agent_factory.register_llm_client("kimi".to_string(), kimi_client);
+        agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
 
         // Create coordinator
         let agent_factory_arc = std::sync::Arc::new(agent_factory);
@@ -821,8 +833,8 @@ impl KimiChat {
             ));
         }
 
-        let old_model = self.current_model;
-        self.current_model = new_model;
+        let old_model = self.current_model.clone();
+        self.current_model = new_model.clone();
 
         Ok(format!(
             "Switched from {} to {} - Reason: {}",
@@ -873,6 +885,7 @@ impl KimiChat {
         let summary_model = match self.current_model {
             ModelType::Kimi => ModelType::GptOss,
             ModelType::GptOss => ModelType::Kimi,
+            ModelType::Custom(_) => ModelType::Kimi, // Default to Kimi for custom models
         };
 
         println!(
@@ -1277,7 +1290,7 @@ impl KimiChat {
     }
 
     async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType, Vec<Message>)> {
-        let mut current_model = self.current_model;
+        let mut current_model = self.current_model.clone();
         let mut messages = orig_messages.to_vec().clone();
 
 
@@ -1817,13 +1830,19 @@ async fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
-    // API key is only required if not using llama.cpp
-    let api_key = if cli.llama_cpp_url.is_some() {
-        // llama.cpp doesn't need an API key, use empty string
-        String::new()
-    } else {
+    // Determine API URLs for each model
+    // Priority: specific flags (--api-url-kimi, --api-url-gpt-oss) override general flag (--llama-cpp-url)
+    let api_url_kimi = cli.api_url_kimi.or_else(|| cli.llama_cpp_url.clone());
+    let api_url_gpt_oss = cli.api_url_gpt_oss.or_else(|| cli.llama_cpp_url.clone());
+
+    // API key is only required if at least one model uses Groq (no API URL specified)
+    let using_groq = api_url_kimi.is_none() || api_url_gpt_oss.is_none();
+    let api_key = if using_groq {
         env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --llama-cpp-url to use llama.cpp instead of Groq.")?
+            .context("GROQ_API_KEY environment variable not set. Use --api-url-kimi and/or --api-url-gpt-oss to use llama.cpp instead of Groq.")?
+    } else {
+        // Both models use llama.cpp, no API key needed
+        String::new()
     };
 
     // Use current directory as work_dir so the AI can see project files
@@ -1840,8 +1859,8 @@ async fn main() -> Result<()> {
     // Create client configuration from CLI arguments
     let client_config = ClientConfig {
         api_key: api_key.clone(),
-        use_llama_cpp: cli.llama_cpp_url.is_some(),
-        llama_cpp_url: cli.llama_cpp_url.clone(),
+        api_url_kimi,
+        api_url_gpt_oss,
         model_kimi_override: cli.model_kimi.clone(),
         model_gpt_oss_override: cli.model_gpt_oss.clone(),
     };
