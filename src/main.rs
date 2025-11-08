@@ -1334,10 +1334,10 @@ impl KimiChat {
         }
     }
 
-    fn validate_and_fix_tool_calls(&self, messages: &mut Vec<Message>) -> Result<bool> {
+    fn validate_and_fix_tool_calls_in_place(&mut self) -> Result<bool> {
         let mut fixed_any = false;
 
-        for message in messages.iter_mut() {
+        for message in self.messages.iter_mut() {
             if let Some(tool_calls) = &mut message.tool_calls {
                 for tool_call in tool_calls.iter_mut() {
                     let original_args = tool_call.function.arguments.clone();
@@ -1542,19 +1542,11 @@ impl KimiChat {
         use std::io::{self, Write};
         use futures_util::StreamExt;
 
-        let mut current_model = self.current_model.clone();
-        let mut messages = orig_messages.to_vec().clone();
-
-        // Validate and fix tool calls before sending
-        if let Ok(fixed) = self.validate_and_fix_tool_calls(&mut messages) {
-            if fixed {
-                eprintln!("{} Tool calls were automatically fixed before sending to API", "✅".green());
-            }
-        }
+        let current_model = self.current_model.clone();
 
         let request = ChatRequest {
             model: current_model.as_str().to_string(),
-            messages: messages.clone(),
+            messages: orig_messages.to_vec(),
             tools: self.get_tools(),
             tool_choice: "auto".to_string(),
             stream: Some(true),
@@ -1694,19 +1686,12 @@ impl KimiChat {
 
     async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
         let mut current_model = self.current_model.clone();
-        let mut messages = orig_messages.to_vec().clone();
-
+        // Clone messages for potential retry logic with model switching
+        let mut messages = orig_messages.to_vec();
 
         // Retry logic with exponential backoff
         let mut retry_count = 0;
         loop {
-            // Validate and fix tool calls before sending
-            if let Ok(fixed) = self.validate_and_fix_tool_calls(&mut messages) {
-                if fixed {
-                    eprintln!("{} Tool calls were automatically fixed before sending to API", "✅".green());
-                }
-            }
-
 	    let request = ChatRequest {
 		model: current_model.as_str().to_string(),
 		messages: messages.clone(),
@@ -1922,6 +1907,14 @@ impl KimiChat {
         let mut errors_encountered: Vec<String> = Vec::new();
 
         loop {
+            // Validate and fix tool calls in the conversation history before sending to API
+            // This ensures fixes are permanent and consistent across requests (preserving cache)
+            if let Ok(fixed) = self.validate_and_fix_tool_calls_in_place() {
+                if fixed {
+                    eprintln!("{} Tool calls were automatically fixed in conversation history", "✅".green());
+                }
+            }
+
             let (response, usage, current_model) = if self.stream_responses {
                 self.call_api_streaming(&self.messages).await?
             } else {
