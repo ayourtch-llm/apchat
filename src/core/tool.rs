@@ -110,30 +110,50 @@ pub trait Tool: Send + Sync {
         let mut required = Vec::new();
 
         for (name, param_def) in self.parameters() {
-            let param_json = serde_json::json!({
-                "type": param_def.param_type,
-                "description": param_def.description,
-                "default": param_def.default
-            });
-            properties.insert(name.clone(), param_json);
+            // Build parameter definition with sorted keys
+            let mut param_obj = serde_json::Map::new();
+            if let Some(default) = &param_def.default {
+                param_obj.insert("default".to_string(), default.clone());
+            }
+            param_obj.insert("description".to_string(), serde_json::Value::String(param_def.description.clone()));
+            param_obj.insert("type".to_string(), serde_json::Value::String(param_def.param_type.clone()));
+
+            properties.insert(name.clone(), serde_json::Value::Object(param_obj));
 
             if param_def.required {
                 required.push(name);
             }
         }
 
-        serde_json::json!({
-            "type": "function",
-            "function": {
-                "name": self.name(),
-                "description": self.description(),
-                "parameters": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required
-                }
-            }
-        })
+        // Sort required array alphabetically for consistent caching
+        required.sort();
+
+        // Build properties in sorted order
+        let mut sorted_properties = serde_json::Map::new();
+        let mut prop_keys: Vec<_> = properties.keys().cloned().collect();
+        prop_keys.sort();
+        for key in prop_keys {
+            sorted_properties.insert(key.clone(), properties[&key].clone());
+        }
+
+        // Build parameters object with sorted keys
+        let mut parameters = serde_json::Map::new();
+        parameters.insert("properties".to_string(), serde_json::Value::Object(sorted_properties));
+        parameters.insert("required".to_string(), serde_json::Value::Array(required.into_iter().map(serde_json::Value::String).collect()));
+        parameters.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+
+        // Build function object with sorted keys
+        let mut function = serde_json::Map::new();
+        function.insert("description".to_string(), serde_json::Value::String(self.description().to_string()));
+        function.insert("name".to_string(), serde_json::Value::String(self.name().to_string()));
+        function.insert("parameters".to_string(), serde_json::Value::Object(parameters));
+
+        // Build top-level object with sorted keys
+        let mut result = serde_json::Map::new();
+        result.insert("function".to_string(), serde_json::Value::Object(function));
+        result.insert("type".to_string(), serde_json::Value::String("function".to_string()));
+
+        serde_json::Value::Object(result)
     }
 }
 
