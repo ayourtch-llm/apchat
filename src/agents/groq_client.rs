@@ -7,14 +7,16 @@ use serde_json::Value;
 pub struct GroqLlmClient {
     api_key: String,
     model: String,
+    api_url: String,
     client: reqwest::Client,
 }
 
 impl GroqLlmClient {
-    pub fn new(api_key: String, model: String) -> Self {
+    pub fn new(api_key: String, model: String, api_url: String) -> Self {
         Self {
             api_key,
             model,
+            api_url,
             client: reqwest::Client::new(),
         }
     }
@@ -26,7 +28,7 @@ impl LlmClient for GroqLlmClient {
         let request = self.build_chat_request(messages, tools).await?;
 
         let response = self.client
-            .post(crate::GROQ_API_URL)
+            .post(&self.api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request)
@@ -88,7 +90,7 @@ impl LlmClient for GroqLlmClient {
 
         let client = reqwest::Client::new();
         let response = client
-            .post("https://api.groq.com/openai/v1/chat/completions")
+            .post(&self.api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&api_request)

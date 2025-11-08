@@ -635,6 +635,32 @@ impl KimiChat {
         }
     }
 
+    /// Get the API URL to use based on the current model and client configuration
+    fn get_api_url(&self, model: &ModelType) -> String {
+        match model {
+            ModelType::BluModel => {
+                self.client_config.api_url_blu_model
+                    .as_ref()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| GROQ_API_URL.to_string())
+            }
+            ModelType::GrnModel => {
+                self.client_config.api_url_grn_model
+                    .as_ref()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| GROQ_API_URL.to_string())
+            }
+            ModelType::Custom(_) => {
+                // For custom models, default to the first available override or Groq
+                self.client_config.api_url_blu_model
+                    .as_ref()
+                    .or(self.client_config.api_url_grn_model.as_ref())
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| GROQ_API_URL.to_string())
+            }
+        }
+    }
+
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
@@ -762,7 +788,8 @@ impl KimiChat {
             println!("{} Using Groq API for 'blu_model'", "🚀".cyan());
             std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
-                blu_model
+                blu_model,
+                GROQ_API_URL.to_string()
             ))
         };
 
@@ -777,7 +804,8 @@ impl KimiChat {
             println!("{} Using Groq API for 'grn_model'", "🚀".cyan());
             std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
-                grn_model
+                grn_model,
+                GROQ_API_URL.to_string()
             ))
         };
 
@@ -823,12 +851,16 @@ impl KimiChat {
 
     /// Process user request using the agent system
     async fn process_with_agents(&mut self, user_request: &str) -> Result<String> {
+        // Get API URL before mutable borrow
+        let api_url = self.get_api_url(&self.current_model);
+
         if let Some(coordinator) = &mut self.agent_coordinator {
             // Create execution context for agents
             let tool_registry_arc = std::sync::Arc::new(self.tool_registry.clone());
             let llm_client = std::sync::Arc::new(GroqLlmClient::new(
                 self.api_key.clone(),
-                self.current_model.as_str().to_string()
+                self.current_model.as_str().to_string(),
+                api_url
             ));
 
             // Convert message history to agent format
@@ -1040,8 +1072,11 @@ impl KimiChat {
             stream: None,
         };
 
+        // Get the appropriate API URL for the summary model
+        let api_url = self.get_api_url(&summary_model);
+
         let response = self.client
-            .post(GROQ_API_URL)
+            .post(&api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request)
@@ -1146,8 +1181,11 @@ impl KimiChat {
                         stream: None,
                     };
 
+                    // Get the appropriate API URL for the current model
+                    let decision_api_url = self.get_api_url(&self.current_model);
+
                     let decision_response = self.client
-                        .post(GROQ_API_URL)
+                        .post(&decision_api_url)
                         .header("Authorization", format!("Bearer {}", self.api_key))
                         .header("Content-Type", "application/json")
                         .json(&decision_request)
@@ -1236,9 +1274,11 @@ impl KimiChat {
             stream: None,
         };
 
-        // Make API call
+        // Make API call using BluModel's API URL
+        let repair_api_url = self.get_api_url(&ModelType::BluModel);
+
         let response = self.client
-            .post(GROQ_API_URL)
+            .post(&repair_api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .json(&repair_request)
             .send()
@@ -1501,12 +1541,15 @@ impl KimiChat {
             stream: Some(true),
         };
 
+        // Get the appropriate API URL based on the current model
+        let api_url = self.get_api_url(&current_model);
+
         // Log request details in verbose mode
-        self.log_request(GROQ_API_URL, &request);
+        self.log_request(&api_url, &request);
 
         let response = self
             .client
-            .post(GROQ_API_URL)
+            .post(&api_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
             .json(&request)
@@ -1653,12 +1696,15 @@ impl KimiChat {
 		stream: None,
 	    };
 
+            // Get the appropriate API URL based on the current model
+            let api_url = self.get_api_url(&current_model);
+
             // Log request details in verbose mode
-            self.log_request(GROQ_API_URL, &request);
+            self.log_request(&api_url, &request);
 
             let response = self
                 .client
-                .post(GROQ_API_URL)
+                .post(&api_url)
                 .header("Authorization", format!("Bearer {}", self.api_key))
                 .header("Content-Type", "application/json")
                 .json(&request)
@@ -1839,10 +1885,12 @@ impl KimiChat {
         const PROGRESS_EVAL_INTERVAL: u32 = 15; // Evaluate progress every 15 tool calls
 
         // Initialize progress evaluator for all operations
+        let blu_model_url = self.get_api_url(&ModelType::BluModel);
         let mut progress_evaluator = Some(crate::agents::progress_evaluator::ProgressEvaluator::new(
             std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
                 self.api_key.clone(),
-                "kimi".to_string()
+                "kimi".to_string(),
+                blu_model_url
             )),
             0.6, // Minimum confidence threshold
             PROGRESS_EVAL_INTERVAL,
