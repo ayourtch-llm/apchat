@@ -602,21 +602,10 @@ impl KimiChat {
         The system supports multiple models that can be switched during the conversation:\n\
         - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
         - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\n\
-        Available tools (use ONLY these exact names):\n\
-        - read_file: Read entire file contents (always returns full file)\n\
-        - open_file: Read specific line range from a file (use when you only need a section)\n\
-        - write_file: Write/create a file\n\
-        - edit_file: Edit existing file by replacing content (for single edits)\n\
-        - plan_edits: Plan multiple file edits to apply atomically (RECOMMENDED for multiple related changes)\n\
-        - apply_edit_plan: Apply the previously created edit plan\n\
-        - list_files: List files (single-level patterns only, no **)\n\
-        - switch_model: Switch between models\n\n\
-        IMPORTANT WORKFLOW for multiple edits:\n\
-        1. When making multiple changes to files, use plan_edits to create a complete plan\n\
-        2. Review the plan validation output\n\
-        3. Use apply_edit_plan to execute all changes atomically\n\
+        IMPORTANT: You have been provided with a set of tools (functions) that you can use. \
+        Only use the tools that are provided to you - do not make up tool names or attempt to use tools that are not available. \
+        When making multiple file edits, use plan_edits to create a complete plan, then apply_edit_plan to execute all changes atomically. \
         This prevents issues where you lose track of file state between sequential edits.\n\n\
-        CRITICAL: Only use the exact tool names listed above. Do not make up tool names or use tools not in this list. \
         Model switches may happen automatically during the conversation based on tool usage and errors. \
         The currently active model will be indicated in system messages as the conversation progresses.".to_string()
     }
