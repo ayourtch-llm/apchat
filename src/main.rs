@@ -1538,7 +1538,7 @@ impl KimiChat {
     }
 
     /// Handle streaming API response, displaying chunks as they arrive
-    async fn call_api_streaming(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType, Vec<Message>)> {
+    async fn call_api_streaming(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
         use std::io::{self, Write};
         use futures_util::StreamExt;
 
@@ -1689,10 +1689,10 @@ impl KimiChat {
             name: None,
         };
 
-        Ok((message, usage, current_model, messages))
+        Ok((message, usage, current_model))
     }
 
-    async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType, Vec<Message>)> {
+    async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
         let mut current_model = self.current_model.clone();
         let mut messages = orig_messages.to_vec().clone();
 
@@ -1880,7 +1880,7 @@ impl KimiChat {
                 .map(|c| c.message)
                 .context("No response from API")?;
 
-            return Ok((message, chat_response.usage, current_model, messages));
+            return Ok((message, chat_response.usage, current_model));
         }
     }
 
@@ -1922,12 +1922,11 @@ impl KimiChat {
         let mut errors_encountered: Vec<String> = Vec::new();
 
         loop {
-            let (response, usage, current_model, messages) = if self.stream_responses {
+            let (response, usage, current_model) = if self.stream_responses {
                 self.call_api_streaming(&self.messages).await?
             } else {
                 self.call_api(&self.messages).await?
             };
-            self.messages = messages;
             if self.current_model != current_model {
                 println!("Forced model switch: {:?} -> {:?}", &self.current_model, &current_model);
                 self.current_model = current_model;
