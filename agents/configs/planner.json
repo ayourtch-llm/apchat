@@ -2,7 +2,7 @@
   "name": "planner",
   "description": "Strategic task planning and decomposition specialist",
   "version": "1.0.0",
-  "model": "gpt_oss",
+  "model": "grn_model",
   "tools": [
     "list_files",
     "read_file"

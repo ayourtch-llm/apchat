@@ -28,10 +28,12 @@ mod logging;
 mod open_file;
 mod preview;
 mod core;
+mod policy;
 mod tools;
 mod agents;
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
+use policy::{PolicyManager, ActionType, Decision};
 use core::tool_context::ToolContext;
 use tools::*;
 use agents::*;
@@ -70,17 +72,49 @@ struct Cli {
     #[arg(long)]
     pretty: bool,
 
-    /// Use llama.cpp server instead of Groq (e.g., http://localhost:8080)
+    /// Use llama.cpp server for both models (e.g., http://localhost:8080)
+    /// This is a convenience flag that sets both --api-url-blu-model and --api-url-grn-model
     #[arg(long, value_name = "URL")]
     llama_cpp_url: Option<String>,
 
-    /// Override the 'kimi' model with a custom model name
-    #[arg(long, value_name = "MODEL")]
-    model_kimi: Option<String>,
+    /// API URL for the 'blu_model' model (e.g., http://localhost:8080)
+    /// If set, uses llama.cpp for blu_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    api_url_blu_model: Option<String>,
 
-    /// Override the 'gpt-oss' model with a custom model name
+    /// API URL for the 'grn_model' model (e.g., http://localhost:8081)
+    /// If set, uses llama.cpp for grn_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    api_url_grn_model: Option<String>,
+
+    /// Override the 'blu_model' model with a custom model name
     #[arg(long, value_name = "MODEL")]
-    model_gpt_oss: Option<String>,
+    model_blu_model: Option<String>,
+
+    /// Override the 'grn_model' model with a custom model name
+    #[arg(long, value_name = "MODEL")]
+    model_grn_model: Option<String>,
+
+    /// Override both models with the same custom model name
+    /// This is a convenience flag that sets both --model-blu-model and --model-grn-model
+    #[arg(long, value_name = "MODEL")]
+    model: Option<String>,
+
+    /// Auto-confirm all actions without asking (auto-pilot mode)
+    #[arg(long)]
+    auto_confirm: bool,
+
+    /// Path to policy file (default: policies.toml in project root)
+    #[arg(long, value_name = "PATH")]
+    policy_file: Option<String>,
+
+    /// Learn from user decisions and save them to policy file
+    #[arg(long)]
+    learn_policies: bool,
+
+    /// Enable streaming mode - show AI responses as they're generated
+    #[arg(long)]
+    stream: bool,
 }
 
 #[derive(Subcommand)]
@@ -171,7 +205,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = ReadFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -188,7 +222,7 @@ impl Commands {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
                     params.set("content", content);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = WriteFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -207,7 +241,7 @@ impl Commands {
                     params.set("file_path", file_path);
                     params.set("old_content", old_content);
                     params.set("new_content", new_content);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = EditFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -222,7 +256,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("pattern", pattern);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = ListFilesTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -245,7 +279,7 @@ impl Commands {
                     params.set("regex", regex);
                     params.set("case_insensitive", case_insensitive);
                     params.set("max_results", max_results as i64);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = SearchFilesTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -267,7 +301,7 @@ impl Commands {
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("command", command);
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = RunCommandTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -290,7 +324,7 @@ impl Commands {
                     if let Some(end) = end_line {
                         params.set("end_line", end as i64);
                     }
-                    let context = ToolContext::new(work_dir, "cli_session".to_string());
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
                     let result = OpenFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
@@ -305,32 +339,32 @@ impl Commands {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum ModelType {
-    Kimi,
-    GptOss,
+    BluModel,
+    GrnModel,
     Custom(String),
 }
 
 impl ModelType {
     fn as_str(&self) -> String {
         match self {
-            ModelType::Kimi => "moonshotai/kimi-k2-instruct-0905".to_string(),
-            ModelType::GptOss => "openai/gpt-oss-120b".to_string(),
+            ModelType::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
+            ModelType::GrnModel => "openai/gpt-oss-120b".to_string(),
             ModelType::Custom(name) => name.clone(),
         }
     }
 
     fn display_name(&self) -> String {
         match self {
-            ModelType::Kimi => "Kimi-K2-Instruct-0905".to_string(),
-            ModelType::GptOss => "GPT-OSS-120B".to_string(),
+            ModelType::BluModel => "Kimi-K2-Instruct-0905".to_string(),
+            ModelType::GrnModel => "GPT-OSS-120B".to_string(),
             ModelType::Custom(name) => name.clone(),
         }
     }
 
     fn from_str(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "kimi" => ModelType::Kimi,
-            "gpt-oss" | "gptoss" | "gpt_oss" => ModelType::GptOss,
+            "blu_model" | "blu-model" | "blumodel" => ModelType::BluModel,
+            "grn_model" | "grn-model" | "grnmodel" => ModelType::GrnModel,
             _ => ModelType::Custom(s.to_string()),
         }
     }
@@ -383,6 +417,8 @@ struct ChatRequest {
     messages: Vec<Message>,
     tools: Vec<Tool>,
     tool_choice: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -416,6 +452,41 @@ struct Choice {
     finish_reason: Option<String>,
     #[serde(default)]
     logprobs: Option<serde_json::Value>,
+}
+
+// Structures for streaming responses
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    choices: Vec<StreamChoice>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    object: Option<String>,
+    #[serde(default)]
+    created: Option<i64>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    usage: Option<Usage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+    delta: StreamDelta,
+    #[serde(default)]
+    index: Option<i32>,
+    #[serde(default)]
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamDelta {
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ToolCall>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -488,14 +559,14 @@ fn default_max_results() -> u32 { 100 }
 struct ClientConfig {
     /// API key for authentication (not used for llama.cpp)
     api_key: String,
-    /// Use llama.cpp server instead of Groq
-    use_llama_cpp: bool,
-    /// llama.cpp server base URL (e.g., http://localhost:8080)
-    llama_cpp_url: Option<String>,
-    /// Override for 'kimi' model name
-    model_kimi_override: Option<String>,
-    /// Override for 'gpt_oss' model name
-    model_gpt_oss_override: Option<String>,
+    /// API URL for 'blu_model' - if Some, uses llama.cpp; if None, uses Groq
+    api_url_blu_model: Option<String>,
+    /// API URL for 'grn_model' - if Some, uses llama.cpp; if None, uses Groq
+    api_url_grn_model: Option<String>,
+    /// Override for 'blu_model' model name
+    model_blu_model_override: Option<String>,
+    /// Override for 'grn_model' model name
+    model_grn_model_override: Option<String>,
 }
 
 struct KimiChat {
@@ -512,6 +583,10 @@ struct KimiChat {
     use_agents: bool,
     // Client configuration
     client_config: ClientConfig,
+    // Policy manager
+    policy_manager: PolicyManager,
+    // Streaming mode
+    stream_responses: bool,
 }
 
 impl KimiChat {
@@ -520,8 +595,8 @@ impl KimiChat {
         let base_prompt = format!(
             "You are an AI assistant with access to file operations and model switching capabilities. \
             You are currently running as {}. You can switch to other models when appropriate:\n\
-            - gpt-oss (GPT-OSS-120B): **Preferred for cost efficiency** - significantly cheaper than Kimi while providing good performance for most tasks\n\
-            - kimi (Kimi-K2-Instruct-0905): Use when GPT-OSS struggles or when you need faster responses\n\n\
+            - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
+            - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\n\
             Available tools (use ONLY these exact names):\n\
             - read_file: Read entire file contents (always returns full file)\n\
             - open_file: Read specific line range from a file (use when you only need a section)\n\
@@ -539,10 +614,10 @@ impl KimiChat {
             model.display_name()
         );
 
-        if *model == ModelType::GptOss {
+        if *model == ModelType::GrnModel {
             format!(
                 "{}CRITICAL WARNING: If you attempt to call ANY tool not listed above (such as 'edit', 'repo_browser.search', \
-                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the Kimi model \
+                'repo_browser.open_file', or any other made-up tool name), you will be IMMEDIATELY switched to the BluModel model \
                 and your request will be retried. Use ONLY the exact tool names listed above.",
                 base_prompt
             )
@@ -557,29 +632,31 @@ impl KimiChat {
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            use_llama_cpp: false,
-            llama_cpp_url: None,
-            model_kimi_override: None,
-            model_gpt_oss_override: None,
+            api_url_blu_model: None,
+            api_url_grn_model: None,
+            model_blu_model_override: None,
+            model_grn_model_override: None,
         };
-        Self::new_with_config(config, work_dir, false)
+        let policy_manager = PolicyManager::new();
+        Self::new_with_config(config, work_dir, false, policy_manager, false)
     }
 
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            use_llama_cpp: false,
-            llama_cpp_url: None,
-            model_kimi_override: None,
-            model_gpt_oss_override: None,
+            api_url_blu_model: None,
+            api_url_grn_model: None,
+            model_blu_model_override: None,
+            model_grn_model_override: None,
         };
-        Self::new_with_config(config, work_dir, use_agents)
+        let policy_manager = PolicyManager::new();
+        Self::new_with_config(config, work_dir, use_agents, policy_manager, false)
     }
 
-    fn new_with_config(client_config: ClientConfig, work_dir: PathBuf, use_agents: bool) -> Self {
+    fn new_with_config(client_config: ClientConfig, work_dir: PathBuf, use_agents: bool, policy_manager: PolicyManager, stream_responses: bool) -> Self {
         let tool_registry = Self::initialize_tool_registry();
         let agent_coordinator = if use_agents {
-            match Self::initialize_agent_system(&client_config, &tool_registry) {
+            match Self::initialize_agent_system(&client_config, &tool_registry, &policy_manager) {
                 Ok(coordinator) => Some(coordinator),
                 Err(e) => {
                     eprintln!("{} Failed to initialize agent system: {}", "❌".red(), e);
@@ -598,13 +675,15 @@ impl KimiChat {
             messages: Vec::new(),
             // Default to GPT-OSS for cost efficiency - it's significantly cheaper than Kimi
             // while still providing good performance for most tasks
-            current_model: ModelType::GptOss,
+            current_model: ModelType::GrnModel,
             total_tokens_used: 0,
             logger: None,
             tool_registry,
             agent_coordinator,
             use_agents,
             client_config,
+            policy_manager,
+            stream_responses,
         };
 
         // Add system message to inform the model about capabilities
@@ -650,52 +729,53 @@ impl KimiChat {
     }
 
     /// Initialize the agent system with configuration files
-    fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry) -> Result<PlanningCoordinator> {
+    fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry, policy_manager: &PolicyManager) -> Result<PlanningCoordinator> {
         println!("{} Initializing agent system...", "🤖".blue());
 
         // Create agent factory
         let tool_registry_arc = std::sync::Arc::new((*tool_registry).clone());
-        let mut agent_factory = AgentFactory::new(tool_registry_arc);
+        let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
 
         // Determine model names with overrides
-        let kimi_model = client_config.model_kimi_override.clone()
-            .unwrap_or_else(|| ModelType::Kimi.as_str());
-        let gpt_oss_model = client_config.model_gpt_oss_override.clone()
-            .unwrap_or_else(|| ModelType::GptOss.as_str());
+        let blu_model = client_config.model_blu_model_override.clone()
+            .unwrap_or_else(|| ModelType::BluModel.as_str());
+        let grn_model = client_config.model_grn_model_override.clone()
+            .unwrap_or_else(|| ModelType::GrnModel.as_str());
 
-        // Register LLM clients based on configuration
-        if client_config.use_llama_cpp {
-            let base_url = client_config.llama_cpp_url.clone()
-                .unwrap_or_else(|| "http://localhost:8080".to_string());
+        // Register LLM clients based on per-model configuration
 
-            println!("{} Using llama.cpp server at: {}", "🦙".cyan(), base_url);
-
-            let kimi_client = std::sync::Arc::new(LlamaCppClient::new(
-                base_url.clone(),
-                kimi_model
-            ));
-            let gpt_oss_client = std::sync::Arc::new(LlamaCppClient::new(
-                base_url.clone(),
-                gpt_oss_model
-            ));
-
-            agent_factory.register_llm_client("kimi".to_string(), kimi_client);
-            agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
+        // Configure blu_model client
+        let blu_model_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_blu_model {
+            println!("{} Using llama.cpp for 'blu_model' at: {}", "🦙".cyan(), api_url);
+            std::sync::Arc::new(LlamaCppClient::new(
+                api_url.clone(),
+                blu_model
+            ))
         } else {
-            println!("{} Using Groq API", "🚀".cyan());
-
-            let kimi_client = std::sync::Arc::new(GroqLlmClient::new(
+            println!("{} Using Groq API for 'blu_model'", "🚀".cyan());
+            std::sync::Arc::new(GroqLlmClient::new(
                 client_config.api_key.clone(),
-                kimi_model
-            ));
-            let gpt_oss_client = std::sync::Arc::new(GroqLlmClient::new(
-                client_config.api_key.clone(),
-                gpt_oss_model
-            ));
+                blu_model
+            ))
+        };
 
-            agent_factory.register_llm_client("kimi".to_string(), kimi_client);
-            agent_factory.register_llm_client("gpt_oss".to_string(), gpt_oss_client);
-        }
+        // Configure grn_model client
+        let grn_model_client: std::sync::Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_grn_model {
+            println!("{} Using llama.cpp for 'grn_model' at: {}", "🦙".cyan(), api_url);
+            std::sync::Arc::new(LlamaCppClient::new(
+                api_url.clone(),
+                grn_model
+            ))
+        } else {
+            println!("{} Using Groq API for 'grn_model'", "🚀".cyan());
+            std::sync::Arc::new(GroqLlmClient::new(
+                client_config.api_key.clone(),
+                grn_model
+            ))
+        };
+
+        agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);
+        agent_factory.register_llm_client("grn_model".to_string(), grn_model_client);
 
         // Create coordinator
         let agent_factory_arc = std::sync::Arc::new(agent_factory);
@@ -809,9 +889,9 @@ impl KimiChat {
 
     fn switch_model(&mut self, model_str: &str, reason: &str) -> Result<String> {
         let new_model = match model_str.to_lowercase().as_str() {
-            "kimi" => ModelType::Kimi,
-            "gpt-oss" => ModelType::GptOss,
-            _ => anyhow::bail!("Unknown model: {}. Available: 'kimi', 'gpt-oss'", model_str),
+            "blu_model" | "blu-model" => ModelType::BluModel,
+            "grn_model" | "grn-model" => ModelType::GrnModel,
+            _ => anyhow::bail!("Unknown model: {}. Available: 'blu_model', 'grn_model'", model_str),
         };
 
         if new_model == self.current_model {
@@ -821,8 +901,8 @@ impl KimiChat {
             ));
         }
 
-        let old_model = self.current_model;
-        self.current_model = new_model;
+        let old_model = self.current_model.clone();
+        self.current_model = new_model.clone();
 
         Ok(format!(
             "Switched from {} to {} - Reason: {}",
@@ -846,7 +926,8 @@ impl KimiChat {
 
                 let context = ToolContext::new(
                     self.work_dir.clone(),
-                    format!("session_{}", chrono::Utc::now().timestamp())
+                    format!("session_{}", chrono::Utc::now().timestamp()),
+                    self.policy_manager.clone()
                 );
 
                 let result = self.tool_registry.execute_tool(name, params, &context).await;
@@ -871,8 +952,9 @@ impl KimiChat {
 
         // Use the "other" model for summarization
         let summary_model = match self.current_model {
-            ModelType::Kimi => ModelType::GptOss,
-            ModelType::GptOss => ModelType::Kimi,
+            ModelType::BluModel => ModelType::GrnModel,
+            ModelType::GrnModel => ModelType::BluModel,
+            ModelType::Custom(_) => ModelType::BluModel, // Default to BluModel for custom models
         };
 
         println!(
@@ -948,6 +1030,7 @@ impl KimiChat {
             messages: summary_history,
             tools: vec![],
             tool_choice: "none".to_string(),
+            stream: None,
         };
 
         let response = self.client
@@ -1053,6 +1136,7 @@ impl KimiChat {
                         messages: decision_prompt,
                         tools: vec![],
                         tool_choice: "none".to_string(),
+                        stream: None,
                     };
 
                     let decision_response = self.client
@@ -1123,7 +1207,7 @@ impl KimiChat {
 
         // Create a simple repair request using Kimi (fast and good at structured output)
         let repair_request = ChatRequest {
-            model: ModelType::Kimi.as_str().to_string(),
+            model: ModelType::BluModel.as_str().to_string(),
             messages: vec![
                 Message {
                     role: "system".to_string(),
@@ -1142,6 +1226,7 @@ impl KimiChat {
             ],
             tools: vec![], // No tools for repair request
             tool_choice: "none".to_string(),
+            stream: None,
         };
 
         // Make API call
@@ -1276,8 +1361,137 @@ impl KimiChat {
         Ok(fixed_any)
     }
 
+    /// Handle streaming API response, displaying chunks as they arrive
+    async fn call_api_streaming(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType, Vec<Message>)> {
+        use std::io::{self, Write};
+        use futures_util::StreamExt;
+
+        let mut current_model = self.current_model.clone();
+        let mut messages = orig_messages.to_vec().clone();
+
+        // Validate and fix tool calls before sending
+        if let Ok(fixed) = self.validate_and_fix_tool_calls(&mut messages) {
+            if fixed {
+                eprintln!("{} Tool calls were automatically fixed before sending to API", "✅".green());
+            }
+        }
+
+        let request = ChatRequest {
+            model: current_model.as_str().to_string(),
+            messages: messages.clone(),
+            tools: self.get_tools(),
+            tool_choice: "auto".to_string(),
+            stream: Some(true),
+        };
+
+        let response = self
+            .client
+            .post(GROQ_API_URL)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
+            return Err(anyhow::anyhow!("API request failed with status {}: {}", status, error_body));
+        }
+
+        // Process streaming response
+        let mut accumulated_content = String::new();
+        let mut accumulated_tool_calls: Option<Vec<ToolCall>> = None;
+        let mut role = String::new();
+        let mut usage: Option<Usage> = None;
+        let mut buffer = String::new();
+
+        // Show thinking indicator
+        print!("🤔 Thinking...");
+        io::stdout().flush().unwrap();
+        let mut first_chunk = true;
+
+        // Read the response as a stream of bytes
+        let mut stream = response.bytes_stream();
+
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(bytes) => {
+                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                    // Process complete lines (SSE format: "data: {json}\n\n")
+                    while let Some(line_end) = buffer.find("\n\n") {
+                        let line = buffer[..line_end].to_string();
+                        buffer = buffer[line_end + 2..].to_string();
+
+                        // Skip empty lines and non-data lines
+                        if line.trim().is_empty() || !line.starts_with("data: ") {
+                            continue;
+                        }
+
+                        let data = &line[6..]; // Skip "data: " prefix
+
+                        // Check for stream end marker
+                        if data.trim() == "[DONE]" {
+                            break;
+                        }
+
+                        // Parse the JSON chunk
+                        if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
+                            if let Some(usage_data) = chunk.usage {
+                                usage = Some(usage_data);
+                            }
+
+                            if let Some(choice) = chunk.choices.first() {
+                                let delta = &choice.delta;
+
+                                // Update role if present
+                                if let Some(r) = &delta.role {
+                                    role = r.clone();
+                                }
+
+                                // Accumulate content and display it
+                                if let Some(content) = &delta.content {
+                                    if first_chunk {
+                                        // Clear thinking indicator
+                                        print!("\r\x1B[K");
+                                        io::stdout().flush().unwrap();
+                                        first_chunk = false;
+                                    }
+
+                                    accumulated_content.push_str(content);
+                                    print!("{}", content);
+                                    io::stdout().flush().unwrap();
+                                }
+
+                                // Accumulate tool calls if present
+                                if let Some(tool_calls) = &delta.tool_calls {
+                                    accumulated_tool_calls = Some(tool_calls.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => return Err(anyhow::anyhow!("Error reading stream: {}", e)),
+            }
+        }
+
+        println!(); // New line after streaming complete
+
+        // Build the final message
+        let message = Message {
+            role: if role.is_empty() { "assistant".to_string() } else { role },
+            content: accumulated_content,
+            tool_calls: accumulated_tool_calls,
+            tool_call_id: None,
+            name: None,
+        };
+
+        Ok((message, usage, current_model, messages))
+    }
+
     async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType, Vec<Message>)> {
-        let mut current_model = self.current_model;
+        let mut current_model = self.current_model.clone();
         let mut messages = orig_messages.to_vec().clone();
 
 
@@ -1296,6 +1510,7 @@ impl KimiChat {
 		messages: messages.clone(),
 		tools: self.get_tools(),
 		tool_choice: "auto".to_string(),
+		stream: None,
 	    };
             let response = self
                 .client
@@ -1335,12 +1550,12 @@ impl KimiChat {
                     eprintln!("{}", "❌ Tool calling error detected!".red().bold());
                     eprintln!("{}", error_body.yellow());
 
-                    // Check for GPT-OSS hallucinating non-existent tools
-                    if error_body.contains("attempted to call tool") && current_model == ModelType::GptOss {
-                        eprintln!("{}", "🔄 GPT-OSS-120B attempted to use non-existent tool. Switching to Kimi and retrying...".bright_cyan());
+                    // Check for GrnModel hallucinating non-existent tools
+                    if error_body.contains("attempted to call tool") && current_model == ModelType::GrnModel {
+                        eprintln!("{}", "🔄 GrnModel attempted to use non-existent tool. Switching to BluModel and retrying...".bright_cyan());
 
-                        // Switch to Kimi
-                        current_model = ModelType::Kimi;
+                        // Switch to BluModel
+                        current_model = ModelType::BluModel;
 
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
@@ -1349,17 +1564,17 @@ impl KimiChat {
                             }
                         }
 
-                        // Retry with Kimi - continue the loop to retry
+                        // Retry with BluModel - continue the loop to retry
                         retry_count = 0; // Reset retry count for new model
                         continue;
                     }
-                    // Check for Kimi generating malformed tool calls
+                    // Check for BluModel generating malformed tool calls
                     else if (error_body.contains("Failed to call a function") ||
                              error_body.contains("tool call validation failed") ||
                              error_body.contains("parameters for tool") ||
                              error_body.contains("did not match schema")) &&
-                            current_model == ModelType::Kimi {
-                        eprintln!("{}", "❌ Kimi-K2 generated malformed tool call (invalid JSON/parameters).".red());
+                            current_model == ModelType::BluModel {
+                        eprintln!("{}", "❌ BluModel generated malformed tool call (invalid JSON/parameters).".red());
 
                         // First, try to repair the tool call using AI
                         let mut repaired = false;
@@ -1397,11 +1612,11 @@ impl KimiChat {
                             continue;
                         }
 
-                        // If repair failed or wasn't possible, switch to GPT-OSS as fallback
-                        eprintln!("{}", "🔄 Repair failed. Switching to GPT-OSS and retrying...".bright_cyan());
+                        // If repair failed or wasn't possible, switch to GrnModel as fallback
+                        eprintln!("{}", "🔄 Repair failed. Switching to GrnModel and retrying...".bright_cyan());
 
-                        // Switch to GPT-OSS
-                        current_model = ModelType::GptOss;
+                        // Switch to GrnModel
+                        current_model = ModelType::GrnModel;
 
                         // Update system message
                         if let Some(sys_msg) = messages.first_mut() {
@@ -1410,7 +1625,7 @@ impl KimiChat {
                             }
                         }
 
-                        // Retry with GPT-OSS - continue the loop to retry
+                        // Retry with GrnModel - continue the loop to retry
                         retry_count = 0; // Reset retry count for new model
                         continue;
                     }
@@ -1487,7 +1702,11 @@ impl KimiChat {
         let mut errors_encountered: Vec<String> = Vec::new();
 
         loop {
-            let (response, usage, current_model, messages) = self.call_api(&self.messages).await?;
+            let (response, usage, current_model, messages) = if self.stream_responses {
+                self.call_api_streaming(&self.messages).await?
+            } else {
+                self.call_api(&self.messages).await?
+            };
             self.messages = messages;
             if self.current_model != current_model {
                 println!("Forced model switch: {:?} -> {:?}", &self.current_model, &current_model);
@@ -1817,13 +2036,19 @@ async fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
-    // API key is only required if not using llama.cpp
-    let api_key = if cli.llama_cpp_url.is_some() {
-        // llama.cpp doesn't need an API key, use empty string
-        String::new()
-    } else {
+    // Determine API URLs for each model
+    // Priority: specific flags (--api-url-blu-model, --api-url-grn-model) override general flag (--llama-cpp-url)
+    let api_url_blu_model = cli.api_url_blu_model.or_else(|| cli.llama_cpp_url.clone());
+    let api_url_grn_model = cli.api_url_grn_model.or_else(|| cli.llama_cpp_url.clone());
+
+    // API key is only required if at least one model uses Groq (no API URL specified)
+    let using_groq = api_url_blu_model.is_none() || api_url_grn_model.is_none();
+    let api_key = if using_groq {
         env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --llama-cpp-url to use llama.cpp instead of Groq.")?
+            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model to use llama.cpp instead of Groq.")?
+    } else {
+        // Both models use llama.cpp, no API key needed
+        String::new()
     };
 
     // Use current directory as work_dir so the AI can see project files
@@ -1838,12 +2063,38 @@ async fn main() -> Result<()> {
     }
 
     // Create client configuration from CLI arguments
+    // Priority: specific flags override general --model flag
     let client_config = ClientConfig {
         api_key: api_key.clone(),
-        use_llama_cpp: cli.llama_cpp_url.is_some(),
-        llama_cpp_url: cli.llama_cpp_url.clone(),
-        model_kimi_override: cli.model_kimi.clone(),
-        model_gpt_oss_override: cli.model_gpt_oss.clone(),
+        api_url_blu_model,
+        api_url_grn_model,
+        model_blu_model_override: cli.model_blu_model.clone().or_else(|| cli.model.clone()),
+        model_grn_model_override: cli.model_grn_model.clone().or_else(|| cli.model.clone()),
+    };
+
+    // Create policy manager based on CLI arguments
+    let policy_manager = if cli.auto_confirm {
+        eprintln!("{} Auto-confirm mode enabled - all actions will be approved automatically", "🚀".green());
+        PolicyManager::allow_all()
+    } else if cli.policy_file.is_some() || cli.learn_policies {
+        let policy_file = cli.policy_file.unwrap_or_else(|| "policies.toml".to_string());
+        let policy_path = work_dir.join(&policy_file);
+        match PolicyManager::from_file(&policy_path, cli.learn_policies) {
+            Ok(pm) => {
+                eprintln!("{} Loaded policy file: {}", "📋".cyan(), policy_path.display());
+                if cli.learn_policies {
+                    eprintln!("{} Policy learning enabled - user decisions will be saved to policy file", "📚".cyan());
+                }
+                pm
+            }
+            Err(e) => {
+                eprintln!("{} Failed to load policy file: {}", "⚠️".yellow(), e);
+                eprintln!("{} Using default policy (ask for confirmation)", "📋".cyan());
+                PolicyManager::new()
+            }
+        }
+    } else {
+        PolicyManager::new()
     };
 
     // Handle task mode if requested
@@ -1858,7 +2109,7 @@ async fn main() -> Result<()> {
         println!("{}", format!("Task: {}", task_text).bright_yellow());
         println!();
 
-        let mut chat = KimiChat::new_with_config(client_config.clone(), work_dir.clone(), cli.agents);
+        let mut chat = KimiChat::new_with_config(client_config.clone(), work_dir.clone(), cli.agents, policy_manager.clone(), cli.stream);
 
         // Initialize logger for task mode
         chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
@@ -1917,7 +2168,7 @@ async fn main() -> Result<()> {
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
-    println!("{}", "Default model: GPT-OSS-120B (cost-efficient) • Auto-switches to Kimi-K2-Instruct-0905 when needed".bright_black());
+    println!("{}", "Default model: GrnModel/GPT-OSS-120B (cost-efficient) • Auto-switches to BluModel/Kimi-K2-Instruct-0905 when needed".bright_black());
 
     if cli.agents {
         println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
@@ -1925,7 +2176,7 @@ async fn main() -> Result<()> {
 
     println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
 
-    let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents);
+    let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents, policy_manager, cli.stream);
     // Initialize logger (async) – logs go into the workspace directory
     chat.logger = match ConversationLogger::new(&chat.work_dir).await {
         Ok(l) => Some(l),
@@ -2002,6 +2253,13 @@ async fn main() -> Result<()> {
                     logger.log("user", line, None, false).await;
                 }
 
+                // Show thinking indicator when streaming is enabled
+                if chat.stream_responses {
+                    use std::io::{self, Write};
+                    print!("{} ", "🤔 Thinking...".bright_black());
+                    io::stdout().flush().unwrap();
+                }
+
                 let response = if chat.use_agents && chat.agent_coordinator.is_some() {
                     // Use agent system
                     match chat.process_with_agents(line).await {
@@ -2033,8 +2291,13 @@ async fn main() -> Result<()> {
                 if let Some(logger) = &mut chat.logger {
                     logger.log("assistant", &response, None, false).await;
                 }
-                let model_name = format!("[{}]", chat.current_model.display_name()).bright_magenta();
-                println!("\n{} {} {}\n", model_name, "Assistant:".bright_blue().bold(), response);
+
+                // Display response if not streaming (streaming already displayed it)
+                if !chat.stream_responses {
+                    let model_label = format!("[{}]", chat.current_model.display_name()).bright_magenta();
+                    let assistant_label = "Assistant:".bright_blue().bold();
+                    println!("\n{} {} {}\n", model_label, assistant_label, response);
+                }
             }
             Err(ReadlineError::Interrupted) => {
                 println!("{}", "^C".bright_black());

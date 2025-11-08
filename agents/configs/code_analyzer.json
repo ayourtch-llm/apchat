@@ -2,7 +2,7 @@
   "name": "code_analyzer",
   "description": "Code analysis specialist for understanding codebase structure, patterns, and architecture",
   "version": "1.0.0",
-  "model": "gpt_oss",
+  "model": "grn_model",
   "tools": [
     "read_file",
     "open_file",

@@ -46,35 +46,24 @@ impl Tool for RunCommandTool {
             }
         }
 
-        // Ask user for confirmation
+        // Check permission using policy system
         print!("{} {} ", "Run command:".yellow(), command.cyan());
         std::io::stdout().flush().ok();
-        print!("{} (y/N): ", "Execute?".yellow());
-        std::io::stdout().flush().ok();
 
-        let mut input = String::new();
-        if let Err(e) = std::io::stdin().read_line(&mut input) {
-            return ToolResult::error(format!("Failed to read user input: {}", e));
+        let approved = match context.check_permission(
+            crate::policy::ActionType::CommandExecution,
+            &command,
+            "Execute? (y/N):"
+        ) {
+            Ok(approved) => approved,
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        };
+
+        if !approved {
+            return ToolResult::error("Command cancelled by user or policy".to_string());
         }
 
-        match input.trim().to_lowercase().as_str() {
-            "y" | "yes" => {
-                println!("{} {}", "Running:".green(), command.cyan());
-            }
-            _ => {
-                // Cancelled - ask for optional feedback
-                println!("{}", "Would you like to provide feedback to the model about why you rejected this? (optional)".bright_yellow());
-                println!("{}", "Press Enter to skip, or type your feedback:".bright_black());
-
-                let mut feedback_input = String::new();
-                let feedback = match std::io::stdin().read_line(&mut feedback_input) {
-                    Ok(_) if !feedback_input.trim().is_empty() => format!(" - {}", feedback_input.trim()),
-                    _ => String::new(),
-                };
-
-                return ToolResult::error(format!("Command cancelled by user{}", feedback));
-            }
-        }
+        println!("{} {}", "Running:".green(), command.cyan());
 
         // Parse command and arguments
         let orig_command = command.clone();

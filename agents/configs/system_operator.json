@@ -2,7 +2,7 @@
   "name": "system_operator",
   "description": "System operations specialist for running commands and managing development workflows",
   "version": "1.0.0",
-  "model": "kimi",
+  "model": "blu_model",
   "tools": [
     "run_command",
     "read_file",
