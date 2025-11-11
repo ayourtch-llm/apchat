@@ -1941,6 +1941,12 @@ impl KimiChat {
             }
         }
 
+        // Clear thinking indicator if it was never cleared (no content received)
+        if first_chunk {
+            print!("\r\x1B[K");
+            io::stdout().flush().unwrap();
+        }
+
         println!(); // New line after streaming complete
 
         // Build the final message
@@ -2792,13 +2798,6 @@ async fn main() -> Result<()> {
                     logger.log("user", line, None, false).await;
                 }
 
-                // Show thinking indicator when streaming is enabled
-                if chat.stream_responses {
-                    use std::io::{self, Write};
-                    print!("{} ", "🤔 Thinking...".bright_black());
-                    io::stdout().flush().unwrap();
-                }
-
                 let response = if chat.use_agents && chat.agent_coordinator.is_some() {
                     // Use agent system
                     match chat.process_with_agents(line).await {
@@ -2836,6 +2835,9 @@ async fn main() -> Result<()> {
                     let model_label = format!("[{}]", chat.current_model.display_name()).bright_magenta();
                     let assistant_label = "Assistant:".bright_blue().bold();
                     println!("\n{} {} {}\n", model_label, assistant_label, response);
+                } else {
+                    // Add extra newline after streaming to separate from next prompt
+                    println!();
                 }
             }
             Err(ReadlineError::Interrupted) => {
