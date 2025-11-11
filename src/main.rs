@@ -582,12 +582,16 @@ fn default_max_results() -> u32 { 100 }
 /// Configuration for KimiChat client
 #[derive(Debug, Clone)]
 struct ClientConfig {
-    /// API key for authentication (not used for llama.cpp)
+    /// API key for authentication (Groq default)
     api_key: String,
-    /// API URL for 'blu_model' - if Some, uses llama.cpp; if None, uses Groq
+    /// API URL for 'blu_model' - if Some, uses custom backend; if None, uses Groq
     api_url_blu_model: Option<String>,
-    /// API URL for 'grn_model' - if Some, uses llama.cpp; if None, uses Groq
+    /// API URL for 'grn_model' - if Some, uses custom backend; if None, uses Groq
     api_url_grn_model: Option<String>,
+    /// API key for 'blu_model' - if Some, uses this instead of default api_key
+    api_key_blu_model: Option<String>,
+    /// API key for 'grn_model' - if Some, uses this instead of default api_key
+    api_key_grn_model: Option<String>,
     /// Override for 'blu_model' model name
     model_blu_model_override: Option<String>,
     /// Override for 'grn_model' model name
@@ -779,11 +783,39 @@ impl KimiChat {
         Self::normalize_api_url(&url)
     }
 
+    /// Get the appropriate API key for a given model based on configuration
+    fn get_api_key(&self, model: &ModelType) -> String {
+        match model {
+            ModelType::BluModel => {
+                self.client_config.api_key_blu_model
+                    .as_ref()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| self.api_key.clone())
+            }
+            ModelType::GrnModel => {
+                self.client_config.api_key_grn_model
+                    .as_ref()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| self.api_key.clone())
+            }
+            ModelType::Custom(_) => {
+                // For custom models, default to the first available override or default key
+                self.client_config.api_key_blu_model
+                    .as_ref()
+                    .or(self.client_config.api_key_grn_model.as_ref())
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| self.api_key.clone())
+            }
+        }
+    }
+
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
             api_url_blu_model: None,
             api_url_grn_model: None,
+            api_key_blu_model: None,
+            api_key_grn_model: None,
             model_blu_model_override: None,
             model_grn_model_override: None,
         };
@@ -796,6 +828,8 @@ impl KimiChat {
             api_key: api_key.clone(),
             api_url_blu_model: None,
             api_url_grn_model: None,
+            api_key_blu_model: None,
+            api_key_grn_model: None,
             model_blu_model_override: None,
             model_grn_model_override: None,
         };
@@ -982,12 +1016,13 @@ impl KimiChat {
     async fn process_with_agents(&mut self, user_request: &str) -> Result<String> {
         // Get API URL before mutable borrow
         let api_url = self.get_api_url(&self.current_model);
+        let api_key = self.get_api_key(&self.current_model);
 
         if let Some(coordinator) = &mut self.agent_coordinator {
             // Create execution context for agents
             let tool_registry_arc = std::sync::Arc::new(self.tool_registry.clone());
             let llm_client = std::sync::Arc::new(GroqLlmClient::new(
-                self.api_key.clone(),
+                api_key,
                 self.current_model.as_str().to_string(),
                 api_url,
                 "process_with_agents".to_string()
@@ -1260,9 +1295,10 @@ impl KimiChat {
         // Log request to file for persistent debugging
         let _ = self.log_request_to_file(&api_url, &request, &summary_model);
 
+        let api_key = self.get_api_key(&summary_model);
         let response = self.client
             .post(&api_url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -1372,9 +1408,10 @@ impl KimiChat {
                     // Log request to file for persistent debugging
                     let _ = self.log_request_to_file(&decision_api_url, &decision_request, &self.current_model);
 
+                    let api_key = self.get_api_key(&self.current_model);
                     let decision_response = self.client
                         .post(&decision_api_url)
-                        .header("Authorization", format!("Bearer {}", self.api_key))
+                        .header("Authorization", format!("Bearer {}", api_key))
                         .header("Content-Type", "application/json")
                         .json(&decision_request)
                         .send()
@@ -1470,9 +1507,10 @@ impl KimiChat {
         // Log request to file for persistent debugging
         let _ = self.log_request_to_file(&repair_api_url, &repair_request, &ModelType::BluModel);
 
+        let api_key = self.get_api_key(&ModelType::BluModel);
         let response = self.client
             .post(&repair_api_url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", format!("Bearer {}", api_key))
             .json(&repair_request)
             .send()
             .await?;
@@ -1793,10 +1831,11 @@ impl KimiChat {
         // Log request to file for persistent debugging
         let _ = self.log_request_to_file(&api_url, &request, &current_model);
 
+        let api_key = self.get_api_key(&current_model);
         let response = self
             .client
             .post(&api_url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -2026,10 +2065,11 @@ impl KimiChat {
             // Log request to file for persistent debugging
             let _ = self.log_request_to_file(&api_url, &request, &current_model);
 
+            let api_key = self.get_api_key(&current_model);
             let response = self
                 .client
                 .post(&api_url)
-                .header("Authorization", format!("Bearer {}", self.api_key))
+                .header("Authorization", format!("Bearer {}", api_key))
                 .header("Content-Type", "application/json")
                 .json(&request)
                 .send()
@@ -2224,9 +2264,10 @@ impl KimiChat {
 
         // Initialize progress evaluator for all operations
         let blu_model_url = self.get_api_url(&ModelType::BluModel);
+        let blu_model_key = self.get_api_key(&ModelType::BluModel);
         let mut progress_evaluator = Some(crate::agents::progress_evaluator::ProgressEvaluator::new(
             std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
-                self.api_key.clone(),
+                blu_model_key,
                 "kimi".to_string(),
                 blu_model_url,
                 "progress_evaluator".to_string()
@@ -2594,16 +2635,33 @@ async fn main() -> Result<()> {
 
     // Determine API URLs for each model
     // Priority: specific flags (--api-url-blu-model, --api-url-grn-model) override general flag (--llama-cpp-url)
-    let api_url_blu_model = cli.api_url_blu_model.or_else(|| cli.llama_cpp_url.clone());
-    let api_url_grn_model = cli.api_url_grn_model.or_else(|| cli.llama_cpp_url.clone());
+    // Also check for Anthropic environment variables
+    let api_url_blu_model = cli.api_url_blu_model
+        .or_else(|| cli.llama_cpp_url.clone())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL_BLU").ok())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
 
-    // API key is only required if at least one model uses Groq (no API URL specified)
-    let using_groq = api_url_blu_model.is_none() || api_url_grn_model.is_none();
-    let api_key = if using_groq {
+    let api_url_grn_model = cli.api_url_grn_model
+        .or_else(|| cli.llama_cpp_url.clone())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL_GRN").ok())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
+
+    // Check for per-model API keys (for Anthropic or other services)
+    let api_key_blu_model = env::var("ANTHROPIC_AUTH_TOKEN_BLU").ok()
+        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
+
+    let api_key_grn_model = env::var("ANTHROPIC_AUTH_TOKEN_GRN").ok()
+        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
+
+    // API key is only required if at least one model uses Groq (no API URL specified and no per-model key)
+    let needs_groq_key = (api_url_blu_model.is_none() && api_key_blu_model.is_none())
+                      || (api_url_grn_model.is_none() && api_key_grn_model.is_none());
+
+    let api_key = if needs_groq_key {
         env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model to use llama.cpp instead of Groq.")?
+            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model with ANTHROPIC_AUTH_TOKEN to use other backends.")?
     } else {
-        // Both models use llama.cpp, no API key needed
+        // Using custom backends with per-model keys, no Groq key needed
         String::new()
     };
 
@@ -2624,6 +2682,8 @@ async fn main() -> Result<()> {
         api_key: api_key.clone(),
         api_url_blu_model,
         api_url_grn_model,
+        api_key_blu_model,
+        api_key_grn_model,
         model_blu_model_override: cli.model_blu_model.clone().or_else(|| cli.model.clone()),
         model_grn_model_override: cli.model_grn_model.clone().or_else(|| cli.model.clone()),
     };
