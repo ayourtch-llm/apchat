@@ -60,8 +60,8 @@ impl AgentConfig {
         }
 
         // Validate model name
-        if !["kimi", "gpt_oss"].contains(&self.model.as_str()) {
-            return Err(format!("Invalid model: {}. Available models: kimi, gpt_oss", self.model));
+        if !["kimi", "gpt_oss", "blu_model", "grn_model", "anthropic"].contains(&self.model.as_str()) {
+            return Err(format!("Invalid model: {}. Available models: kimi, gpt_oss, blu_model, grn_model, anthropic", self.model));
         }
 
         Ok(())

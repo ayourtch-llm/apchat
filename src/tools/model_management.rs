@@ -58,8 +58,8 @@ impl Tool for SwitchModelTool {
         };
 
         // Validate model name
-        if model != "kimi" && model != "gpt_oss" {
-            return ToolResult::error("Invalid model. Available models: kimi, gpt_oss".to_string());
+        if !["kimi", "gpt_oss", "blu_model", "grn_model", "anthropic"].contains(&model.as_str()) {
+            return ToolResult::error("Invalid model. Available models: kimi, gpt_oss, blu_model, grn_model, anthropic".to_string());
         }
 
         // For now, return information about the requested switch
