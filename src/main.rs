@@ -2124,8 +2124,24 @@ impl KimiChat {
         let mut messages = orig_messages.to_vec();
 
         // Check if we need to use the new LlmClient system for Anthropic
-        if matches!(current_model, ModelType::AnthropicModel) {
+        let is_custom_claude = if let ModelType::Custom(ref name) = current_model {
+            name.contains("claude")
+        } else {
+            false
+        };
+
+        let should_use_anthropic = matches!(current_model, ModelType::AnthropicModel) ||
+            is_custom_claude ||
+            (self.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+            (self.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+
+        println!("🔧 DEBUG: current_model = {:?}", current_model);
+        println!("🔧 DEBUG: should_use_anthropic = {}", should_use_anthropic);
+        if should_use_anthropic {
+            println!("🔧 DEBUG: Using call_api_with_llm_client for Anthropic");
             return self.call_api_with_llm_client(&messages, &current_model).await;
+        } else {
+            println!("🔧 DEBUG: Using regular OpenAI-style call_api");
         }
 
         // Retry logic with exponential backoff
@@ -2328,6 +2344,10 @@ impl KimiChat {
 
     /// Call API using the new LlmClient system (for Anthropic and future backends)
     async fn call_api_with_llm_client(&self, messages: &[Message], model: &ModelType) -> Result<(Message, Option<Usage>, ModelType)> {
+        println!("🔧 DEBUG: call_api_with_llm_client called with model: {:?}", model);
+        println!("🔧 DEBUG: client_config.api_url_blu_model: {:?}", self.client_config.api_url_blu_model);
+        println!("🔧 DEBUG: client_config.api_url_grn_model: {:?}", self.client_config.api_url_grn_model);
+
         // Convert old Message format to new ChatMessage format
         let chat_messages: Vec<ChatMessage> = messages.iter().map(|msg| {
             ChatMessage {
@@ -2356,28 +2376,113 @@ impl KimiChat {
             }
         }).collect();
 
-        // Create the appropriate LlmClient
-        let api_url = self.get_api_url(model);
-        let api_key = self.get_api_key(model);
-
+        // Create the appropriate LlmClient using the same logic as agent mode
         let llm_client: std::sync::Arc<dyn crate::agents::agent::LlmClient> =
-            if api_url.contains("anthropic") {
-                println!("{} Using Anthropic API", "🧠".cyan());
+            if matches!(model, ModelType::BluModel) {
+                // Blu model logic (same as agent mode)
+                if let Some(ref api_url) = self.client_config.api_url_blu_model {
+                    if api_url.contains("anthropic") {
+                        println!("{} Using Anthropic API for 'blu_model' at: {}", "🧠".cyan(), api_url);
+                        println!("🔧 DEBUG: BluModel Anthropic URL: '{}', API Key present: {}", api_url, self.client_config.api_key_blu_model.is_some());
+                        std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                            self.client_config.api_key_blu_model.clone().unwrap_or_default(),
+                            model.as_str(),
+                            api_url.clone(),
+                            "blu_model".to_string()
+                        ))
+                    } else {
+                        println!("{} Using llama.cpp for 'blu_model' at: {}", "🦙".cyan(), api_url);
+                        std::sync::Arc::new(crate::agents::llama_cpp_client::LlamaCppClient::new(
+                            api_url.clone(),
+                            model.as_str()
+                        ))
+                    }
+                } else if env::var("ANTHROPIC_AUTH_TOKEN_BLU").is_ok() ||
+                          (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
+                           (self.client_config.model_blu_model_override.as_ref()
+                            .map(|m| m.contains("claude") || m.contains("anthropic"))
+                            .unwrap_or(false))) {
+                    println!("{} Using Anthropic API for 'blu_model'", "🧠".cyan());
+                    let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_BLU")
+                        .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+                        .unwrap_or_default();
+                    std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                        anthropic_key,
+                        model.as_str(),
+                        "https://api.anthropic.com".to_string(),
+                        "blu_model".to_string()
+                    ))
+                } else {
+                    println!("{} Using Groq API for 'blu_model'", "🚀".cyan());
+                    std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
+                        self.client_config.api_key.clone(),
+                        model.as_str(),
+                        crate::GROQ_API_URL.to_string(),
+                        "blu_model".to_string()
+                    ))
+                }
+            } else if matches!(model, ModelType::AnthropicModel) {
+                // Anthropic model logic - use raw URL
+                let api_url = env::var("ANTHROPIC_BASE_URL")
+                    .or_else(|_| env::var("ANTHROPIC_BASE_URL_BLU"))
+                    .or_else(|_| env::var("ANTHROPIC_BASE_URL_GRN"))
+                    .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
+                println!("{} Using Anthropic API for 'anthropic' at: {}", "🧠".cyan(), api_url);
+                println!("🔧 DEBUG: AnthropicModel URL: '{}'", api_url);
+                let api_key = env::var("ANTHROPIC_API_KEY")
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
+                    .unwrap_or_else(|_| self.client_config.api_key.clone());
                 std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
                     api_key,
                     model.as_str(),
                     api_url,
-                    "chat".to_string()
+                    "anthropic".to_string()
                 ))
             } else {
-                // Fallback to Groq client
-                println!("{} Using Groq API", "🚀".cyan());
-                std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
-                    api_key,
-                    model.as_str(),
-                    api_url,
-                    "chat".to_string()
-                ))
+                // Grn model logic (same as agent mode)
+                if let Some(ref api_url) = self.client_config.api_url_grn_model {
+                    if api_url.contains("anthropic") {
+                        println!("{} Using Anthropic API for 'grn_model' at: {}", "🧠".cyan(), api_url);
+                        println!("🔧 DEBUG: GrnModel Anthropic URL: '{}', API Key present: {}", api_url, self.client_config.api_key_grn_model.is_some());
+                        std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                            self.client_config.api_key_grn_model.clone().unwrap_or_default(),
+                            model.as_str(),
+                            api_url.clone(),
+                            "grn_model".to_string()
+                        ))
+                    } else {
+                        println!("{} Using llama.cpp for 'grn_model' at: {}", "🦙".cyan(), api_url);
+                        std::sync::Arc::new(crate::agents::llama_cpp_client::LlamaCppClient::new(
+                            api_url.clone(),
+                            model.as_str()
+                        ))
+                    }
+                } else if env::var("ANTHROPIC_AUTH_TOKEN_GRN").is_ok() ||
+                          (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
+                           (self.client_config.model_grn_model_override.as_ref()
+                            .map(|m| m.contains("claude") || m.contains("anthropic"))
+                            .unwrap_or(false))) {
+                    println!("{} Using Anthropic API for 'grn_model'", "🧠".cyan());
+                    let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_GRN")
+                        .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+                        .unwrap_or_default();
+                    std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                        anthropic_key,
+                        model.as_str(),
+                        "https://api.anthropic.com".to_string(),
+                        "grn_model".to_string()
+                    ))
+                } else {
+                    println!("{} Using Groq API for 'grn_model'", "🚀".cyan());
+                    std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
+                        self.client_config.api_key.clone(),
+                        model.as_str(),
+                        crate::GROQ_API_URL.to_string(),
+                        "grn_model".to_string()
+                    ))
+                }
             };
 
         // Make the API call
@@ -2993,7 +3098,6 @@ async fn main() -> Result<()> {
 
     println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
-    println!("{}", "Default model: GrnModel/GPT-OSS-120B (cost-efficient) • Auto-switches to BluModel/Kimi-K2-Instruct-0905 when needed".bright_black());
 
     if cli.agents {
         println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
@@ -3002,6 +3106,42 @@ async fn main() -> Result<()> {
     println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
 
     let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents, policy_manager, cli.stream, cli.verbose);
+
+    // Show the actual current model configuration
+    let current_model_display = match chat.current_model {
+        ModelType::BluModel => format!("BluModel/{} (auto-switched from default)", chat.current_model.display_name()),
+        ModelType::GrnModel => format!("GrnModel/{} (default)", chat.current_model.display_name()),
+        ModelType::AnthropicModel => format!("Anthropic/{}", chat.current_model.display_name()),
+        ModelType::Custom(ref name) => format!("Custom/{}", name),
+    };
+
+    // Show what backends are being used
+    let blu_backend = if chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false) ||
+                       env::var("ANTHROPIC_AUTH_TOKEN_BLU").is_ok() {
+        "Anthropic API 🧠"
+    } else if chat.client_config.api_url_blu_model.is_some() {
+        "llama.cpp 🦙"
+    } else {
+        "Groq API 🚀"
+    };
+
+    let grn_backend = if chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false) ||
+                       env::var("ANTHROPIC_AUTH_TOKEN_GRN").is_ok() {
+        "Anthropic API 🧠"
+    } else if chat.client_config.api_url_grn_model.is_some() {
+        "llama.cpp 🦙"
+    } else {
+        "Groq API 🚀"
+    };
+
+    println!("{}", format!("Default model: {} • BluModel uses {}, GrnModel uses {}",
+        current_model_display, blu_backend, grn_backend).bright_black());
+
+    // Debug info
+    println!("{}", format!("🔧 DEBUG: blu_model URL: {:?}", chat.client_config.api_url_blu_model).bright_black());
+    println!("{}", format!("🔧 DEBUG: grn_model URL: {:?}", chat.client_config.api_url_grn_model).bright_black());
+    println!("{}", format!("🔧 DEBUG: Current model: {:?}", chat.current_model).bright_black());
+
     // Initialize logger (async) – logs go into the workspace directory
     chat.logger = match ConversationLogger::new(&chat.work_dir).await {
         Ok(l) => Some(l),
