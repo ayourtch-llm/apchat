@@ -490,6 +490,8 @@ struct StreamDelta {
     #[serde(default)]
     content: Option<String>,
     #[serde(default)]
+    reasoning_content: Option<String>,
+    #[serde(default)]
     tool_calls: Option<Vec<StreamToolCallDelta>>,
 }
 
@@ -1819,6 +1821,7 @@ impl KimiChat {
 
         // Process streaming response
         let mut accumulated_content = String::new();
+        let mut accumulated_reasoning = String::new();
         let mut accumulated_tool_calls: Vec<ToolCall> = Vec::new();
         let mut role = String::new();
         let mut usage: Option<Usage> = None;
@@ -1828,6 +1831,7 @@ impl KimiChat {
         print!("🤔 Thinking...");
         io::stdout().flush().unwrap();
         let mut first_chunk = true;
+        let mut first_reasoning = true;
 
         // Read the response as a stream of bytes
         let mut stream = response.bytes_stream();
@@ -1877,6 +1881,27 @@ impl KimiChat {
                                     role = r.clone();
                                 }
 
+                                // Accumulate and display reasoning content (thinking process)
+                                if let Some(reasoning) = &delta.reasoning_content {
+                                    if first_chunk {
+                                        // Clear thinking indicator
+                                        print!("\r\x1B[K");
+                                        io::stdout().flush().unwrap();
+                                        first_chunk = false;
+                                    }
+
+                                    if first_reasoning {
+                                        // Show reasoning header
+                                        print!("{}", "💭 ".bright_black());
+                                        first_reasoning = false;
+                                    }
+
+                                    accumulated_reasoning.push_str(reasoning);
+                                    // Display reasoning in dim color to distinguish from actual response
+                                    print!("{}", reasoning.bright_black());
+                                    io::stdout().flush().unwrap();
+                                }
+
                                 // Accumulate content and display it
                                 if let Some(content) = &delta.content {
                                     if first_chunk {
@@ -1884,6 +1909,11 @@ impl KimiChat {
                                         print!("\r\x1B[K");
                                         io::stdout().flush().unwrap();
                                         first_chunk = false;
+                                    }
+
+                                    // If we just finished reasoning, add separator
+                                    if !first_reasoning && accumulated_content.is_empty() {
+                                        println!(); // New line after reasoning
                                     }
 
                                     accumulated_content.push_str(content);
