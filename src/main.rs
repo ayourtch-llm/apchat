@@ -29,6 +29,7 @@ use core::{ToolRegistry, ToolParameters};
 use core::tool_context::ToolContext;
 use policy::PolicyManager;
 use tools_execution::parse_xml_tool_calls;
+use tools_execution::validation::{repair_tool_call_with_model, validate_and_fix_tool_calls_in_place};
 use cli::{Cli, Commands};
 use config::{ClientConfig, GROQ_API_URL, normalize_api_url, initialize_tool_registry, initialize_agent_system};
 use chat::{save_state, load_state};
@@ -45,41 +46,41 @@ use models::{
 };
 
 
-const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
-const MAX_RETRIES: u32 = 3;
+pub(crate) const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
+pub(crate) const MAX_RETRIES: u32 = 3;
 
-struct KimiChat {
-    api_key: String,
-    work_dir: PathBuf,
-    client: reqwest::Client,
-    messages: Vec<Message>,
-    current_model: ModelType,
-    total_tokens_used: usize,
-    logger: Option<ConversationLogger>,
-    tool_registry: ToolRegistry,
+pub(crate) struct KimiChat {
+    pub(crate) api_key: String,
+    pub(crate) work_dir: PathBuf,
+    pub(crate) client: reqwest::Client,
+    pub(crate) messages: Vec<Message>,
+    pub(crate) current_model: ModelType,
+    pub(crate) total_tokens_used: usize,
+    pub(crate) logger: Option<ConversationLogger>,
+    pub(crate) tool_registry: ToolRegistry,
     // Agent system
-    agent_coordinator: Option<PlanningCoordinator>,
-    use_agents: bool,
+    pub(crate) agent_coordinator: Option<PlanningCoordinator>,
+    pub(crate) use_agents: bool,
     // Client configuration
-    client_config: ClientConfig,
+    pub(crate) client_config: ClientConfig,
     // Policy manager
-    policy_manager: PolicyManager,
+    pub(crate) policy_manager: PolicyManager,
     // Streaming mode
-    stream_responses: bool,
+    pub(crate) stream_responses: bool,
     // Verbose debug mode
-    verbose: bool,
+    pub(crate) verbose: bool,
     // Debug level for controlling debug output (0=off, 1=basic, 2=detailed, etc.)
-    debug_level: u32,
+    pub(crate) debug_level: u32,
 }
 
 impl KimiChat {
     /// Normalize API URL by ensuring it has the correct path for OpenAI-compatible endpoints
-    fn normalize_api_url(url: &str) -> String {
+    pub(crate) fn normalize_api_url(url: &str) -> String {
         normalize_api_url(url)
     }
 
     /// Generate system prompt based on current model
-    fn get_system_prompt() -> String {
+    pub(crate) fn get_system_prompt() -> String {
         "You are an AI assistant with access to file operations and model switching capabilities. \
         The system supports multiple models that can be switched during the conversation:\n\
         - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
@@ -93,7 +94,7 @@ impl KimiChat {
     }
 
     /// Get the API URL to use based on the current model and client configuration
-    fn get_api_url(&self, model: &ModelType) -> String {
+    pub(crate) fn get_api_url(&self, model: &ModelType) -> String {
         let url = match model {
             ModelType::BluModel => {
                 self.client_config.api_url_blu_model
@@ -129,7 +130,7 @@ impl KimiChat {
     }
 
     /// Get the appropriate API key for a given model based on configuration
-    fn get_api_key(&self, model: &ModelType) -> String {
+    pub(crate) fn get_api_key(&self, model: &ModelType) -> String {
         match model {
             ModelType::BluModel => {
                 self.client_config.api_key_blu_model
@@ -191,17 +192,17 @@ impl KimiChat {
     }
 
     /// Set the debug level (0=off, 1=basic, 2=detailed, etc.)
-    fn set_debug_level(&mut self, level: u32) {
+    pub(crate) fn set_debug_level(&mut self, level: u32) {
         self.debug_level = level;
     }
 
     /// Get the current debug level
-    fn get_debug_level(&self) -> u32 {
+    pub(crate) fn get_debug_level(&self) -> u32 {
         self.debug_level
     }
 
     /// Check if debug output should be shown for a given level
-    fn should_show_debug(&self, level: u32) -> bool {
+    pub(crate) fn should_show_debug(&self, level: u32) -> bool {
         self.debug_level & (1 << (level - 1)) != 0
     }
 
@@ -270,7 +271,7 @@ impl KimiChat {
         chat
     }
 
-    fn get_tools(&self) -> Vec<Tool> {
+    pub(crate) fn get_tools(&self) -> Vec<Tool> {
         // Convert new tool registry format to legacy Tool format for backward compatibility
         let registry_tools = self.tool_registry.get_openai_tool_definitions();
 
@@ -713,184 +714,11 @@ impl KimiChat {
 
     /// Attempt to repair malformed tool calls using a separate API call to a model
     async fn repair_tool_call_with_model(&self, tool_call: &ToolCall, error_msg: &str) -> Result<ToolCall> {
-        eprintln!("{} Attempting to repair tool call '{}' using AI...", "🔧".bright_yellow(), tool_call.function.name);
-
-        let repair_prompt = format!(
-            "A tool call failed with a validation error. Please fix the JSON arguments.\n\n\
-            Tool name: {}\n\
-            Original arguments (malformed): {}\n\
-            Error: {}\n\n\
-            Requirements:\n\
-            - Return ONLY the corrected JSON arguments as a valid JSON object\n\
-            - Do not include any explanation, markdown formatting, or extra text\n\
-            - Ensure all field types match the schema (integers as numbers, not strings)\n\
-            - Common issues: trailing quotes after numbers, string instead of integer values\n\n\
-            Corrected JSON arguments:",
-            tool_call.function.name,
-            tool_call.function.arguments,
-            error_msg
-        );
-
-        // Create a simple repair request using Kimi (fast and good at structured output)
-        let repair_request = ChatRequest {
-            model: ModelType::BluModel.as_str().to_string(),
-            messages: vec![
-                Message {
-                    role: "system".to_string(),
-                    content: "You are a JSON repair assistant. Return only valid JSON, no explanations.".to_string(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                },
-                Message {
-                    role: "user".to_string(),
-                    content: repair_prompt,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                },
-            ],
-            tools: vec![], // No tools for repair request
-            tool_choice: "none".to_string(),
-            stream: None,
-        };
-
-        // Make API call using BluModel's API URL
-        let repair_api_url = self.get_api_url(&ModelType::BluModel);
-
-        // Log request to file for persistent debugging
-        let _ = log_request_to_file(&repair_api_url, &repair_request, &ModelType::BluModel, &self.api_key);
-
-        let api_key = self.get_api_key(&ModelType::BluModel);
-        let response = self.client
-            .post(&repair_api_url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .json(&repair_request)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            anyhow::bail!("Repair API call failed: {}", error_text);
-        }
-
-        let api_response: ChatResponse = response.json().await?;
-
-        if let Some(choice) = api_response.choices.first() {
-            let repaired_json = choice.message.content.trim();
-
-            // Validate the repaired JSON
-            if let Ok(_) = serde_json::from_str::<serde_json::Value>(repaired_json) {
-                eprintln!("{} Successfully repaired tool call arguments", "✓".bright_green());
-
-                // Return repaired tool call
-                Ok(ToolCall {
-                    id: tool_call.id.clone(),
-                    tool_type: tool_call.tool_type.clone(),
-                    function: FunctionCall {
-                        name: tool_call.function.name.clone(),
-                        arguments: repaired_json.to_string(),
-                    },
-                })
-            } else {
-                anyhow::bail!("Repaired JSON is still invalid: {}", repaired_json)
-            }
-        } else {
-            anyhow::bail!("No response from repair API call")
-        }
+        repair_tool_call_with_model(self, tool_call, error_msg).await
     }
 
     fn validate_and_fix_tool_calls_in_place(&mut self) -> Result<bool> {
-        let mut fixed_any = false;
-
-        for message in self.messages.iter_mut() {
-            if let Some(tool_calls) = &mut message.tool_calls {
-                for tool_call in tool_calls.iter_mut() {
-                    let original_args = tool_call.function.arguments.clone();
-
-                    // Try to parse the arguments as JSON
-                    match serde_json::from_str::<serde_json::Value>(&tool_call.function.arguments) {
-                        Ok(mut json_args) => {
-                            // Validate and fix based on tool name
-                            let mut needs_fix = false;
-
-                            match tool_call.function.name.as_str() {
-                                "open_file" | "read_file" => {
-                                    // Check if start_line or end_line are strings instead of integers
-                                    if let Some(obj) = json_args.as_object_mut() {
-                                        // Check start_line
-                                        let start_fix = obj.get("start_line")
-                                            .and_then(|v| v.as_str())
-                                            .and_then(|s| s.parse::<i64>().ok());
-
-                                        if let Some(num) = start_fix {
-                                            obj.insert("start_line".to_string(), serde_json::json!(num));
-                                            needs_fix = true;
-                                            eprintln!("{} Fixed start_line: string → integer {}", "🔧".yellow(), num);
-                                        }
-
-                                        // Check end_line
-                                        let end_fix = obj.get("end_line")
-                                            .and_then(|v| v.as_str())
-                                            .and_then(|s| s.parse::<i64>().ok());
-
-                                        if let Some(num) = end_fix {
-                                            obj.insert("end_line".to_string(), serde_json::json!(num));
-                                            needs_fix = true;
-                                            eprintln!("{} Fixed end_line: string → integer {}", "🔧".yellow(), num);
-                                        }
-                                    }
-                                }
-                                "search_files" => {
-                                    // Check if max_results is a string
-                                    if let Some(obj) = json_args.as_object_mut() {
-                                        let max_fix = obj.get("max_results")
-                                            .and_then(|v| v.as_str())
-                                            .and_then(|s| s.parse::<i64>().ok());
-
-                                        if let Some(num) = max_fix {
-                                            obj.insert("max_results".to_string(), serde_json::json!(num));
-                                            needs_fix = true;
-                                            eprintln!("{} Fixed max_results: string → integer {}", "🔧".yellow(), num);
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-
-                            if needs_fix {
-                                tool_call.function.arguments = serde_json::to_string(&json_args)?;
-                                fixed_any = true;
-                            }
-                        }
-                        Err(e) => {
-                            // JSON parsing failed - try to fix common issues
-                            let mut fixed_args = original_args.clone();
-
-                            // Common issue: trailing quote after number (e.g., "end_line": 60")
-                            // Pattern: number followed by quote and closing brace
-                            let re = regex::Regex::new(r#":\s*(\d+)"\s*([,}])"#)?;
-                            if re.is_match(&fixed_args) {
-                                fixed_args = re.replace_all(&fixed_args, ": $1$2").to_string();
-                                eprintln!("{} Fixed malformed JSON: removed trailing quotes after numbers", "🔧".yellow());
-
-                                // Verify the fix worked
-                                if serde_json::from_str::<serde_json::Value>(&fixed_args).is_ok() {
-                                    tool_call.function.arguments = fixed_args;
-                                    fixed_any = true;
-                                } else {
-                                    eprintln!("{} Failed to fix malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e);
-                                }
-                            } else {
-                                eprintln!("{} Malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(fixed_any)
+        validate_and_fix_tool_calls_in_place(self)
     }
 
     /// Handle streaming API response, displaying chunks as they arrive
