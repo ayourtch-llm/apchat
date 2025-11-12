@@ -36,7 +36,7 @@ mod tools_execution;
 mod cli;
 mod config;
 
-use logging::ConversationLogger;
+use logging::{ConversationLogger, log_request, log_request_to_file, log_response, log_stream_chunk};
 use core::{ToolRegistry, ToolParameters};
 use policy::{PolicyManager, ActionType, Decision};
 use core::tool_context::ToolContext;
@@ -592,7 +592,7 @@ impl KimiChat {
         let api_url = self.get_api_url(&summary_model);
 
         // Log request to file for persistent debugging
-        let _ = self.log_request_to_file(&api_url, &request, &summary_model);
+        let _ = log_request_to_file(&api_url, &request, &summary_model, &self.api_key);
 
         let api_key = self.get_api_key(&summary_model);
         let response = self.client
@@ -705,7 +705,7 @@ impl KimiChat {
                     let decision_api_url = self.get_api_url(&self.current_model);
 
                     // Log request to file for persistent debugging
-                    let _ = self.log_request_to_file(&decision_api_url, &decision_request, &self.current_model);
+                    let _ = log_request_to_file(&decision_api_url, &decision_request, &self.current_model, &self.api_key);
 
                     let api_key = self.get_api_key(&self.current_model);
                     let decision_response = self.client
@@ -804,7 +804,7 @@ impl KimiChat {
         let repair_api_url = self.get_api_url(&ModelType::BluModel);
 
         // Log request to file for persistent debugging
-        let _ = self.log_request_to_file(&repair_api_url, &repair_request, &ModelType::BluModel);
+        let _ = log_request_to_file(&repair_api_url, &repair_request, &ModelType::BluModel, &self.api_key);
 
         let api_key = self.get_api_key(&ModelType::BluModel);
         let response = self.client
@@ -938,174 +938,6 @@ impl KimiChat {
         Ok(fixed_any)
     }
 
-    /// Log HTTP request details for debugging
-    fn log_request(&self, url: &str, request: &ChatRequest) {
-        if !self.verbose {
-            return;
-        }
-
-        println!("\n{}", "═".repeat(80).bright_cyan());
-        println!("{}", "🔍 HTTP REQUEST DEBUG".bright_cyan().bold());
-        println!("{}", "═".repeat(80).bright_cyan());
-
-        // Parse URL to show host and port
-        if let Ok(parsed_url) = reqwest::Url::parse(url) {
-            println!("{}: {}", "URL".bright_yellow(), url);
-            println!("{}: {}", "Host".bright_yellow(), parsed_url.host_str().unwrap_or("unknown"));
-            println!("{}: {}", "Port".bright_yellow(), parsed_url.port().map(|p| p.to_string()).unwrap_or_else(||
-                if parsed_url.scheme() == "https" { "443 (default)".to_string() } else { "80 (default)".to_string() }
-            ));
-            println!("{}: {}", "Scheme".bright_yellow(), parsed_url.scheme());
-        } else {
-            println!("{}: {}", "URL".bright_yellow(), url);
-        }
-
-        println!("\n{}", "Headers:".bright_yellow());
-        println!("  Content-Type: application/json");
-        println!("  Authorization: Bearer {}***", &self.api_key.chars().take(10).collect::<String>());
-
-        println!("\n{}", "Request Body:".bright_yellow());
-        match serde_json::to_string_pretty(&request) {
-            Ok(json) => {
-                // Truncate very long requests for readability
-                if json.len() > 5000 {
-                    println!("{}", &json[..5000]);
-                    println!("\n{}", format!("... (truncated, total {} bytes)", json.len()).bright_black());
-                } else {
-                    println!("{}", json);
-                }
-            }
-            Err(e) => println!("{}", format!("Error serializing request: {}", e).red()),
-        }
-
-        println!("{}", "═".repeat(80).bright_cyan());
-        println!();
-    }
-
-    /// Log HTTP request to file for persistent debugging
-    fn log_request_to_file(&self, url: &str, request: &ChatRequest, model: &ModelType) -> Result<()> {
-        // Create logs directory if it doesn't exist
-        fs::create_dir_all("logs")?;
-
-        // Generate timestamp for filename
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Create filename with timestamp and model name
-        let model_name = model.as_str().replace('/', "-");
-        let filename = format!("logs/req-{}-{}.txt", timestamp, model_name);
-
-        // Build the log content
-        let mut log_content = String::new();
-        log_content.push_str(&format!("HTTP REQUEST LOG\n"));
-        log_content.push_str(&format!("================\n\n"));
-        log_content.push_str(&format!("Timestamp: {}\n", timestamp));
-        log_content.push_str(&format!("Model: {}\n\n", model.as_str()));
-
-        // Parse URL to show host and port
-        if let Ok(parsed_url) = reqwest::Url::parse(url) {
-            log_content.push_str(&format!("URL: {}\n", url));
-            log_content.push_str(&format!("Host: {}\n", parsed_url.host_str().unwrap_or("unknown")));
-            log_content.push_str(&format!("Port: {}\n",
-                parsed_url.port().map(|p| p.to_string()).unwrap_or_else(||
-                    if parsed_url.scheme() == "https" { "443 (default)".to_string() } else { "80 (default)".to_string() }
-                )
-            ));
-            log_content.push_str(&format!("Scheme: {}\n\n", parsed_url.scheme()));
-        } else {
-            log_content.push_str(&format!("URL: {}\n\n", url));
-        }
-
-        log_content.push_str("Headers:\n");
-        log_content.push_str("  Content-Type: application/json\n");
-        log_content.push_str(&format!("  Authorization: Bearer {}***\n\n", &self.api_key.chars().take(10).collect::<String>()));
-
-        log_content.push_str("Request Body:\n");
-        match serde_json::to_string_pretty(&request) {
-            Ok(json) => {
-                log_content.push_str(&json);
-                log_content.push_str("\n");
-            }
-            Err(e) => {
-                log_content.push_str(&format!("Error serializing request: {}\n", e));
-            }
-        }
-
-        // Write to file
-        fs::write(&filename, log_content)
-            .with_context(|| format!("Failed to write request log to {}", filename))?;
-
-        Ok(())
-    }
-
-    /// Log HTTP response details for debugging
-    fn log_response(&self, status: &reqwest::StatusCode, headers: &reqwest::header::HeaderMap, body: &str) {
-        if !self.verbose {
-            return;
-        }
-
-        println!("\n{}", "═".repeat(80).bright_green());
-        println!("{}", "📥 HTTP RESPONSE DEBUG".bright_green().bold());
-        println!("{}", "═".repeat(80).bright_green());
-
-        println!("{}: {} {}",
-            "Status".bright_yellow(),
-            status.as_u16(),
-            status.canonical_reason().unwrap_or("Unknown")
-        );
-
-        println!("\n{}", "Headers:".bright_yellow());
-        for (name, value) in headers.iter() {
-            if let Ok(val_str) = value.to_str() {
-                println!("  {}: {}", name.as_str().bright_white(), val_str);
-            }
-        }
-
-        println!("\n{}", "Response Body:".bright_yellow());
-        // Try to pretty-print JSON, fall back to raw text
-        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(body) {
-            match serde_json::to_string_pretty(&json_val) {
-                Ok(pretty) => {
-                    if pretty.len() > 5000 {
-                        println!("{}", &pretty[..5000]);
-                        println!("\n{}", format!("... (truncated, total {} bytes)", pretty.len()).bright_black());
-                    } else {
-                        println!("{}", pretty);
-                    }
-                }
-                Err(_) => println!("{}", body),
-            }
-        } else {
-            // Not JSON, show raw
-            if body.len() > 5000 {
-                println!("{}", &body[..5000]);
-                println!("\n{}", format!("... (truncated, total {} bytes)", body.len()).bright_black());
-            } else {
-                println!("{}", body);
-            }
-        }
-
-        println!("{}", "═".repeat(80).bright_green());
-        println!();
-    }
-
-    /// Log streaming chunk for debugging
-    fn log_stream_chunk(&self, chunk_num: usize, data: &str) {
-        if !self.verbose {
-            return;
-        }
-
-        println!("{}", format!("📦 Stream Chunk #{}: {}", chunk_num,
-            if data.len() > 200 {
-                format!("{}... ({} bytes)", &data[..200], data.len())
-            } else {
-                data.to_string()
-            }
-        ).bright_black());
-    }
-
     /// Handle streaming API response, displaying chunks as they arrive
     async fn call_api_streaming(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
         use std::io::{self, Write};
@@ -1125,10 +957,10 @@ impl KimiChat {
         let api_url = self.get_api_url(&current_model);
 
         // Log request details in verbose mode
-        self.log_request(&api_url, &request);
+        log_request(&api_url, &request, &self.api_key, self.verbose);
 
         // Log request to file for persistent debugging
-        let _ = self.log_request_to_file(&api_url, &request, &current_model);
+        let _ = log_request_to_file(&api_url, &request, &current_model, &self.api_key);
 
         let api_key = self.get_api_key(&current_model);
         let response = self
@@ -1147,7 +979,7 @@ impl KimiChat {
             let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
 
             // Log error response
-            self.log_response(&status, &headers, &error_body);
+            log_response(&status, &headers, &error_body, self.verbose);
 
             return Err(anyhow::anyhow!("API request failed with status {}: {}", status, error_body));
         }
@@ -1194,7 +1026,7 @@ impl KimiChat {
 
                         // Log stream chunk in verbose mode
                         chunk_counter += 1;
-                        self.log_stream_chunk(chunk_counter, data);
+                        log_stream_chunk(chunk_counter, data, self.verbose);
 
                         // Check for stream end marker
                         if data.trim() == "[DONE]" {
@@ -1386,10 +1218,10 @@ impl KimiChat {
             let api_url = self.get_api_url(&current_model);
 
             // Log request details in verbose mode
-            self.log_request(&api_url, &request);
+            log_request(&api_url, &request, &self.api_key, self.verbose);
 
             // Log request to file for persistent debugging
-            let _ = self.log_request_to_file(&api_url, &request, &current_model);
+            let _ = log_request_to_file(&api_url, &request, &current_model, &self.api_key);
 
             let api_key = self.get_api_key(&current_model);
             let response = self
@@ -1428,7 +1260,7 @@ impl KimiChat {
                 let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
 
                 // Log error response in verbose mode
-                self.log_response(&status, &headers, &error_body);
+                log_response(&status, &headers, &error_body, self.verbose);
 
                 // Check if this is a tool-related error
                 if status == 400 && error_body.contains("tool_use_failed") {
@@ -1543,7 +1375,7 @@ impl KimiChat {
             let response_text = response.text().await?;
 
             // Log successful response in verbose mode
-            self.log_response(&status, &headers, &response_text);
+            log_response(&status, &headers, &response_text, self.verbose);
 
             let chat_response: ChatResponse = serde_json::from_str(&response_text)
                 .with_context(|| format!("Failed to parse API response: {}", response_text))?;
