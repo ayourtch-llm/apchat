@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
-use futures::stream::{self, Stream, StreamExt};
-use futures_util::stream::unfold;
-use std::pin::Pin;
+use futures::Stream;
+use futures::StreamExt;
+use async_stream::stream;
 
 /// Anthropic LLM client implementation using native Anthropic API
 pub struct AnthropicLlmClient {
@@ -185,6 +185,9 @@ impl LlmClient for AnthropicLlmClient {
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
+            .header("Connection", "keep-alive")  // Keep connection alive for streaming
+            .header("Cache-Control", "no-cache")  // Prevent caching of streaming data
+            .header("Accept", "text/event-stream")  // Explicitly accept SSE
             .json(&request)
             .send()
             .await?;
@@ -252,6 +255,9 @@ impl LlmClient for AnthropicLlmClient {
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
+            .header("Connection", "keep-alive")  // Keep connection alive for streaming
+            .header("Cache-Control", "no-cache")  // Prevent caching of streaming data
+            .header("Accept", "text/event-stream")  // Explicitly accept SSE
             .json(&request)
             .send()
             .await?;
@@ -262,114 +268,47 @@ impl LlmClient for AnthropicLlmClient {
         }
 
         let byte_stream = response.bytes_stream();
-        let agent_name = self.agent_name.clone();
 
-        let stream = unfold((byte_stream, String::new(), false, agent_name), |(mut byte_stream, mut buffer, mut done, agent_name)| async move {
-            if done {
-                return None;
-            }
+        let stream = stream! {
+            let mut buffer = String::new();
+            let mut byte_stream = byte_stream;
+            let mut event_buffer = String::new();
 
-            // Read from the stream until we get a complete SSE event
             while let Some(chunk_result) = byte_stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
-                        buffer.push_str(&String::from_utf8_lossy(&chunk));
+                        let chunk_str = String::from_utf8_lossy(&chunk);
+                        
+                        // Process character by character for minimal latency
+                        for ch in chunk_str.chars() {
+                            buffer.push(ch);
+                            event_buffer.push(ch);
 
-                        // Process all complete SSE events in the buffer
-                        while let Some(event_end) = buffer.find("\n\n") {
-                            let event = buffer[..event_end].to_string();
-                            buffer = buffer[event_end + 2..].to_string();
-
-                            // Parse SSE event
-                            if let Some(data_start) = event.find("data: ") {
-                                let data = &event[data_start + 6..];
-
-                                if data.trim() == "[DONE]" {
-                                    // Stream finished
-                                    done = true;
-                                    return Some((Ok(StreamingChunk {
-                                        content: String::new(),
-                                        delta: String::new(),
-                                        finish_reason: Some("stop".to_string()),
-                                    }), (byte_stream, buffer, done, agent_name)));
-                                }
-
-                                // Parse JSON data
-                                if let Ok(json) = serde_json::from_str::<Value>(data) {
-                                    if let Some(content_type) = json["type"].as_str() {
-                                        match content_type {
-                                            "content_block_start" => {
-                                                if let Some(content_block) = json["content_block"].as_object() {
-                                                    if let Some(text) = content_block["text"].as_str() {
-                                                        return Some((Ok(StreamingChunk {
-                                                            content: text.to_string(),
-                                                            delta: text.to_string(),
-                                                            finish_reason: None,
-                                                        }), (byte_stream, buffer, done, agent_name)));
-                                                    }
-                                                }
-                                            }
-                                            "content_block_delta" => {
-                                                if let Some(delta) = json["delta"].as_object() {
-                                                    if let Some(text) = delta["text"].as_str() {
-                                                        return Some((Ok(StreamingChunk {
-                                                            content: String::new(), // No accumulated content in streaming mode
-                                                            delta: text.to_string(),
-                                                            finish_reason: None,
-                                                        }), (byte_stream, buffer, done, agent_name)));
-                                                    }
-                                                }
-                                            }
-                                            "content_block_stop" => {
-                                                // Content block finished
-                                                return Some((Ok(StreamingChunk {
-                                                    content: String::new(),
-                                                    delta: String::new(),
-                                                    finish_reason: None, // Don't finish yet, wait for message_stop
-                                                }), (byte_stream, buffer, done, agent_name)));
-                                            }
-                                            "message_stop" => {
-                                                // Message completely finished
-                                                done = true;
-                                                return Some((Ok(StreamingChunk {
-                                                    content: String::new(),
-                                                    delta: String::new(),
-                                                    finish_reason: Some("stop".to_string()),
-                                                }), (byte_stream, buffer, done, agent_name)));
-                                            }
-                                            "error" => {
-                                                if let Some(error) = json["error"].as_object() {
-                                                    let error_msg = error["message"].as_str().unwrap_or("Unknown error");
-                                                    return Some((Err(anyhow::anyhow!("Anthropic streaming error: {}", error_msg)), (byte_stream, buffer, done, agent_name)));
-                                                }
-                                            }
-                                            _ => {
-                                                // Other event types (ping, etc.) - ignore
-                                            }
-                                        }
-                                    }
+                            // When we hit a newline, process the complete SSE line
+                            if ch == '\n' {
+                                let line = std::mem::take(&mut event_buffer);
+                                
+                                // Parse SSE line immediately and yield if we get content
+                                if let Some(streaming_chunk) = Self::parse_sse_line(&line) {
+                                    yield Ok(streaming_chunk);
                                 }
                             }
                         }
                     }
                     Err(e) => {
-                        return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (byte_stream, buffer, done, agent_name)));
+                        yield Err(anyhow::anyhow!("Stream error: {}", e));
+                        break;
                     }
                 }
             }
 
-            // Stream ended without explicit [DONE]
-            if !done {
-                done = true;
-                return Some((Ok(StreamingChunk {
-                    content: String::new(),
-                    delta: String::new(),
-                    finish_reason: Some("stop".to_string()),
-                }), (byte_stream, buffer, done, agent_name)));
+            // Process any remaining data in the buffer
+            if !event_buffer.is_empty() {
+                if let Some(streaming_chunk) = Self::parse_sse_line(&event_buffer) {
+                    yield Ok(streaming_chunk);
+                }
             }
-
-            None
-        });
+        };
 
         Ok(Box::new(Box::pin(stream)))
     }
@@ -392,6 +331,9 @@ impl LlmClient for AnthropicLlmClient {
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
+            .header("Connection", "keep-alive")  // Keep connection alive for streaming
+            .header("Cache-Control", "no-cache")  // Prevent caching of streaming data
+            .header("Accept", "text/event-stream")  // Explicitly accept SSE
             .json(&request)
             .send()
             .await?;
@@ -422,6 +364,76 @@ impl LlmClient for AnthropicLlmClient {
 }
 
 impl AnthropicLlmClient {
+    /// Parse a single SSE line and return a streaming chunk if it contains text
+    fn parse_sse_line(line: &str) -> Option<StreamingChunk> {
+        // Only process data lines
+        if !line.starts_with("data: ") {
+            return None;
+        }
+
+        let data = &line[6..];
+
+        // Check for stream end
+        if data.trim() == "[DONE]" {
+            return Some(StreamingChunk {
+                content: String::new(),
+                delta: String::new(),
+                finish_reason: Some("stop".to_string()),
+            });
+        }
+
+        // Parse JSON event
+        if let Ok(json) = serde_json::from_str::<Value>(data) {
+            if let Some(content_type) = json["type"].as_str() {
+                match content_type {
+                    "content_block_delta" => {
+                        // This is the main event type for streaming text content
+                        if let Some(delta) = json.get("delta").and_then(|v| v.as_object()) {
+                            if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                                // Return immediately for minimal latency
+                                return Some(StreamingChunk {
+                                    content: String::new(),
+                                    delta: text.to_string(),
+                                    finish_reason: None,
+                                });
+                            }
+                        }
+                    }
+                    "content_block_start" => {
+                        // Handle initial content block (less common for text)
+                        if let Some(content_block) = json.get("content_block").and_then(|v| v.as_object()) {
+                            if let Some(text) = content_block.get("text").and_then(|v| v.as_str()) {
+                                return Some(StreamingChunk {
+                                    content: text.to_string(),
+                                    delta: text.to_string(),
+                                    finish_reason: None,
+                                });
+                            }
+                        }
+                    }
+                    "message_stop" => {
+                        return Some(StreamingChunk {
+                            content: String::new(),
+                            delta: String::new(),
+                            finish_reason: Some("stop".to_string()),
+                        });
+                    }
+                    "error" => {
+                        // Handle errors - these will be propagated as Err results
+                        if let Some(error) = json.get("error").and_then(|v| v.as_object()) {
+                            let error_msg = error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                            // Don't return a chunk for errors - let the stream consumer handle them
+                        }
+                    }
+                    // Other event types (ping, message_start, content_block_stop, etc.) are ignored
+                    _ => {}
+                }
+            }
+        }
+
+        None
+    }
+
     fn log_request_to_file(&self, url: &str, request: &serde_json::Value) -> Result<()> {
         // Create logs directory if it doesn't exist
         fs::create_dir_all("logs")?;

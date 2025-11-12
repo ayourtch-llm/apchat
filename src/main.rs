@@ -2697,15 +2697,19 @@ impl KimiChat {
         // Get the streaming response
         let mut stream = llm_client.chat_streaming(chat_messages.clone(), tools.clone()).await?;
 
-        // Process the stream
+        // Process the stream with minimal buffering
         use futures::StreamExt;
+        use std::io::{self, Write};
+        
+        // Ensure stdout is flushed immediately for each chunk
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(chunk) => {
-                    // Print the delta in real-time (like the old streaming system)
+                    // Print the delta immediately without any buffering
                     if !chunk.delta.is_empty() {
-                        print!("{}", chunk.delta);
-                        std::io::stdout().flush().unwrap();
+                        // Use direct write and flush for minimal latency
+                        io::stdout().write_all(chunk.delta.as_bytes()).unwrap();
+                        io::stdout().flush().unwrap();
                         accumulated_content.push_str(&chunk.delta);
                     }
 
