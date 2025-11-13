@@ -15,13 +15,13 @@ impl Tool for SearchFilesTool {
     }
 
     fn description(&self) -> &str {
-        "Search for text across files using glob patterns"
+        "Search for text across files using glob patterns. Supports recursive search with **."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("query", "string", "Text or pattern to search for", required),
-            param!("pattern", "string", "File pattern to search in (e.g., 'src/*.rs'). Defaults to '*.rs'", optional, "*.rs"),
+            param!("pattern", "string", "File pattern to search in (e.g., 'src/**/*.rs', '**/*.py'). Use ** for recursive search. Defaults to '**/*.rs' (all Rust files)", optional, "**/*.rs"),
             param!("regex", "boolean", "Use regex search instead of plain text", optional, false),
             param!("case_insensitive", "boolean", "Case insensitive search", optional, false),
             param!("max_results", "integer", "Maximum number of results to return", optional, 50),
@@ -35,8 +35,8 @@ impl Tool for SearchFilesTool {
         };
 
         let pattern = params.get_optional::<String>("pattern")
-            .unwrap_or(Some("*.rs".to_string()))
-            .unwrap_or_else(|| "*.rs".to_string());
+            .unwrap_or(Some("**/*.rs".to_string()))
+            .unwrap_or_else(|| "**/*.rs".to_string());
 
         let use_regex = params.get_optional::<bool>("regex")
             .unwrap_or(Some(false))
@@ -49,11 +49,6 @@ impl Tool for SearchFilesTool {
         let max_results = params.get_optional::<i32>("max_results")
             .unwrap_or(Some(50))
             .unwrap_or(50) as usize;
-
-        // Prevent recursive patterns for security
-        if pattern.contains("**") {
-            return ToolResult::error("Recursive '**' patterns are not allowed for security reasons".to_string());
-        }
 
         // Build search pattern
         let search_regex = if use_regex {
@@ -71,11 +66,21 @@ impl Tool for SearchFilesTool {
             Regex::new(&regex_str).unwrap()
         };
 
-        let glob_pattern = context.work_dir.join(&pattern);
+        // Build glob pattern - if pattern is absolute, use as-is; otherwise join with work_dir
+        let glob_pattern = if std::path::Path::new(&pattern).is_absolute() {
+            pattern.clone()
+        } else {
+            context.work_dir.join(&pattern)
+                .to_string_lossy()
+                .to_string()
+        };
+
+        eprintln!("[DEBUG] Searching with pattern: '{}' in work_dir: {:?}", glob_pattern, context.work_dir);
+
         let mut results = Vec::new();
         let mut files_searched = 0;
 
-        match glob::glob(glob_pattern.to_str().unwrap_or(&pattern)) {
+        match glob::glob(&glob_pattern) {
             Ok(paths) => {
                 for path in paths {
                     if results.len() >= max_results {
@@ -121,7 +126,11 @@ impl Tool for SearchFilesTool {
                 }
 
                 let result = if results.is_empty() {
-                    format!("No matches found for '{}' in {} files", query, files_searched)
+                    if files_searched == 0 {
+                        format!("No files matched pattern '{}'. Searched in: {:?}\nTry a different pattern (e.g., 'src/**/*.rs' for recursive search in src/)", pattern, context.work_dir)
+                    } else {
+                        format!("No matches found for '{}' in {} files (pattern: '{}')", query, files_searched, pattern)
+                    }
                 } else {
                     let truncated = if results.len() >= max_results {
                         format!(" (showing first {} results)", max_results)
