@@ -221,7 +221,7 @@ impl KimiChat {
     }
 
     /// Process user request using the agent system
-    async fn process_with_agents(&mut self, user_request: &str) -> Result<String> {
+    async fn process_with_agents(&mut self, user_request: &str, cancellation_token: Option<tokio_util::sync::CancellationToken>) -> Result<String> {
         // Get API URL before mutable borrow
         let api_url = config::get_api_url(&self.client_config, &self.current_model);
         let api_key = config::get_api_key(&self.client_config, &self.api_key, &self.current_model);
@@ -262,6 +262,7 @@ impl KimiChat {
                 llm_client,
                 conversation_history,
                 terminal_manager: Some(self.terminal_manager.clone()),
+                cancellation_token,
             };
 
             // Debug: Log current model

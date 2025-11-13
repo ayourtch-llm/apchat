@@ -46,7 +46,7 @@ pub async fn run_task_mode(
 
     let response = if chat.use_agents && chat.agent_coordinator.is_some() {
         // Use agent system
-        match chat.process_with_agents(&task_text).await {
+        match chat.process_with_agents(&task_text, None).await {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);

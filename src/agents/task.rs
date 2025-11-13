@@ -44,6 +44,7 @@ pub struct TaskContextBuilder {
     llm_client: Option<std::sync::Arc<dyn crate::agents::agent::LlmClient>>,
     conversation_history: Vec<crate::agents::agent::ChatMessage>,
     terminal_manager: Option<std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>>,
+    cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl TaskContextBuilder {
@@ -55,6 +56,7 @@ impl TaskContextBuilder {
             llm_client: None,
             conversation_history: Vec::new(),
             terminal_manager: None,
+            cancellation_token: None,
         }
     }
 
@@ -96,6 +98,7 @@ impl TaskContextBuilder {
             llm_client: self.llm_client.ok_or("llm_client is required")?,
             conversation_history: self.conversation_history,
             terminal_manager: self.terminal_manager,
+            cancellation_token: self.cancellation_token,
         })
     }
 }

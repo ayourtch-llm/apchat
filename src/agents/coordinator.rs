@@ -112,6 +112,14 @@ impl PlanningCoordinator {
         // 4. Execute all tasks
         let mut results = Vec::new();
         while !self.task_queue.read().await.is_empty() {
+            // Check for cancellation
+            if let Some(ref token) = context.cancellation_token {
+                if token.is_cancelled() {
+                    println!("{}", "Task execution cancelled by user".bright_yellow());
+                    return Err(anyhow::anyhow!("Task execution was cancelled by user"));
+                }
+            }
+
             let result = self.execute_next_task(context).await?;
             results.push(result);
 
@@ -401,6 +409,7 @@ impl PlanningCoordinator {
             llm_client: Arc::clone(&context.llm_client),
             conversation_history: context.conversation_history.clone(),
             terminal_manager: context.terminal_manager.clone(),
+            cancellation_token: context.cancellation_token.clone(),
         };
 
         // Execute task

@@ -197,9 +197,30 @@ pub async fn run_repl_mode(
                 }
 
                 let response = if chat.use_agents && chat.agent_coordinator.is_some() {
-                    // Use agent system
-                    match chat.process_with_agents(line).await {
+                    // Create cancellation token for this agent request
+                    let cancel_token = tokio_util::sync::CancellationToken::new();
+                    let cancel_token_clone = cancel_token.clone();
+
+                    // Set up Ctrl-C handler for agent mode
+                    let ctrl_c_task = tokio::spawn(async move {
+                        if let Ok(_) = tokio::signal::ctrl_c().await {
+                            println!("\n{}", "^C - Interrupting agent execution...".bright_yellow());
+                            cancel_token_clone.cancel();
+                        }
+                    });
+
+                    // Use agent system with cancellation support
+                    let result = chat.process_with_agents(line, Some(cancel_token.clone())).await;
+
+                    // Clean up signal handler
+                    ctrl_c_task.abort();
+
+                    match result {
                         Ok(response) => response,
+                        Err(e) if e.to_string().contains("cancelled") || e.to_string().contains("interrupted") => {
+                            println!("{}", "Task interrupted by user".bright_yellow());
+                            continue;
+                        }
                         Err(e) => {
                             eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
                             // Fallback to regular chat
