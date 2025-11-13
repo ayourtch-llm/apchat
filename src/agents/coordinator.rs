@@ -222,6 +222,15 @@ impl PlanningCoordinator {
         // Execute planner
         let plan_result = planner.execute(plan_task, context).await;
 
+        // Debug: Show planner's raw output
+        eprintln!("[DEBUG] Planner output (first 1000 chars):\n{}",
+            if plan_result.content.len() > 1000 {
+                format!("{}... [truncated]", &plan_result.content[..1000])
+            } else {
+                plan_result.content.clone()
+            }
+        );
+
         if !plan_result.success {
             // Fallback to simple task if planner fails
             println!("{} Planner failed, creating single task", "⚠️".yellow());
@@ -276,13 +285,25 @@ impl PlanningCoordinator {
             .ok_or_else(|| anyhow::anyhow!("No subtasks array in plan"))?;
 
         if strategy == "single_task" || subtasks.is_empty() {
-            // Single task
+            // Single task - extract agent from first subtask
+            let agent_name = if let Some(first_subtask) = subtasks.first() {
+                first_subtask["agent"].as_str().unwrap_or("system_operator")
+            } else {
+                "system_operator"
+            };
+
+            eprintln!("[DEBUG] Single task mode - agent assigned: {}", agent_name);
+
+            let mut metadata = HashMap::new();
+            metadata.insert("assigned_agent".to_string(), agent_name.to_string());
+            metadata.insert("depth".to_string(), "0".to_string());
+
             return Ok(vec![Task {
                 id: format!("task_{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)),
                 description: original_request.to_string(),
                 task_type: TaskType::Simple,
                 priority: TaskPriority::Medium,
-                metadata: HashMap::new(),
+                metadata,
             }]);
         }
 
@@ -293,6 +314,8 @@ impl PlanningCoordinator {
                 .ok_or_else(|| anyhow::anyhow!("Subtask missing description"))?;
             let agent_name = subtask["agent"].as_str()
                 .ok_or_else(|| anyhow::anyhow!("Subtask missing agent assignment"))?;
+
+            eprintln!("[DEBUG] Subtask {} assigned to agent: {}", idx, agent_name);
 
             let mut metadata = HashMap::new();
             metadata.insert("assigned_agent".to_string(), agent_name.to_string());
