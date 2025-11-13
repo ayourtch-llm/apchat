@@ -287,12 +287,12 @@ impl Tool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "List files matching a glob pattern (no recursive ** allowed)"
+        "List files matching a glob pattern. Supports recursive search with **."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("pattern", "string", "Glob pattern (e.g., 'src/*.rs'). Defaults to '*'", optional, "*"),
+            param!("pattern", "string", "Glob pattern (e.g., 'src/**/*.rs', '**/*.json'). Use ** for recursive search. Defaults to '*' (files in current directory)", optional, "*"),
         ])
     }
 
@@ -301,13 +301,18 @@ impl Tool for ListFilesTool {
             .unwrap_or(Some("*".to_string()))
             .unwrap_or_else(|| "*".to_string());
 
-        // Prevent recursive patterns for security
-        if pattern.contains("**") {
-            return ToolResult::error("Recursive '**' patterns are not allowed for security reasons".to_string());
-        }
+        // Build glob pattern - if pattern is absolute, use as-is; otherwise join with work_dir
+        let glob_pattern = if std::path::Path::new(&pattern).is_absolute() {
+            pattern.clone()
+        } else {
+            context.work_dir.join(&pattern)
+                .to_string_lossy()
+                .to_string()
+        };
 
-        let glob_pattern = context.work_dir.join(&pattern);
-        match glob::glob(glob_pattern.to_str().unwrap_or(&pattern)) {
+        eprintln!("[DEBUG] list_files with pattern: '{}' in work_dir: {:?}", glob_pattern, context.work_dir);
+
+        match glob::glob(&glob_pattern) {
             Ok(paths) => {
                 let mut files = Vec::new();
                 for path in paths {
@@ -327,9 +332,17 @@ impl Tool for ListFilesTool {
 
                 files.sort();
                 let result = if files.is_empty() {
-                    format!("No files found matching pattern: {}", pattern)
+                    format!(
+                        "No files found matching pattern: '{}'\nSearched in: {:?}\nTip: Use ** for recursive search (e.g., 'src/**/*.rs')",
+                        pattern, context.work_dir
+                    )
                 } else {
-                    format!("Files matching '{}':\n{}", pattern, files.join("\n"))
+                    format!(
+                        "Found {} file(s) matching '{}':\n{}",
+                        files.len(),
+                        pattern,
+                        files.join("\n")
+                    )
                 };
 
                 ToolResult::success(result)
