@@ -72,56 +72,61 @@ impl PtyHandler {
     /// Read available data from PTY with timeout
     /// This handles the case where output doesn't end with newline (like shell prompts)
     /// Returns whatever data is available within the timeout period
+    ///
+    /// Uses polling approach to avoid orphaned threads that steal data
     pub fn read(&mut self) -> Result<String> {
-        use std::sync::mpsc::{channel, RecvTimeoutError};
-        use std::thread;
-        use std::time::Duration;
+        use std::io::ErrorKind;
+        use std::time::{Duration, Instant};
 
-        let (tx, rx) = channel();
+        let mut accumulated = Vec::new();
+        let mut buffer = vec![0u8; 4096];
+        let start = Instant::now();
+        let timeout_duration = Duration::from_millis(150); // Total time to wait for data
+        let poll_interval = Duration::from_millis(10); // Check every 10ms
 
-        // Clone the reader's file descriptor to read in a separate thread
-        // We use try_clone_reader to get another handle to the same PTY
-        let mut reader_clone = match self.pty.try_clone_reader() {
-            Ok(r) => r,
-            Err(e) => return Err(anyhow::anyhow!("Failed to clone reader: {}", e)),
-        };
+        loop {
+            match self.reader.read(&mut buffer) {
+                Ok(0) => {
+                    // EOF - return what we have
+                    break;
+                }
+                Ok(n) => {
+                    // Got data - accumulate it
+                    accumulated.extend_from_slice(&buffer[..n]);
 
-        // Spawn thread to do blocking read
-        thread::spawn(move || {
-            let mut buffer = vec![0u8; 4096];
-            let result = reader_clone.read(&mut buffer);
-            let _ = tx.send((result, buffer));
-        });
+                    // Keep reading while data is available (non-blocking)
+                    // This handles cases where data arrives in multiple chunks
+                    // But don't wait too long - if we got some data, check a few more times
+                    // then return it so the terminal can be responsive
+                    if accumulated.len() > 0 && start.elapsed() > Duration::from_millis(50) {
+                        // We have some data and waited a bit for more - good enough
+                        break;
+                    }
+                }
+                Err(e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+                    // No data available right now
+                    if !accumulated.is_empty() {
+                        // We already got some data earlier, return it
+                        break;
+                    }
 
-        // Wait with timeout - this prevents hanging on partial output
-        match rx.recv_timeout(Duration::from_millis(100)) {
-            Ok((Ok(0), _)) => {
-                // EOF
-                Ok(String::new())
-            }
-            Ok((Ok(n), buffer)) => {
-                // Got data
-                Ok(String::from_utf8_lossy(&buffer[..n]).to_string())
-            }
-            Ok((Err(e), _)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                // No data available (non-blocking mode)
-                Ok(String::new())
-            }
-            Ok((Err(e), _)) => {
-                // Read error
-                Err(anyhow::anyhow!("PTY read error: {}", e))
-            }
-            Err(RecvTimeoutError::Timeout) => {
-                // Timeout - probably waiting for more data that won't come (like after a prompt)
-                // This is normal - just return empty
-                // The thread will eventually complete and be cleaned up
-                Ok(String::new())
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                // Thread died unexpectedly
-                Ok(String::new())
+                    // No data yet - check if we should keep waiting
+                    if start.elapsed() >= timeout_duration {
+                        // Timeout reached, return what we have (might be empty)
+                        break;
+                    }
+
+                    // Wait a bit before next poll
+                    std::thread::sleep(poll_interval);
+                }
+                Err(e) => {
+                    // Real error
+                    return Err(e).context("Failed to read from PTY");
+                }
             }
         }
+
+        Ok(String::from_utf8_lossy(&accumulated).to_string())
     }
 
     /// Resize the PTY

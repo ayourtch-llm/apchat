@@ -126,18 +126,17 @@ impl Tool for PtySendKeysTool {
                         .map_err(|e| format!("Failed to send keys: {}", e))?;
 
                     // Wait for terminal to process and produce output
-                    // This is longer to handle cases where output doesn't end with newline
-                    std::thread::sleep(std::time::Duration::from_millis(120));
+                    std::thread::sleep(std::time::Duration::from_millis(100));
 
                     // Update screen buffer with any available output
-                    // The read() has its own 100ms timeout, so this won't hang
+                    // The read() uses polling with 150ms timeout, accumulating all available data
                     let _ = session.update_screen(); // Ignore errors - buffer may be empty
 
                     Ok(format!("Keys sent to session {}", session_id))
                 });
 
-                // Wrap with timeout to prevent hanging (accounting for sleep + read timeout)
-                match timeout(Duration::from_millis(500), task).await {
+                // Wrap with timeout to prevent hanging (100ms sleep + 150ms read timeout + margin)
+                match timeout(Duration::from_millis(400), task).await {
                     Ok(Ok(Ok(msg))) => ToolResult::success(msg),
                     Ok(Ok(Err(e))) => ToolResult::error(e),
                     Ok(Err(e)) => ToolResult::error(format!("Task error: {}", e)),
