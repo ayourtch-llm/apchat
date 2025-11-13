@@ -12,9 +12,9 @@ Based on `recommend.md`, the primary goal was to improve code maintainability by
 
 ### Code Reduction
 - **Original:** 3,610 lines in `src/main.rs`
-- **Final:** 2,594 lines in `src/main.rs`
-- **Extracted:** 1,016 lines (28% reduction)
-- **New module lines:** 1,436 lines (includes new structure and documentation)
+- **Final:** 928 lines in `src/main.rs`
+- **Extracted:** 2,682 lines (74% reduction)
+- **Total new module lines:** 3,500+ lines (includes new structure, documentation, and extracted functions)
 
 ### Modules Created
 
@@ -33,10 +33,12 @@ Centralized all data structures and type definitions:
 #### 2. **Tools Execution Module** (`src/tools_execution/`)
 Extracted XML parsing and tool execution logic:
 - **`parsing.rs`** (96 lines) - `parse_xml_tool_calls()` function for handling XML-format tool calls from models like glm-4.6
+- **`validation.rs`** (206 lines) - `repair_tool_call_with_model()` and `validate_and_fix_tool_calls_in_place()` functions for AI-powered tool call repair
 - **`mod.rs`** - Module exports
 
 **Benefits:**
-- Isolated parsing logic from main application flow
+- Isolated parsing and validation logic from main application flow
+- AI-powered tool call repair for handling malformed JSON
 - Easier to test and extend parsing capabilities
 - Ready for additional tool execution utilities
 
@@ -70,14 +72,32 @@ Request/response logging functionality:
 - Better debugging and auditing support
 
 #### 6. **Chat Module** (`src/chat/`)
-Conversation state management:
+Conversation state management and orchestration:
 - **`state.rs`** (86 lines) - `ChatState` struct with save/load functionality
+- **`history.rs`** (279 lines) - `summarize_and_trim_history()` function for AI-powered conversation summarization and history management
+- **`session.rs`** (409 lines) - `chat()` function - main conversation loop with tool calling iterations, progress evaluation, and intelligent stopping
 - **`mod.rs`** - Module exports
 
 **Benefits:**
 - Isolated state persistence logic
+- AI-powered conversation summarization prevents context overflow
+- Main chat orchestration extracted for clarity
 - Easier to extend with additional state management features
 - Clean separation of concerns
+
+#### 7. **API Module** (`src/api/`)
+API communication with multiple backend types:
+- **`streaming.rs`** (475 lines) - `call_api_streaming()` for Groq-style SSE streaming and `call_api_streaming_with_llm_client()` for Anthropic/llama.cpp streaming
+- **`client.rs`** (440 lines) - `call_api()` for non-streaming Groq-style requests and `call_api_with_llm_client()` for Anthropic/llama.cpp non-streaming
+- **`mod.rs`** - Module exports
+
+**Benefits:**
+- Centralized all API communication logic (850+ lines extracted)
+- Clear separation between streaming and non-streaming implementations
+- Support for multiple backend types (Groq, Anthropic, llama.cpp)
+- Easier to add new API backends
+- Consistent error handling and retry logic
+- Tool call repair and model switching on errors
 
 ### Import Cleanup
 Removed unused imports to improve code clarity:
@@ -100,36 +120,64 @@ Removed unused imports to improve code clarity:
 
 ## Commits
 
-The refactoring was completed in 7 commits:
+The refactoring was completed in 12 commits across two sessions:
 
-1. **57e1c89** - Extract config module from main.rs
-2. **b08eff9** - Extract CLI module from main.rs
-3. **026b7f4** - Extract XML parsing to tools_execution module
-4. **7051579** - Extract models module from main.rs
+### Session 1 (Initial Extractions - 28% reduction):
+1. **7051579** - Extract models module from main.rs
+2. **026b7f4** - Extract XML parsing to tools_execution module
+3. **b08eff9** - Extract CLI module from main.rs
+4. **57e1c89** - Extract config module from main.rs
 5. **318f108** - Extract request logging to logging module
 6. **fbab65e** - Extract chat state module from main.rs
 7. **dddcb36** - Clean up unused imports in main.rs
 
+### Session 2 (Advanced Extractions - 74% total reduction):
+8. **8c53c8d** - Extract validation functions to tools_execution module
+9. **99c5b02** - Extract history summarization to chat module
+10. **4d0bbd3** - Extract main chat loop to chat/session module
+11. **e4e5484** - Extract API methods to src/api/ module
+12. **f2630fb** - Clean up: Remove backup file
+
 ## Remaining Structure
 
-The `src/main.rs` file now contains:
+The `src/main.rs` file now contains (928 lines):
 - **KimiChat struct** - Main application state
-- **KimiChat implementation** - Core business logic methods:
-  - API communication methods (tightly coupled to instance state)
-  - Tool execution coordination
-  - Chat loop and conversation management
-  - Agent system integration
+- **KimiChat implementation** - Thin wrapper methods that delegate to extracted modules:
+  - `repair_tool_call_with_model()` → `tools_execution::validation`
+  - `validate_and_fix_tool_calls_in_place()` → `tools_execution::validation`
+  - `call_api_streaming()` → `api::streaming`
+  - `call_api()` → `api::client`
+  - `call_api_with_llm_client()` → `api::client`
+  - `call_api_streaming_with_llm_client()` → `api::streaming`
+  - `summarize_and_trim_history()` → `chat::history`
+  - `chat()` → `chat::session`
+- **Helper methods** - Small utility methods for internal use
 - **main() function** - Application entry point and CLI handling
 
-## Why Some Code Remained
+## Extraction Strategy
 
-Several methods were not extracted because:
-1. **Tight Coupling** - Methods like `call_api_streaming`, `summarize_and_trim_history`, and `chat` are tightly coupled to `KimiChat` instance state
-2. **Logical Cohesion** - These methods represent the core behavior of the `KimiChat` struct
-3. **Code Quality** - Extracting them would require:
-   - Passing many parameters (reducing readability)
-   - Creating complex trait-based abstractions (increasing complexity)
-   - Breaking logical cohesion without meaningful benefit
+### Session 2 Breakthrough
+The key innovation in Session 2 was using **explicit parameter passing** instead of `self`:
+
+```rust
+// Extracted function
+pub(crate) async fn function_name(chat: &KimiChat, ...) -> Result<...> {
+    // Uses chat.field, chat.method(), etc.
+}
+
+// Thin wrapper in main.rs
+impl KimiChat {
+    async fn function_name(&self, ...) -> Result<...> {
+        function_name(self, ...).await
+    }
+}
+```
+
+This pattern allowed extraction of previously "unextractable" methods while:
+- Maintaining backward compatibility
+- Avoiding complex trait abstractions
+- Preserving clear ownership semantics
+- Keeping code readable and maintainable
 
 ## Benefits Achieved
 
@@ -168,6 +216,17 @@ While the current refactoring achieves the primary goals, future enhancements co
 
 ## Conclusion
 
-This refactoring successfully reduces the `main.rs` file size by 28% while improving code organization, maintainability, and extensibility. The modular structure provides a solid foundation for future development and makes the codebase easier to understand and modify.
+This refactoring successfully reduces the `main.rs` file size by **74%** (from 3,610 to 928 lines) while dramatically improving code organization, maintainability, and extensibility. The modular structure provides a solid foundation for future development and makes the codebase significantly easier to understand and modify.
 
-All changes were made incrementally with proper testing and git commits, ensuring no functionality was lost during the refactoring process.
+### Key Achievements:
+- ✅ **7 new modules** created with clear responsibilities
+- ✅ **2,682 lines extracted** into focused modules
+- ✅ **74% size reduction** in main.rs
+- ✅ **Zero breaking changes** - all functionality preserved
+- ✅ **12 incremental commits** with proper testing
+- ✅ **Backward compatible** API through thin wrapper methods
+
+### Technical Innovation:
+The second session's breakthrough of using explicit `&KimiChat` parameter passing proved that methods previously considered "too tightly coupled to extract" could indeed be extracted cleanly without sacrificing code quality or introducing unnecessary complexity.
+
+All changes were made incrementally with proper testing and git commits, ensuring no functionality was lost during the refactoring process. The codebase is now significantly more maintainable and ready for future enhancements.
