@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use clap::Parser;
 
@@ -21,6 +22,7 @@ mod config;
 mod chat;
 mod api;
 mod app;
+mod terminal;
 
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
@@ -44,6 +46,7 @@ use models::{
     Tool, FunctionDef,
     ChatResponse, Usage,
 };
+use terminal::TerminalManager;
 
 
 pub(crate) const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
@@ -65,6 +68,8 @@ pub(crate) struct KimiChat {
     pub(crate) client_config: ClientConfig,
     // Policy manager
     pub(crate) policy_manager: PolicyManager,
+    // Terminal manager
+    pub(crate) terminal_manager: Arc<Mutex<TerminalManager>>,
     // Streaming mode
     pub(crate) stream_responses: bool,
     // Verbose debug mode
@@ -144,6 +149,10 @@ impl KimiChat {
             None
         };
 
+        // Initialize terminal manager
+        let log_dir = PathBuf::from("logs/terminals");
+        let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(log_dir)));
+
         // Determine initial model based on overrides or defaults
         // Default to GPT-OSS for cost efficiency - it's significantly cheaper than Kimi
         // while still providing good performance for most tasks
@@ -166,6 +175,7 @@ impl KimiChat {
             use_agents,
             client_config,
             policy_manager,
+            terminal_manager,
             stream_responses,
             verbose,
             debug_level: 0, // Default debug level is 0 (off)

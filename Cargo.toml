@@ -26,3 +26,7 @@ clap_complete = "4.5"
 similar = { version = "2.6", features = ["inline"] }
 async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
+
+# Terminal/PTY support
+portable-pty = "0.8"
+vt100 = "0.15"

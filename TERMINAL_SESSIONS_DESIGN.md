@@ -4,6 +4,17 @@
 
 Add stateful PTY terminal session support to kimichat, allowing LLMs to launch, interact with, and monitor terminal sessions with full VT100/ANSI support.
 
+## Design Decisions (Confirmed)
+
+- **Tool Naming**: All tools prefixed with `pty_*` to avoid confusion
+- **Scrollback**: 1000 lines default, configurable via tool call
+- **Persistence**: Sessions do NOT survive kimichat restarts
+- **Capture**: Write to file (unlimited size), timestamps for start/stop
+- **Concurrent Sessions**: Soft limit of 15 sessions
+- **User Input Timeout**: 5 minutes (configurable constant)
+- **Availability**: Tools available in BOTH single-LLM and multi-agent mode
+- **Special Keys**: Use `^C` (Ctrl+C), `[UP]` (arrow), `[F1]` (function key) notation
+
 ## Use Cases
 
 1. **Interactive Development**: LLM runs build tools, sees errors, iterates
@@ -39,7 +50,13 @@ pub struct TerminalManager {
     sessions: HashMap<SessionId, Arc<Mutex<TerminalSession>>>,
     next_id: u32,
     log_dir: PathBuf,
+    max_sessions: usize,  // Default: 15
 }
+
+// Constants
+const MAX_CONCURRENT_SESSIONS: usize = 15;
+const DEFAULT_SCROLLBACK_LINES: usize = 1000;
+const USER_INPUT_TIMEOUT_SECS: u64 = 300;  // 5 minutes
 
 /// Represents a single terminal session
 pub struct TerminalSession {
@@ -48,8 +65,9 @@ pub struct TerminalSession {
     child: Box<dyn Child>,
     parser: vt100::Parser,
     screen_buffer: ScreenBuffer,
+    scrollback_lines: usize,          // Configurable scrollback
     capture_enabled: bool,
-    capture_buffer: Vec<u8>,
+    capture_file: Option<PathBuf>,    // Capture writes to file, not memory
     logger: SessionLogger,
     metadata: SessionMetadata,
 }
@@ -93,7 +111,9 @@ vt100 = "0.15"            # VT100/ANSI parser
 
 ## LLM Tools
 
-### 1. `launch_terminal`
+All tools use the `pty_` prefix to avoid confusion with other tool categories.
+
+### 1. `pty_launch`
 
 **Purpose**: Create new PTY session
 
@@ -117,7 +137,7 @@ vt100 = "0.15"            # VT100/ANSI parser
 }
 ```
 
-### 2. `send_keys`
+### 2. `pty_send_keys`
 
 **Purpose**: Send keystrokes to terminal
 
@@ -148,7 +168,7 @@ vt100 = "0.15"            # VT100/ANSI parser
 }
 ```
 
-### 3. `get_terminal_screen`
+### 3. `pty_get_screen`
 
 **Purpose**: Get current terminal screen contents
 
@@ -172,7 +192,7 @@ vt100 = "0.15"            # VT100/ANSI parser
 }
 ```
 
-### 4. `get_cursor_position`
+### 4. `pty_get_cursor`
 
 **Purpose**: Get current cursor position
 
@@ -180,7 +200,7 @@ vt100 = "0.15"            # VT100/ANSI parser
 
 **Returns**: `{ "session_id": 1, "position": [10, 5] }`
 
-### 5. `set_terminal_size`
+### 5. `pty_resize`
 
 **Purpose**: Resize terminal
 
@@ -193,22 +213,33 @@ vt100 = "0.15"            # VT100/ANSI parser
 }
 ```
 
-### 6. `start_capture` / `stop_capture`
+### 6. `pty_start_capture` / `pty_stop_capture`
 
-**Purpose**: Control output buffering
+**Purpose**: Control output capture to file
 
 **Parameters**: `{ "session_id": 1 }`
 
-**Returns**: For `stop_capture`, returns captured output:
+**Behavior**:
+- `pty_start_capture`: Starts writing all PTY output to a timestamped capture file
+- `pty_stop_capture`: Stops capturing, closes file, returns file path
+
+**Returns** (for `pty_stop_capture`):
 ```json
 {
   "session_id": 1,
-  "captured": "output since start_capture",
-  "bytes": 1024
+  "capture_file": "/path/to/logs/terminals/session-1-capture-20250113-100000.log",
+  "bytes_captured": 1024,
+  "duration_seconds": 45.3
 }
 ```
 
-### 7. `list_terminal_sessions`
+**Capture File Format** (JSONL with timestamps):
+```json
+{"timestamp": "2025-01-13T10:00:00.123Z", "data": "output line 1\n"}
+{"timestamp": "2025-01-13T10:00:00.456Z", "data": "output line 2\n"}
+```
+
+### 7. `pty_list`
 
 **Purpose**: List all active sessions
 
@@ -230,7 +261,7 @@ vt100 = "0.15"            # VT100/ANSI parser
 }
 ```
 
-### 8. `kill_terminal_session`
+### 8. `pty_kill`
 
 **Purpose**: Terminate session
 
@@ -244,7 +275,21 @@ vt100 = "0.15"            # VT100/ANSI parser
 
 Signals: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`
 
-### 9. `request_user_input`
+### 9. `pty_set_scrollback`
+
+**Purpose**: Configure scrollback buffer size
+
+**Parameters**:
+```json
+{
+  "session_id": 1,
+  "lines": 2000
+}
+```
+
+**Returns**: `{ "session_id": 1, "scrollback_lines": 2000 }`
+
+### 10. `pty_request_user_input`
 
 **Purpose**: Hand off terminal to user
 
@@ -262,6 +307,7 @@ Signals: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`
 2. Show current terminal screen
 3. Give user control (attach stdin/stdout)
 4. Return when user signals completion (Ctrl+D) or timeout
+5. Default timeout: `USER_INPUT_TIMEOUT_SECS` (5 minutes)
 
 ## CLI Integration
 
@@ -424,24 +470,29 @@ pub struct KimiChat {
 ```rust
 // In src/config/mod.rs initialize_tool_registry()
 registry.register_with_categories(
-    LaunchTerminalTool,
+    PtyLaunchTool,
     vec!["terminal".to_string()]
 );
 registry.register_with_categories(
-    SendKeysTool,
+    PtySendKeysTool,
     vec!["terminal".to_string()]
 );
-// ... etc
+registry.register_with_categories(
+    PtyGetScreenTool,
+    vec!["terminal".to_string()]
+);
+// ... etc for all 10 tools
 ```
 
 ### 3. Policy Integration
 
 ```toml
 # policies.toml
-[terminal]
-launch = "confirm"  # Require confirmation to launch
-send_keys = "allow"  # Allow once launched
-kill = "confirm"     # Require confirmation to kill
+[pty]
+launch = "confirm"     # Require confirmation to launch
+send_keys = "allow"    # Allow once launched
+kill = "confirm"       # Require confirmation to kill
+request_user_input = "allow"  # Allow LLM to request user help
 ```
 
 ### 4. Agent Configurations
@@ -467,65 +518,65 @@ kill = "confirm"     # Require confirmation to kill
 // LLM Tool Calls:
 
 // 1. Launch terminal
-launch_terminal({
+pty_launch({
   "command": "bash",
   "working_dir": "/home/user/project"
 })
 // Returns: { "session_id": 1 }
 
 // 2. Run build
-send_keys({
+pty_send_keys({
   "session_id": 1,
   "keys": "cargo build\n",
   "special": true
 })
 
 // 3. Wait a bit, then check output
-get_terminal_screen({
+pty_get_screen({
   "session_id": 1,
   "include_colors": false
 })
 // Returns screen contents with any errors
 
 // 4. If errors, iterate...
-send_keys({
+pty_send_keys({
   "session_id": 1,
   "keys": "^C",  // Ctrl+C to cancel
   "special": true
 })
 
 // 5. Clean up
-kill_terminal_session({ "session_id": 1 })
+pty_kill({ "session_id": 1 })
 ```
 
 ### Example 2: Interactive Debugging
 
 ```rust
 // 1. Launch debugger
-launch_terminal({
+pty_launch({
   "command": "gdb ./myprogram",
   "working_dir": "/home/user/project"
 })
 
 // 2. Set breakpoint
-send_keys({
+pty_send_keys({
   "session_id": 1,
   "keys": "break main\n",
   "special": true
 })
 
 // 3. Run
-send_keys({
+pty_send_keys({
   "session_id": 1,
   "keys": "run\n",
   "special": true
 })
 
 // 4. Check state
-get_terminal_screen({ "session_id": 1 })
+pty_get_screen({ "session_id": 1 })
 
 // 5. LLM can't figure it out, ask user
-request_user_input({
+pty_request_user_input({
   "session_id": 1,
   "message": "I've set a breakpoint at main() and the program is paused. Please inspect the variables and continue when ready.",
   "timeout_seconds": 300
@@ -534,15 +585,13 @@ request_user_input({
 // User interacts, then continues LLM
 ```
 
-## Open Questions
+## Remaining Questions
 
-1. **Scrollback**: How much history to keep? Default 1000 lines?
-2. **Performance**: Benchmark vt100 parser with large outputs
-3. **Windows Support**: portable-pty claims cross-platform, verify
-4. **Binary Output**: How to handle non-text output (images, etc.)?
-5. **Multi-user**: Should sessions be user-scoped or global?
-6. **Persistence**: Should sessions persist across kimichat restarts?
-7. **Copy-on-write**: Should screen snapshots use COW for efficiency?
+1. **Performance**: Benchmark vt100 parser with large outputs
+2. **Windows Support**: portable-pty claims cross-platform, verify
+3. **Binary Output**: How to handle non-text output (images, etc.)?
+4. **Multi-user**: Should sessions be user-scoped or global?
+5. **Copy-on-write**: Should screen snapshots use COW for efficiency?
 
 ## Testing Strategy
 
