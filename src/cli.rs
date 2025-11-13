@@ -81,6 +81,30 @@ pub struct Cli {
     #[arg(long, value_name = "MODEL")]
     pub model: Option<String>,
 
+    /// Backend type for blu_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub blu_backend: Option<String>,
+
+    /// Backend type for grn_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub grn_backend: Option<String>,
+
+    /// Backend type for red_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub red_backend: Option<String>,
+
+    /// API key for blu_model
+    #[arg(long, value_name = "KEY")]
+    pub blu_key: Option<String>,
+
+    /// API key for grn_model
+    #[arg(long, value_name = "KEY")]
+    pub grn_key: Option<String>,
+
+    /// API key for red_model
+    #[arg(long, value_name = "KEY")]
+    pub red_key: Option<String>,
+
     /// Auto-confirm all actions without asking (auto-pilot mode)
     #[arg(long)]
     pub auto_confirm: bool,

@@ -13,16 +13,56 @@ use crate::agents::{
 use crate::models::ModelType;
 
 pub mod helpers;
-pub use helpers::{get_system_prompt, get_api_url, get_api_key};
+pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_client};
 
 // Re-export the Groq API URL constant
 pub const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
+
+/// Backend type for LLM models
+#[derive(Debug, Clone, PartialEq)]
+pub enum BackendType {
+    Groq,
+    Anthropic,
+    Llama,
+    OpenAI,
+}
+
+impl BackendType {
+    /// Parse backend type from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "groq" => Some(Self::Groq),
+            "anthropic" | "claude" => Some(Self::Anthropic),
+            "llama" | "llamacpp" | "llama.cpp" | "llama-cpp" => Some(Self::Llama),
+            "openai" => Some(Self::OpenAI),
+            _ => None,
+        }
+    }
+
+    /// Get string representation
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Groq => "groq",
+            Self::Anthropic => "anthropic",
+            Self::Llama => "llama",
+            Self::OpenAI => "openai",
+        }
+    }
+}
 
 /// Configuration for KimiChat client
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     /// API key for authentication (Groq default)
     pub api_key: String,
+
+    /// Explicit backend type for blu_model
+    pub backend_blu_model: Option<BackendType>,
+    /// Explicit backend type for grn_model
+    pub backend_grn_model: Option<BackendType>,
+    /// Explicit backend type for red_model
+    pub backend_red_model: Option<BackendType>,
+
     /// API URL for 'blu_model' - if Some, uses custom backend; if None, uses Groq
     pub api_url_blu_model: Option<String>,
     /// API URL for 'grn_model' - if Some, uses custom backend; if None, uses Groq
@@ -104,132 +144,34 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         .unwrap_or_else(|| ModelType::RedModel.as_str());
 
     // Register LLM clients based on per-model configuration
+    // Use the centralized helper function to create clients for all three models
 
-    // Configure blu_model client
-    let blu_model_client: Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_blu_model {
-        if api_url.contains("anthropic") {
-            println!("{} Using Anthropic API for 'blu_model' at: {}", "🧠".cyan(), api_url);
-            Arc::new(AnthropicLlmClient::new(
-                client_config.api_key_blu_model.clone().unwrap_or_default(),
-                blu_model,
-                api_url.clone(),
-                "blu_model".to_string()
-            ))
-        } else {
-            println!("{} Using llama.cpp for 'blu_model' at: {}", "🦙".cyan(), api_url);
-            Arc::new(LlamaCppClient::new(
-                api_url.clone(),
-                blu_model
-            ))
-        }
-    } else if env::var("ANTHROPIC_AUTH_TOKEN_BLU").is_ok() ||
-              (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
-               (client_config.model_blu_model_override.as_ref()
-                .map(|m| m.contains("claude") || m.contains("anthropic"))
-                .unwrap_or(false))) {
-        println!("{} Using Anthropic API for 'blu_model'", "🧠".cyan());
-        let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_BLU")
-            .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-            .unwrap_or_default();
-        Arc::new(AnthropicLlmClient::new(
-            anthropic_key,
-            blu_model,
-            "https://api.anthropic.com".to_string(),
-            "blu_model".to_string()
-        ))
-    } else {
-        println!("{} Using Groq API for 'blu_model'", "🚀".cyan());
-        Arc::new(GroqLlmClient::new(
-            client_config.api_key.clone(),
-            blu_model,
-            GROQ_API_URL.to_string(),
-            "blu_model".to_string()
-        ))
-    };
+    let blu_model_client = create_model_client(
+        "blu",
+        client_config.backend_blu_model.clone(),
+        client_config.api_url_blu_model.clone(),
+        client_config.api_key_blu_model.clone(),
+        Some(blu_model.clone()),
+        &client_config.api_key,
+    );
 
-    // Configure grn_model client
-    let grn_model_client: Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_grn_model {
-        if api_url.contains("anthropic") {
-            println!("{} Using Anthropic API for 'grn_model' at: {}", "🧠".cyan(), api_url);
-            Arc::new(AnthropicLlmClient::new(
-                client_config.api_key_grn_model.clone().unwrap_or_default(),
-                grn_model,
-                api_url.clone(),
-                "grn_model".to_string()
-            ))
-        } else {
-            println!("{} Using llama.cpp for 'grn_model' at: {}", "🦙".cyan(), api_url);
-            Arc::new(LlamaCppClient::new(
-                api_url.clone(),
-                grn_model
-            ))
-        }
-    } else if env::var("ANTHROPIC_AUTH_TOKEN_GRN").is_ok() ||
-              (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
-               (client_config.model_grn_model_override.as_ref()
-                .map(|m| m.contains("claude") || m.contains("anthropic"))
-                .unwrap_or(false))) {
-        println!("{} Using Anthropic API for 'grn_model'", "🧠".cyan());
-        let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_GRN")
-            .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-            .unwrap_or_default();
-        Arc::new(AnthropicLlmClient::new(
-            anthropic_key,
-            grn_model,
-            "https://api.anthropic.com".to_string(),
-            "grn_model".to_string()
-        ))
-    } else {
-        println!("{} Using Groq API for 'grn_model'", "🚀".cyan());
-        Arc::new(GroqLlmClient::new(
-            client_config.api_key.clone(),
-            grn_model,
-            GROQ_API_URL.to_string(),
-            "grn_model".to_string()
-        ))
-    };
+    let grn_model_client = create_model_client(
+        "grn",
+        client_config.backend_grn_model.clone(),
+        client_config.api_url_grn_model.clone(),
+        client_config.api_key_grn_model.clone(),
+        Some(grn_model.clone()),
+        &client_config.api_key,
+    );
 
-    // Configure red_model client
-    let red_model_client: Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_red_model {
-        if api_url.contains("anthropic") {
-            println!("{} Using Anthropic API for 'red_model' at: {}", "🧠".cyan(), api_url);
-            Arc::new(AnthropicLlmClient::new(
-                client_config.api_key_red_model.clone().unwrap_or_default(),
-                red_model,
-                api_url.clone(),
-                "red_model".to_string()
-            ))
-        } else {
-            println!("{} Using llama.cpp for 'red_model' at: {}", "🦙".cyan(), api_url);
-            Arc::new(LlamaCppClient::new(
-                api_url.clone(),
-                red_model
-            ))
-        }
-    } else if env::var("ANTHROPIC_AUTH_TOKEN_RED").is_ok() ||
-              (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
-               (client_config.model_red_model_override.as_ref()
-                .map(|m| m.contains("claude") || m.contains("anthropic"))
-                .unwrap_or(false))) {
-        println!("{} Using Anthropic API for 'red_model'", "🧠".cyan());
-        let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_RED")
-            .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-            .unwrap_or_default();
-        Arc::new(AnthropicLlmClient::new(
-            anthropic_key,
-            red_model,
-            "https://api.anthropic.com".to_string(),
-            "red_model".to_string()
-        ))
-    } else {
-        println!("{} Using Groq API for 'red_model'", "🚀".cyan());
-        Arc::new(GroqLlmClient::new(
-            client_config.api_key.clone(),
-            red_model,
-            GROQ_API_URL.to_string(),
-            "red_model".to_string()
-        ))
-    };
+    let red_model_client = create_model_client(
+        "red",
+        client_config.backend_red_model.clone(),
+        client_config.api_url_red_model.clone(),
+        client_config.api_key_red_model.clone(),
+        Some(red_model.clone()),
+        &client_config.api_key,
+    );
 
     agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);
     agent_factory.register_llm_client("grn_model".to_string(), grn_model_client);

@@ -77,6 +77,9 @@ impl KimiChat {
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
+            backend_blu_model: None,
+            backend_grn_model: None,
+            backend_red_model: None,
             api_url_blu_model: None,
             api_url_grn_model: None,
             api_url_red_model: None,
@@ -94,6 +97,9 @@ impl KimiChat {
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
+            backend_blu_model: None,
+            backend_grn_model: None,
+            backend_red_model: None,
             api_url_blu_model: None,
             api_url_grn_model: None,
             api_url_red_model: None,
