@@ -82,7 +82,28 @@ impl Tool for ReadFileTool {
         // Use the same logic as the original read_file method
         let full_path = context.work_dir.join(&file_path);
         if !full_path.exists() {
+            // Check for directory with similar name
+            if let Some(stem) = full_path.file_stem().and_then(|s| s.to_str()) {
+                let parent = full_path.parent().unwrap_or(&context.work_dir);
+                let possible_dir = parent.join(stem);
+
+                if possible_dir.exists() && possible_dir.is_dir() {
+                    return ToolResult::error(format!(
+                        "File not found: {} (Note: Found a directory named '{}' at this location. Did you mean to list files in that directory instead?)",
+                        file_path, stem
+                    ));
+                }
+            }
+
             return ToolResult::error(format!("File not found: {}", file_path));
+        }
+
+        // Check if it's a directory
+        if full_path.is_dir() {
+            return ToolResult::error(format!(
+                "Path '{}' is a directory, not a file. Use list_files to see its contents.",
+                file_path
+            ));
         }
 
         match fs::read_to_string(&full_path) {

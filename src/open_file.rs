@@ -32,21 +32,63 @@ pub async fn open_file(
     file_path: impl AsRef<Path>,
     line_range: Option<RangeInclusive<usize>>,
 ) -> Result<String> {
-    // Resolve the absolute path and ensure it stays within the workspace
+    // Resolve the absolute path
     let abs_path = work_dir.join(file_path.as_ref());
+
+    // Check if the exact path exists before trying to canonicalize
+    if !abs_path.exists() {
+        // Provide helpful error message if there's a similar directory
+        let file_name = abs_path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // Check for directory with name matching the file without extension
+        if let Some(stem) = abs_path.file_stem().and_then(|s| s.to_str()) {
+            let parent = abs_path.parent().unwrap_or(work_dir);
+            let possible_dir = parent.join(stem);
+
+            if possible_dir.exists() && possible_dir.is_dir() {
+                return Err(OpenFileError::FileNotFound(format!(
+                    "{} (Note: Found a directory named '{}' at this location. Did you mean to list files in that directory instead?)",
+                    abs_path.display(),
+                    stem
+                )).into());
+            }
+        }
+
+        // Check if parent directory exists
+        if let Some(parent) = abs_path.parent() {
+            if !parent.exists() {
+                return Err(OpenFileError::FileNotFound(format!(
+                    "{} (parent directory '{}' does not exist)",
+                    abs_path.display(),
+                    parent.display()
+                )).into());
+            }
+        }
+
+        return Err(OpenFileError::FileNotFound(abs_path.display().to_string()).into());
+    }
+
+    // Now canonicalize the existing path
     let canonical = abs_path.canonicalize().with_context(|| {
         format!("Failed to canonicalize path: {}", abs_path.display())
     })?;
+
     let work_canonical = work_dir.canonicalize().with_context(|| {
         format!("Failed to canonicalize workspace dir: {}", work_dir.display())
     })?;
+
     if !canonical.starts_with(&work_canonical) {
         anyhow::bail!(OpenFileError::PermissionDenied(canonical.display().to_string()));
     }
 
-    // Existence check
-    if !canonical.exists() {
-        return Err(OpenFileError::FileNotFound(canonical.display().to_string()).into());
+    // Check if it's a directory instead of a file
+    if canonical.is_dir() {
+        return Err(OpenFileError::FileNotFound(format!(
+            "{} is a directory, not a file. Use list_files to see its contents.",
+            canonical.display()
+        )).into());
     }
 
     // Size check
