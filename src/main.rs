@@ -1,12 +1,8 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::time::Duration;
-use tokio::time::sleep;
 
 use clap::Parser;
 
@@ -24,12 +20,12 @@ mod cli;
 mod config;
 mod chat;
 mod api;
+mod app;
 
-use logging::{ConversationLogger, log_request, log_request_to_file, log_response, log_stream_chunk};
+use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
 use core::tool_context::ToolContext;
 use policy::PolicyManager;
-use tools_execution::parse_xml_tool_calls;
 use tools_execution::validation::{repair_tool_call_with_model, validate_and_fix_tool_calls_in_place};
 use cli::{Cli, Commands};
 use config::{ClientConfig, GROQ_API_URL, normalize_api_url, initialize_tool_registry, initialize_agent_system};
@@ -37,16 +33,16 @@ use chat::{save_state, load_state};
 use chat::history::summarize_and_trim_history;
 use chat::session::chat as chat_session;
 use api::{call_api, call_api_streaming, call_api_with_llm_client, call_api_streaming_with_llm_client};
+use app::{setup_from_cli, run_task_mode, run_repl_mode};
 use agents::{
     PlanningCoordinator, GroqLlmClient,
-    ChatMessage, ToolDefinition, ExecutionContext,
+    ChatMessage, ExecutionContext,
 };
 use models::{
     ModelType, Message, ToolCall, FunctionCall,
     SwitchModelArgs,
-    ChatRequest, Tool, FunctionDef,
+    Tool, FunctionDef,
     ChatResponse, Usage,
-    StreamChunk,
 };
 
 
@@ -495,77 +491,10 @@ async fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
-    // Determine API URLs for each model
-    // Priority: specific flags (--api-url-blu-model, --api-url-grn-model) override general flag (--llama-cpp-url)
-    // Also check for Anthropic environment variables
-    let api_url_blu_model = cli.api_url_blu_model
-        .or_else(|| cli.llama_cpp_url.clone())
-        .or_else(|| env::var("ANTHROPIC_BASE_URL_BLU").ok())
-        .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
-
-    let api_url_grn_model = cli.api_url_grn_model
-        .or_else(|| cli.llama_cpp_url.clone())
-        .or_else(|| env::var("ANTHROPIC_BASE_URL_GRN").ok())
-        .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
-
-    // Check for per-model API keys (for Anthropic or other services)
-    let api_key_blu_model = env::var("ANTHROPIC_AUTH_TOKEN_BLU").ok()
-        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
-
-    let api_key_grn_model = env::var("ANTHROPIC_AUTH_TOKEN_GRN").ok()
-        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
-
-    // Auto-detect Anthropic and set appropriate model names if not overridden
-    let is_anthropic_blu = api_url_blu_model.as_ref()
-        .map(|url| url.contains("anthropic"))
-        .unwrap_or(false);
-    let is_anthropic_grn = api_url_grn_model.as_ref()
-        .map(|url| url.contains("anthropic"))
-        .unwrap_or(false);
-
-    let model_blu_override = cli.model_blu_model.clone()
-        .or_else(|| cli.model.clone())
-        .or_else(|| {
-            if is_anthropic_blu {
-                env::var("ANTHROPIC_MODEL_BLU").ok()
-                    .or_else(|| env::var("ANTHROPIC_MODEL").ok())
-                    .or(Some("claude-3-5-sonnet-20241022".to_string()))
-            } else {
-                None
-            }
-        });
-
-    let model_grn_override = cli.model_grn_model.clone()
-        .or_else(|| cli.model.clone())
-        .or_else(|| {
-            if is_anthropic_grn {
-                env::var("ANTHROPIC_MODEL_GRN").ok()
-                    .or_else(|| env::var("ANTHROPIC_MODEL").ok())
-                    .or(Some("claude-3-5-sonnet-20241022".to_string()))
-            } else {
-                None
-            }
-        });
-
-    // API key is only required if at least one model uses Groq (no API URL specified and no per-model key)
-    let needs_groq_key = (api_url_blu_model.is_none() && api_key_blu_model.is_none())
-                      || (api_url_grn_model.is_none() && api_key_grn_model.is_none());
-
-    let api_key = if needs_groq_key {
-        env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model with ANTHROPIC_AUTH_TOKEN to use other backends.")?
-    } else {
-        // Using custom backends with per-model keys, no Groq key needed
-        String::new()
-    };
-
-    // Use current directory as work_dir so the AI can see project files
-    // NB: do NOT use the 'workspace' subdirectory as work_dir
-    let work_dir = env::current_dir()?;
-
     // If a subcommand was provided, execute it and exit
     if let Some(command) = cli.command {
         // Special handling for Switch command which needs KimiChat
+        let work_dir = env::current_dir()?;
         let result = match &command {
             Commands::Switch { model, reason } => {
                 let mut chat = KimiChat::new("".to_string(), work_dir.clone());
@@ -577,352 +506,33 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Create client configuration from CLI arguments
-    // Priority: specific flags override general --model flag, with auto-detection for Anthropic
-    let client_config = ClientConfig {
-        api_key: api_key.clone(),
-        api_url_blu_model: api_url_blu_model.clone(),
-        api_url_grn_model: api_url_grn_model.clone(),
-        api_key_blu_model,
-        api_key_grn_model,
-        model_blu_model_override: model_blu_override.clone(),
-        model_grn_model_override: model_grn_override.clone(),
-    };
-
-    // Inform user about auto-detected Anthropic configuration
-    if is_anthropic_blu {
-        let model_name = model_blu_override.as_ref().unwrap();
-        eprintln!("{} Anthropic detected for blu_model: using model '{}'", "🤖".cyan(), model_name);
-    }
-    if is_anthropic_grn {
-        let model_name = model_grn_override.as_ref().unwrap();
-        eprintln!("{} Anthropic detected for grn_model: using model '{}'", "🤖".cyan(), model_name);
-    }
-
-    // Create policy manager based on CLI arguments
-    let policy_manager = if cli.auto_confirm {
-        eprintln!("{} Auto-confirm mode enabled - all actions will be approved automatically", "🚀".green());
-        PolicyManager::allow_all()
-    } else if cli.policy_file.is_some() || cli.learn_policies {
-        let policy_file = cli.policy_file.unwrap_or_else(|| "policies.toml".to_string());
-        let policy_path = work_dir.join(&policy_file);
-        match PolicyManager::from_file(&policy_path, cli.learn_policies) {
-            Ok(pm) => {
-                eprintln!("{} Loaded policy file: {}", "📋".cyan(), policy_path.display());
-                if cli.learn_policies {
-                    eprintln!("{} Policy learning enabled - user decisions will be saved to policy file", "📚".cyan());
-                }
-                pm
-            }
-            Err(e) => {
-                eprintln!("{} Failed to load policy file: {}", "⚠️".yellow(), e);
-                eprintln!("{} Using default policy (ask for confirmation)", "📋".cyan());
-                PolicyManager::new()
-            }
-        }
-    } else {
-        PolicyManager::new()
-    };
+    // Set up application configuration from CLI
+    let app_config = setup_from_cli(&cli)?;
 
     // Handle task mode if requested
-    if let Some(task_text) = cli.task {
-        println!("{}", "🤖 Kimi Chat - Task Mode".bright_cyan().bold());
-        println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
-
-        if cli.agents {
-            println!("{}", "🚀 Multi-Agent System ENABLED".green().bold());
-        }
-
-        println!("{}", format!("Task: {}", task_text).bright_yellow());
-        println!();
-
-        let mut chat = KimiChat::new_with_config(client_config.clone(), work_dir.clone(), cli.agents, policy_manager.clone(), cli.stream, cli.verbose);
-
-        // Initialize logger for task mode
-        chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
-            Ok(l) => Some(l),
-            Err(e) => {
-                eprintln!("Task logging disabled: {}", e);
-                None
-            }
-        };
-
-        let response = if chat.use_agents && chat.agent_coordinator.is_some() {
-            // Use agent system
-            match chat.process_with_agents(&task_text).await {
-                Ok(response) => response,
-                Err(e) => {
-                    eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
-                    // Fallback to regular chat
-                    match chat.chat(&task_text).await {
-                        Ok(response) => response,
-                        Err(e) => {
-                            eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-        } else {
-            // Use regular chat
-            match chat.chat(&task_text).await {
-                Ok(response) => response,
-                Err(e) => {
-                    eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                    return Ok(());
-                }
-            }
-        };
-
-        if cli.pretty {
-            println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                "response": response,
-                "agents_used": chat.use_agents
-            })).unwrap_or_else(|_| response.to_string()));
-        } else {
-            println!("{}", response);
-        }
-
-        return Ok(());
+    if let Some(task_text) = cli.task.clone() {
+        return run_task_mode(
+            &cli,
+            task_text,
+            app_config.client_config,
+            app_config.work_dir,
+            app_config.policy_manager,
+        )
+        .await;
     }
 
-    // If interactive flag is set (or default), proceed to REPL
+    // If interactive flag is not set and no subcommand, just exit
     if !cli.interactive {
-        // If not interactive and no subcommand, just exit
         println!("No subcommand provided and interactive mode not requested. Exiting.");
         return Ok(());
     }
 
-    println!("{}", "🤖 Kimi Chat - Claude Code-like Experience".bright_cyan().bold());
-    println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
-
-    if cli.agents {
-        println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
-    }
-
-    println!("{}", "Type 'exit' or 'quit' to exit\n".bright_black());
-
-    let mut chat = KimiChat::new_with_config(client_config, work_dir, cli.agents, policy_manager, cli.stream, cli.verbose);
-
-    // Show the actual current model configuration
-    let current_model_display = match chat.current_model {
-        ModelType::BluModel => format!("BluModel/{} (auto-switched from default)", chat.current_model.display_name()),
-        ModelType::GrnModel => format!("GrnModel/{} (default)", chat.current_model.display_name()),
-        ModelType::AnthropicModel => format!("Anthropic/{}", chat.current_model.display_name()),
-        ModelType::Custom(ref name) => format!("Custom/{}", name),
-    };
-
-    // Show what backends are being used
-    let blu_backend = if chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false) ||
-                       env::var("ANTHROPIC_AUTH_TOKEN_BLU").is_ok() {
-        "Anthropic API 🧠"
-    } else if chat.client_config.api_url_blu_model.is_some() {
-        "llama.cpp 🦙"
-    } else {
-        "Groq API 🚀"
-    };
-
-    let grn_backend = if chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false) ||
-                       env::var("ANTHROPIC_AUTH_TOKEN_GRN").is_ok() {
-        "Anthropic API 🧠"
-    } else if chat.client_config.api_url_grn_model.is_some() {
-        "llama.cpp 🦙"
-    } else {
-        "Groq API 🚀"
-    };
-
-    println!("{}", format!("Default model: {} • BluModel uses {}, GrnModel uses {}",
-        current_model_display, blu_backend, grn_backend).bright_black());
-
-    // Debug info (shown at debug level 1+)
-    if chat.should_show_debug(1) {
-        println!("{}", format!("🔧 DEBUG: blu_model URL: {:?}", chat.client_config.api_url_blu_model).bright_black());
-        println!("{}", format!("🔧 DEBUG: grn_model URL: {:?}", chat.client_config.api_url_grn_model).bright_black());
-        println!("{}", format!("🔧 DEBUG: Current model: {:?}", chat.current_model).bright_black());
-    }
-
-    // Initialize logger (async) – logs go into the workspace directory
-    chat.logger = match ConversationLogger::new(&chat.work_dir).await {
-        Ok(l) => Some(l),
-        Err(e) => {
-            eprintln!("Logging disabled: {}", e);
-            None
-        }
-    };
-
-    // If logger was created, log the initial system message that KimiChat::new added
-    if let Some(logger) = &mut chat.logger {
-        // The first message in chat.messages is the system prompt
-        if let Some(sys_msg) = chat.messages.first() {
-            logger
-                .log(
-                    "system",
-                    &sys_msg.content,
-                    None,
-                    false,
-                )
-                .await;
-        }
-    }
-
-    let mut rl = DefaultEditor::new()?;
-
-    // Read kimi.md if it exists to get project context
-    let kimi_context = if let Ok(kimi_content) = chat.read_file("kimi.md") {
-        println!("{} {}", "📖".bright_cyan(), "Reading project context from kimi.md...".bright_black());
-        kimi_content
-    } else {
-        println!("{} {}", "📖".bright_cyan(), "No kimi.md found. Starting fresh.".bright_black());
-        String::new()
-    };
-
-    if !kimi_context.is_empty() {
-        let sys_msg = Message {
-            role: "system".to_string(),
-            content: format!("Project context: {}", kimi_context),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        };
-        // Log this system addition
-        if let Some(logger) = &mut chat.logger {
-            logger
-                .log("system", &sys_msg.content, None, false)
-                .await;
-        }
-        chat.messages.push(sys_msg);
-    }
-
-    loop {
-        let model_indicator = format!("[{}]", chat.current_model.display_name()).bright_magenta();
-        let readline = rl.readline(&format!("{} {} ", model_indicator, "You:".bright_green().bold()));
-
-        match readline {
-            Ok(line) => {
-                let line = line.trim();
-
-                if line.is_empty() {
-                    continue;
-                }
-
-                if line == "exit" || line == "quit" {
-                    println!("{}", "Goodbye!".bright_cyan());
-                    break;
-                }
-
-                // Handle /save and /load commands
-                if line.starts_with("/save ") {
-                    let file_path = line[6..].trim();
-                    match chat.save_state(file_path) {
-                        Ok(msg) => println!("{} {}", "💾".bright_green(), msg),
-                        Err(e) => eprintln!("{} Failed to save: {}", "❌".bright_red(), e),
-                    }
-                    continue;
-                }
-
-                if line.starts_with("/load ") {
-                    let file_path = line[6..].trim();
-                    match chat.load_state(file_path) {
-                        Ok(msg) => println!("{} {}", "📂".bright_green(), msg),
-                        Err(e) => eprintln!("{} Failed to load: {}", "❌".bright_red(), e),
-                    }
-                    continue;
-                }
-
-                // Handle /debug command
-                if line == "/debug" {
-                    println!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level());
-                    println!("{} Usage: /debug <level>", "💡".bright_yellow());
-                    println!("  0 = off");
-                    println!("  1 = basic (bit 0)");
-                    println!("  2 = detailed (bit 1)");
-                    println!("  4 = verbose (bit 2)");
-                    println!("  Example: /debug 3 (enables basic + detailed)");
-                    continue;
-                }
-
-                if line.starts_with("/debug ") {
-                    let level_str = line[7..].trim();
-                    match level_str.parse::<u32>() {
-                        Ok(level) => {
-                            chat.set_debug_level(level);
-                            println!("{} Debug level set to {} (binary: {:b})", "🔧".bright_green(), level, level);
-                        }
-                        Err(_) => {
-                            eprintln!("{} Invalid debug level: '{}'. Use a number like 0, 1, 3, 7, etc.", "❌".bright_red(), level_str);
-                        }
-                    }
-                    continue;
-                }
-
-                rl.add_history_entry(line)?;
-
-                // Log the user message before sending
-                if let Some(logger) = &mut chat.logger {
-                    logger.log("user", line, None, false).await;
-                }
-
-                let response = if chat.use_agents && chat.agent_coordinator.is_some() {
-                    // Use agent system
-                    match chat.process_with_agents(line).await {
-                        Ok(response) => response,
-                        Err(e) => {
-                            eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
-                            // Fallback to regular chat
-                            match chat.chat(line).await {
-                                Ok(response) => response,
-                                Err(e) => {
-                                    eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Use regular chat
-                    match chat.chat(line).await {
-                        Ok(response) => response,
-                        Err(e) => {
-                            eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                            continue;
-                        }
-                    }
-                };
-
-                // Log assistant response
-                if let Some(logger) = &mut chat.logger {
-                    logger.log("assistant", &response, None, false).await;
-                }
-
-                // Display response if not streaming (streaming already displayed it)
-                if !chat.stream_responses {
-                    let model_label = format!("[{}]", chat.current_model.display_name()).bright_magenta();
-                    let assistant_label = "Assistant:".bright_blue().bold();
-                    println!("\n{} {} {}\n", model_label, assistant_label, response);
-                } else {
-                    // Add extra newline after streaming to separate from next prompt
-                    println!();
-                }
-            }
-            Err(ReadlineError::Interrupted) => {
-                println!("{}", "^C".bright_black());
-                continue;
-            }
-            Err(ReadlineError::Eof) => {
-                println!("{}", "Goodbye!".bright_cyan());
-                break;
-            }
-            Err(err) => {
-                eprintln!("{} {}", "Error:".bright_red().bold(), err);
-                break;
-            }
-        }
-    }
-
-    // Graceful shutdown of logger (flush & close)
-    if let Some(logger) = &mut chat.logger {
-        logger.shutdown().await;
-    }
-
-    Ok(())
+    // Run REPL mode
+    run_repl_mode(
+        &cli,
+        app_config.client_config,
+        app_config.work_dir,
+        app_config.policy_manager,
+    )
+    .await
 }
