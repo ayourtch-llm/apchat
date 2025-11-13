@@ -288,12 +288,12 @@ impl Tool for ListFilesTool {
     }
 
     fn description(&self) -> &str {
-        "List files matching a glob pattern. Supports recursive search with **."
+        "List files matching a glob pattern. Automatically excludes build/cache directories (target/, .git/, node_modules/, etc.). Limited to 1000 results. Supports recursive search with **."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("pattern", "string", "Glob pattern (e.g., 'src/**/*.rs', '**/*.json'). Use ** for recursive search. Defaults to '*' (files in current directory)", optional, "*"),
+            param!("pattern", "string", "Glob pattern (e.g., 'src/**/*.rs', '**/*.json'). Use ** for recursive search. Defaults to '*' (files in current directory). Automatically excludes build/cache directories and limits to 1000 results.", optional, "*"),
         ])
     }
 
@@ -306,15 +306,56 @@ impl Tool for ListFilesTool {
 
         eprintln!("[DEBUG] list_files with pattern: '{}' in work_dir: {:?}", glob_pattern, context.work_dir);
 
+        // Directories to exclude (common build/cache directories)
+        const EXCLUDED_DIRS: &[&str] = &[
+            "target",
+            ".git",
+            "node_modules",
+            ".cache",
+            "dist",
+            "build",
+            ".next",
+            ".nuxt",
+            "coverage",
+            "__pycache__",
+            ".pytest_cache",
+            ".venv",
+            "venv",
+        ];
+
+        const MAX_FILES: usize = 1000;
+
         match glob::glob(&glob_pattern) {
             Ok(paths) => {
                 let mut files = Vec::new();
+                let mut total_matched = 0;
+                let mut excluded_count = 0;
+
                 for path in paths {
                     match path {
                         Ok(path) => {
                             if let Some(relative_path) = path.strip_prefix(&context.work_dir).ok() {
-                                if let Some(path_str) = relative_path.to_str() {
-                                    files.push(path_str.to_string());
+                                // Check if path is in an excluded directory
+                                let path_components: Vec<_> = relative_path.components().collect();
+                                let should_exclude = path_components.iter().any(|comp| {
+                                    if let std::path::Component::Normal(name) = comp {
+                                        if let Some(name_str) = name.to_str() {
+                                            return EXCLUDED_DIRS.contains(&name_str);
+                                        }
+                                    }
+                                    false
+                                });
+
+                                if should_exclude {
+                                    excluded_count += 1;
+                                    continue;
+                                }
+
+                                total_matched += 1;
+                                if files.len() < MAX_FILES {
+                                    if let Some(path_str) = relative_path.to_str() {
+                                        files.push(path_str.to_string());
+                                    }
                                 }
                             }
                         }
@@ -325,16 +366,31 @@ impl Tool for ListFilesTool {
                 }
 
                 files.sort();
-                let result = if files.is_empty() {
+                let result = if files.is_empty() && total_matched == 0 {
                     format!(
-                        "No files found matching pattern: '{}'\nSearched in: {:?}\nTip: Use ** for recursive search (e.g., 'src/**/*.rs')",
-                        pattern, context.work_dir
+                        "No files found matching pattern: '{}'\nSearched in: {:?}\nExcluded {} files in build/cache directories\nTip: Use ** for recursive search (e.g., 'src/**/*.rs')",
+                        pattern, context.work_dir, excluded_count
+                    )
+                } else if total_matched > MAX_FILES {
+                    format!(
+                        "⚠️  Found {} matching file(s), but showing only first {} (excluded {} files in build/cache directories):\n{}\n\n\
+                        Tip: Use a more specific pattern to reduce results (e.g., 'src/**/*.rs' instead of '**/*')",
+                        total_matched,
+                        MAX_FILES,
+                        excluded_count,
+                        files.join("\n")
                     )
                 } else {
+                    let exclusion_note = if excluded_count > 0 {
+                        format!(" (excluded {} files in build/cache directories)", excluded_count)
+                    } else {
+                        String::new()
+                    };
                     format!(
-                        "Found {} file(s) matching '{}':\n{}",
+                        "Found {} file(s) matching '{}'{}:\n{}",
                         files.len(),
                         pattern,
+                        exclusion_note,
                         files.join("\n")
                     )
                 };
