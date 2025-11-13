@@ -69,22 +69,58 @@ impl PtyHandler {
         Ok(())
     }
 
-    /// Read available data from PTY
-    /// Note: This may block briefly if waiting for data
-    /// Callers should use this within a timeout context
+    /// Read available data from PTY with timeout
+    /// This handles the case where output doesn't end with newline (like shell prompts)
+    /// Returns whatever data is available within the timeout period
     pub fn read(&mut self) -> Result<String> {
-        let mut buffer = vec![0u8; 4096];
+        use std::sync::mpsc::{channel, RecvTimeoutError};
+        use std::thread;
+        use std::time::Duration;
 
-        match self.reader.read(&mut buffer) {
-            Ok(0) => Ok(String::new()),
-            Ok(n) => {
-                let data = String::from_utf8_lossy(&buffer[..n]).to_string();
-                Ok(data)
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+        let (tx, rx) = channel();
+
+        // Clone the reader's file descriptor to read in a separate thread
+        // We use try_clone_reader to get another handle to the same PTY
+        let mut reader_clone = match self.pty.try_clone_reader() {
+            Ok(r) => r,
+            Err(e) => return Err(anyhow::anyhow!("Failed to clone reader: {}", e)),
+        };
+
+        // Spawn thread to do blocking read
+        thread::spawn(move || {
+            let mut buffer = vec![0u8; 4096];
+            let result = reader_clone.read(&mut buffer);
+            let _ = tx.send((result, buffer));
+        });
+
+        // Wait with timeout - this prevents hanging on partial output
+        match rx.recv_timeout(Duration::from_millis(100)) {
+            Ok((Ok(0), _)) => {
+                // EOF
                 Ok(String::new())
             }
-            Err(e) => Err(e).context("Failed to read from PTY"),
+            Ok((Ok(n), buffer)) => {
+                // Got data
+                Ok(String::from_utf8_lossy(&buffer[..n]).to_string())
+            }
+            Ok((Err(e), _)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                // No data available (non-blocking mode)
+                Ok(String::new())
+            }
+            Ok((Err(e), _)) => {
+                // Read error
+                Err(anyhow::anyhow!("PTY read error: {}", e))
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                // Timeout - probably waiting for more data that won't come (like after a prompt)
+                // This is normal - just return empty
+                // The thread will eventually complete and be cleaned up
+                Ok(String::new())
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                // Thread died unexpectedly
+                Ok(String::new())
+            }
         }
     }
 
