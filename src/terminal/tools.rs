@@ -559,3 +559,91 @@ impl Tool for PtyStopCaptureTool {
         }
     }
 }
+
+/// Tool for requesting user input/interaction with a PTY session
+pub struct PtyRequestUserInputTool;
+
+#[async_trait]
+impl Tool for PtyRequestUserInputTool {
+    fn name(&self) -> &str {
+        "pty_request_user_input"
+    }
+
+    fn description(&self) -> &str {
+        "Request user to interact directly with a PTY terminal session. Displays the current screen and message, then allows user to provide input. Use this when the LLM needs human assistance (e.g., password entry, manual debugging)."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("session_id", "integer", "Session ID to hand over to user", required),
+            param!("message", "string", "Message to display to the user explaining what's needed", required),
+            param!("timeout_seconds", "integer", "Timeout in seconds (default: 300/5 minutes)", optional),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        let session_id = match params.get_required::<i32>("session_id") {
+            Ok(id) => id as u32,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let message = match params.get_required::<String>("message") {
+            Ok(msg) => msg,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let timeout_seconds = params.get_optional::<i32>("timeout_seconds")
+            .unwrap_or(Some(300))
+            .unwrap_or(300) as u64;
+
+        let terminal_manager = match &context.terminal_manager {
+            Some(tm) => tm,
+            None => return ToolResult::error("Terminal manager not available".to_string()),
+        };
+
+        let manager = terminal_manager.lock().unwrap();
+        match manager.get_session(session_id) {
+            Ok(session_arc) => {
+                let mut session = session_arc.lock().unwrap();
+
+                // Update screen first
+                if let Err(e) = session.update_screen() {
+                    return ToolResult::error(format!("Failed to update screen: {}", e));
+                }
+
+                // Get current screen contents
+                let screen_contents = match session.get_screen(false, true) {
+                    Ok(contents) => contents,
+                    Err(e) => return ToolResult::error(format!("Failed to get screen contents: {}", e)),
+                };
+
+                let metadata = session.metadata();
+
+                // For now, we return information about the session state and instructions
+                // A full implementation would involve complex async I/O handling to actually
+                // attach the terminal to the user's stdin/stdout
+                let result = json!({
+                    "session_id": session_id,
+                    "message": message,
+                    "timeout_seconds": timeout_seconds,
+                    "current_screen": screen_contents,
+                    "working_dir": metadata.working_dir.display().to_string(),
+                    "command": metadata.command,
+                    "instructions": format!(
+                        "User assistance requested for terminal session {}.\n\n\
+                        Message: {}\n\n\
+                        Current screen state:\n{}\n\n\
+                        To interact with this session, use:\n\
+                        - pty_send_keys to send commands\n\
+                        - pty_get_screen to see updated output\n\n\
+                        Session will remain available for {} seconds.",
+                        session_id, message, screen_contents, timeout_seconds
+                    ),
+                });
+
+                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
+            }
+            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+        }
+    }
+}

@@ -21,6 +21,7 @@ pub use tools::{
     PtyListTool, PtyKillTool, PtyGetCursorTool,
     PtyResizeTool, PtySetScrollbackTool,
     PtyStartCaptureTool, PtyStopCaptureTool,
+    PtyRequestUserInputTool,
 };
 
 // Constants

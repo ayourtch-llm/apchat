@@ -136,6 +136,7 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(PtyStopCaptureTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtyListTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtyKillTool, vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyRequestUserInputTool, vec!["terminal".to_string()]);
 
     registry
 }
