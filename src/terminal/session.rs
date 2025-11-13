@@ -131,7 +131,8 @@ impl TerminalSession {
                     break;
                 }
 
-                // Try to read from PTY (non-blocking with timeout handled in pty_handler)
+                // Try to read from PTY
+                // This might block, but when PTY is killed it should get EOF or error
                 match pty_reader.read(&mut buffer) {
                     Ok(0) => {
                         // EOF - process exited
@@ -160,6 +161,7 @@ impl TerminalSession {
                     }
                 }
             }
+            // Thread finished - no completion signal needed, just exit
         });
 
         // Store thread handle
@@ -261,15 +263,14 @@ impl TerminalSession {
         // Signal background thread to stop
         self.reader_stop_flag.store(true, Ordering::Relaxed);
 
-        // Kill the PTY process
+        // Kill the PTY process - this will cause the reader thread to get EOF
         self.pty_handler.kill()?;
         self.metadata.status = SessionStatus::Stopped;
 
-        // Wait for background thread to finish (with timeout)
-        if let Some(handle) = self.reader_thread.take() {
-            // Don't block forever - the thread should stop quickly
-            let _ = handle.join();
-        }
+        // Don't wait for background thread - it might be blocked in read()
+        // The thread will exit naturally when it gets EOF from the killed PTY
+        // We just drop the handle, allowing the thread to finish asynchronously
+        let _ = self.reader_thread.take();
 
         Ok(())
     }
@@ -289,11 +290,14 @@ impl TerminalSession {
 
 impl Drop for TerminalSession {
     fn drop(&mut self) {
-        // Ensure background thread is stopped
+        // Signal background thread to stop
         self.reader_stop_flag.store(true, Ordering::Relaxed);
 
-        if let Some(handle) = self.reader_thread.take() {
-            let _ = handle.join();
-        }
+        // Kill the PTY process if not already killed
+        let _ = self.pty_handler.kill();
+
+        // Don't wait for thread to finish - it might be blocked
+        // Just drop the handle and let it finish asynchronously
+        let _ = self.reader_thread.take();
     }
 }
