@@ -20,10 +20,12 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
         crate::chat::history::summarize_and_trim_history(chat).await?;
 
         let mut tool_call_iterations = 0;
-        let mut recent_tool_calls: Vec<String> = Vec::new(); // Track recent tool calls
+        let mut recent_tool_calls: Vec<(String, String)> = Vec::new(); // Track recent tool calls with results
         const MAX_TOOL_ITERATIONS: usize = 100; // Increased limit with intelligent evaluation
-        const LOOP_DETECTION_WINDOW: usize = 6; // Check last 6 tool calls
+        const LOOP_DETECTION_WINDOW: usize = 8; // Check last 8 tool calls
         const PROGRESS_EVAL_INTERVAL: u32 = 50; // Evaluate progress every 50 tool calls
+        const CONSECUTIVE_REPEAT_THRESHOLD: usize = 4; // Warn if same call 4+ times in a row
+        const SCATTERED_REPEAT_THRESHOLD: usize = 6; // Warn if same call 6+ times in window
 
         // Initialize progress evaluator for all operations
         let blu_model_url = crate::config::get_api_url(&chat.client_config, &ModelType::BluModel);
@@ -110,36 +112,71 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
             if let Some(tool_calls) = &response.tool_calls {
                 tool_call_iterations += 1;
 
-                // Check for repeated identical tool calls (actual loop detection)
+                // Enhanced loop detection with lower false positive rate
                 let tool_signature = tool_calls.iter()
                     .map(|tc| format!("{}:{}", tc.function.name, tc.function.arguments))
                     .collect::<Vec<_>>()
                     .join("|");
 
-                recent_tool_calls.push(tool_signature.clone());
+                // We'll store the result signature later after execution
+                // For now, just track the call signature
+                recent_tool_calls.push((tool_signature.clone(), String::new()));
 
                 // Keep only recent tool calls
                 if recent_tool_calls.len() > LOOP_DETECTION_WINDOW {
                     recent_tool_calls.remove(0);
                 }
 
-                // Detect if the same tool call appears too many times in the recent window
-                let repetition_count = recent_tool_calls.iter()
-                    .filter(|&sig| sig == &tool_signature)
+                // Check for consecutive identical calls (stronger signal of being stuck)
+                let consecutive_count = recent_tool_calls.iter()
+                    .rev()
+                    .take_while(|(sig, _)| sig == &tool_signature)
                     .count();
 
-                if repetition_count >= 3 {
+                // Check for scattered repetitions in the window
+                let total_repetition_count = recent_tool_calls.iter()
+                    .filter(|(sig, _)| sig == &tool_signature)
+                    .count();
+
+                // Detect if tool is read-only (less likely to be problematic loop)
+                let is_read_only = tool_calls.iter().all(|tc|
+                    tc.function.name == "open_file" ||
+                    tc.function.name == "read_file" ||
+                    tc.function.name == "list_files" ||
+                    tc.function.name == "search_files" ||
+                    tc.function.name == "grep_search"
+                );
+
+                // More strict threshold for consecutive repeats
+                let is_likely_stuck = if is_read_only {
+                    // Read-only tools can repeat more before we worry
+                    consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD + 2 ||
+                    total_repetition_count >= SCATTERED_REPEAT_THRESHOLD + 2
+                } else {
+                    // Write operations are more concerning
+                    consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD ||
+                    total_repetition_count >= SCATTERED_REPEAT_THRESHOLD
+                };
+
+                if is_likely_stuck {
+                    let pattern_type = if consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD {
+                        format!("{} consecutive identical calls", consecutive_count)
+                    } else {
+                        format!("{} identical calls in last {} operations", total_repetition_count, LOOP_DETECTION_WINDOW)
+                    };
+
                     eprintln!(
-                        "{} Detected repeated tool call pattern (same call {} times in recent history). Likely stuck in a loop.",
+                        "{} Detected repeated tool call pattern ({}). Likely stuck in a loop.",
                         "⚠️".red().bold(),
-                        repetition_count
+                        pattern_type
                     );
                     chat.messages.push(Message {
                         role: "assistant".to_string(),
                         content: format!(
                             "I apologize, but I'm calling the same tool repeatedly without making progress. \
-                            The tool call pattern is repeating. Please try breaking down your request into smaller, \
-                            more specific steps, or provide additional guidance."
+                            Pattern detected: {}. Please try breaking down your request into smaller, \
+                            more specific steps, or provide additional guidance.",
+                            pattern_type
                         ),
                         tool_calls: None,
                         tool_call_id: None,
