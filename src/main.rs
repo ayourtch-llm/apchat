@@ -241,6 +241,11 @@ impl KimiChat {
                 conversation_history,
             };
 
+            // Debug: Log current model
+            if self.debug_level > 0 {
+                eprintln!("[DEBUG] Processing with agents using model: {}", self.current_model.display_name());
+            }
+
             // Process request through coordinator
             let result = coordinator.process_user_request(user_request, &context).await?;
 

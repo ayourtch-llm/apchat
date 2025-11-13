@@ -404,6 +404,13 @@ impl PlanningCoordinator {
 
         // Execute task
         let start_time = std::time::Instant::now();
+        
+        // Debug: Log which agent is being used
+        if *self.visibility_manager.read().await.get_current_phase() != ExecutionPhase::Completed {
+            eprintln!("[DEBUG] Executing task '{}' with agent '{}' (preferred model: '{}')", 
+                      task.description, agent.name(), agent.preferred_model());
+        }
+        
         let result = agent.execute(task.clone(), &task_context).await;
         let execution_time = start_time.elapsed();
 
