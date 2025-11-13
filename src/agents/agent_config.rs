@@ -55,7 +55,8 @@ impl AgentConfig {
             return Err("System prompt cannot be empty".to_string());
         }
 
-        if self.tools.is_empty() {
+        // Allow planner agent to have no tools (it only analyzes and plans)
+        if self.tools.is_empty() && self.name != "planner" {
             return Err("Agent must have at least one tool".to_string());
         }
 
