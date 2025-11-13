@@ -18,7 +18,7 @@ pub struct AppConfig {
 /// Set up application configuration from CLI arguments
 pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     // Determine API URLs for each model
-    // Priority: specific flags (--api-url-blu-model, --api-url-grn-model) override general flag (--llama-cpp-url)
+    // Priority: specific flags (--api-url-blu-model, --api-url-grn-model, --api-url-red-model) override general flag (--llama-cpp-url)
     // Also check for Anthropic environment variables
     let api_url_blu_model = cli.api_url_blu_model
         .clone()
@@ -32,6 +32,12 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         .or_else(|| env::var("ANTHROPIC_BASE_URL_GRN").ok())
         .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
 
+    let api_url_red_model = cli.api_url_red_model
+        .clone()
+        .or_else(|| cli.llama_cpp_url.clone())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL_RED").ok())
+        .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
+
     // Check for per-model API keys (for Anthropic or other services)
     let api_key_blu_model = env::var("ANTHROPIC_AUTH_TOKEN_BLU").ok()
         .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
@@ -39,11 +45,17 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     let api_key_grn_model = env::var("ANTHROPIC_AUTH_TOKEN_GRN").ok()
         .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
 
+    let api_key_red_model = env::var("ANTHROPIC_AUTH_TOKEN_RED").ok()
+        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
+
     // Auto-detect Anthropic and set appropriate model names if not overridden
     let is_anthropic_blu = api_url_blu_model.as_ref()
         .map(|url| url.contains("anthropic"))
         .unwrap_or(false);
     let is_anthropic_grn = api_url_grn_model.as_ref()
+        .map(|url| url.contains("anthropic"))
+        .unwrap_or(false);
+    let is_anthropic_red = api_url_red_model.as_ref()
         .map(|url| url.contains("anthropic"))
         .unwrap_or(false);
 
@@ -71,13 +83,26 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
             }
         });
 
+    let model_red_override = cli.model_red_model.clone()
+        .or_else(|| cli.model.clone())
+        .or_else(|| {
+            if is_anthropic_red {
+                env::var("ANTHROPIC_MODEL_RED").ok()
+                    .or_else(|| env::var("ANTHROPIC_MODEL").ok())
+                    .or(Some("claude-3-5-sonnet-20241022".to_string()))
+            } else {
+                None
+            }
+        });
+
     // API key is only required if at least one model uses Groq (no API URL specified and no per-model key)
     let needs_groq_key = (api_url_blu_model.is_none() && api_key_blu_model.is_none())
-                      || (api_url_grn_model.is_none() && api_key_grn_model.is_none());
+                      || (api_url_grn_model.is_none() && api_key_grn_model.is_none())
+                      || (api_url_red_model.is_none() && api_key_red_model.is_none());
 
     let api_key = if needs_groq_key {
         env::var("GROQ_API_KEY")
-            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model and/or --api-url-grn-model with ANTHROPIC_AUTH_TOKEN to use other backends.")?
+            .context("GROQ_API_KEY environment variable not set. Use --api-url-blu-model, --api-url-grn-model, and/or --api-url-red-model with ANTHROPIC_AUTH_TOKEN to use other backends.")?
     } else {
         // Using custom backends with per-model keys, no Groq key needed
         String::new()
@@ -93,10 +118,13 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         api_key: api_key.clone(),
         api_url_blu_model: api_url_blu_model.clone(),
         api_url_grn_model: api_url_grn_model.clone(),
+        api_url_red_model: api_url_red_model.clone(),
         api_key_blu_model,
         api_key_grn_model,
+        api_key_red_model,
         model_blu_model_override: model_blu_override.clone(),
         model_grn_model_override: model_grn_override.clone(),
+        model_red_model_override: model_red_override.clone(),
     };
 
     // Inform user about auto-detected Anthropic configuration

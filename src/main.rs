@@ -79,10 +79,13 @@ impl KimiChat {
             api_key: api_key.clone(),
             api_url_blu_model: None,
             api_url_grn_model: None,
+            api_url_red_model: None,
             api_key_blu_model: None,
             api_key_grn_model: None,
+            api_key_red_model: None,
             model_blu_model_override: None,
             model_grn_model_override: None,
+            model_red_model_override: None,
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(config, work_dir, false, policy_manager, false, false)
@@ -93,10 +96,13 @@ impl KimiChat {
             api_key: api_key.clone(),
             api_url_blu_model: None,
             api_url_grn_model: None,
+            api_url_red_model: None,
             api_key_blu_model: None,
             api_key_grn_model: None,
+            api_key_red_model: None,
             model_blu_model_override: None,
             model_grn_model_override: None,
+            model_red_model_override: None,
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(config, work_dir, use_agents, policy_manager, false, false)

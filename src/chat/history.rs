@@ -26,6 +26,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
     let summary_model = match chat.current_model {
         ModelType::BluModel => ModelType::GrnModel,
         ModelType::GrnModel => ModelType::BluModel,
+        ModelType::RedModel => ModelType::BluModel, // Use BluModel for summarization when using RedModel
         ModelType::AnthropicModel => ModelType::GrnModel, // Prefer GrnModel for summarization when using Anthropic
         ModelType::Custom(_) => ModelType::BluModel, // Default to BluModel for custom models
     };

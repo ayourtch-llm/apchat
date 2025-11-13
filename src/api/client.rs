@@ -31,7 +31,8 @@ pub(crate) async fn call_api(
     let should_use_anthropic = matches!(current_model, ModelType::AnthropicModel) ||
         is_custom_claude ||
         (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-        (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+        (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+        (chat.client_config.api_url_red_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
     if chat.should_show_debug(1) {
         println!("🔧 DEBUG: current_model = {:?}", current_model);
@@ -258,6 +259,7 @@ pub(crate) async fn call_api_with_llm_client(
     if chat.should_show_debug(2) {
         println!("🔧 DEBUG: client_config.api_url_blu_model: {:?}", chat.client_config.api_url_blu_model);
         println!("🔧 DEBUG: client_config.api_url_grn_model: {:?}", chat.client_config.api_url_grn_model);
+        println!("🔧 DEBUG: client_config.api_url_red_model: {:?}", chat.client_config.api_url_red_model);
     }
 
     // Convert old Message format to new ChatMessage format
@@ -340,6 +342,7 @@ pub(crate) async fn call_api_with_llm_client(
             let api_url = env::var("ANTHROPIC_BASE_URL")
                 .or_else(|_| env::var("ANTHROPIC_BASE_URL_BLU"))
                 .or_else(|_| env::var("ANTHROPIC_BASE_URL_GRN"))
+                .or_else(|_| env::var("ANTHROPIC_BASE_URL_RED"))
                 .unwrap_or_else(|_| "https://api.anthropic.com".to_string());
             println!("{} Using Anthropic API for 'anthropic' at: {}", "🧠".cyan(), api_url);
             if chat.should_show_debug(2) {
@@ -349,6 +352,7 @@ pub(crate) async fn call_api_with_llm_client(
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
+                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
                 .unwrap_or_else(|_| chat.client_config.api_key.clone());
             std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
                 api_key,
@@ -356,6 +360,51 @@ pub(crate) async fn call_api_with_llm_client(
                 api_url,
                 "anthropic".to_string()
             ))
+        } else if matches!(model, ModelType::RedModel) {
+            // Red model logic (same as agent mode)
+            if let Some(ref api_url) = chat.client_config.api_url_red_model {
+                if api_url.contains("anthropic") {
+                    println!("{} Using Anthropic API for 'red_model' at: {}", "🧠".cyan(), api_url);
+                    if chat.should_show_debug(2) {
+                        println!("🔧 DEBUG: RedModel Anthropic URL: '{}', API Key present: {}", api_url, chat.client_config.api_key_red_model.is_some());
+                    }
+                    std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                        chat.client_config.api_key_red_model.clone().unwrap_or_default(),
+                        model.as_str(),
+                        api_url.clone(),
+                        "red_model".to_string()
+                    ))
+                } else {
+                    println!("{} Using llama.cpp for 'red_model' at: {}", "🦙".cyan(), api_url);
+                    std::sync::Arc::new(crate::agents::llama_cpp_client::LlamaCppClient::new(
+                        api_url.clone(),
+                        model.as_str()
+                    ))
+                }
+            } else if env::var("ANTHROPIC_AUTH_TOKEN_RED").is_ok() ||
+                      (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
+                       (chat.client_config.model_red_model_override.as_ref()
+                        .map(|m| m.contains("claude") || m.contains("anthropic"))
+                        .unwrap_or(false))) {
+                println!("{} Using Anthropic API for 'red_model'", "🧠".cyan());
+                let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_RED")
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+                    .unwrap_or_default();
+                std::sync::Arc::new(crate::agents::anthropic_client::AnthropicLlmClient::new(
+                    anthropic_key,
+                    model.as_str(),
+                    "https://api.anthropic.com".to_string(),
+                    "red_model".to_string()
+                ))
+            } else {
+                println!("{} Using Groq API for 'red_model'", "🚀".cyan());
+                std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
+                    chat.client_config.api_key.clone(),
+                    model.as_str(),
+                    crate::GROQ_API_URL.to_string(),
+                    "red_model".to_string()
+                ))
+            }
         } else {
             // Grn model logic (same as agent mode)
             if let Some(ref api_url) = chat.client_config.api_url_grn_model {

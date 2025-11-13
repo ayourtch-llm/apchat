@@ -44,8 +44,8 @@ pub struct Cli {
     #[arg(long)]
     pub pretty: bool,
 
-    /// Use llama.cpp server for both models (e.g., http://localhost:8080)
-    /// This is a convenience flag that sets both --api-url-blu-model and --api-url-grn-model
+    /// Use llama.cpp server for all models (e.g., http://localhost:8080)
+    /// This is a convenience flag that sets --api-url-blu-model, --api-url-grn-model, and --api-url-red-model
     #[arg(long, value_name = "URL")]
     pub llama_cpp_url: Option<String>,
 
@@ -59,6 +59,11 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub api_url_grn_model: Option<String>,
 
+    /// API URL for the 'red_model' model (e.g., http://localhost:8082)
+    /// If set, uses llama.cpp for red_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    pub api_url_red_model: Option<String>,
+
     /// Override the 'blu_model' model with a custom model name
     #[arg(long, value_name = "MODEL")]
     pub model_blu_model: Option<String>,
@@ -67,8 +72,12 @@ pub struct Cli {
     #[arg(long, value_name = "MODEL")]
     pub model_grn_model: Option<String>,
 
-    /// Override both models with the same custom model name
-    /// This is a convenience flag that sets both --model-blu-model and --model-grn-model
+    /// Override the 'red_model' model with a custom model name
+    #[arg(long, value_name = "MODEL")]
+    pub model_red_model: Option<String>,
+
+    /// Override all models with the same custom model name
+    /// This is a convenience flag that sets --model-blu-model, --model-grn-model, and --model-red-model
     #[arg(long, value_name = "MODEL")]
     pub model: Option<String>,
 

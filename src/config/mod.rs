@@ -27,14 +27,20 @@ pub struct ClientConfig {
     pub api_url_blu_model: Option<String>,
     /// API URL for 'grn_model' - if Some, uses custom backend; if None, uses Groq
     pub api_url_grn_model: Option<String>,
+    /// API URL for 'red_model' - if Some, uses custom backend; if None, uses Groq
+    pub api_url_red_model: Option<String>,
     /// API key for 'blu_model' - if Some, uses this instead of default api_key
     pub api_key_blu_model: Option<String>,
     /// API key for 'grn_model' - if Some, uses this instead of default api_key
     pub api_key_grn_model: Option<String>,
+    /// API key for 'red_model' - if Some, uses this instead of default api_key
+    pub api_key_red_model: Option<String>,
     /// Override for 'blu_model' model name
     pub model_blu_model_override: Option<String>,
     /// Override for 'grn_model' model name
     pub model_grn_model_override: Option<String>,
+    /// Override for 'red_model' model name
+    pub model_red_model_override: Option<String>,
 }
 
 /// Normalize API URL by ensuring it has the correct path for OpenAI-compatible endpoints
@@ -94,6 +100,8 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         .unwrap_or_else(|| ModelType::BluModel.as_str());
     let grn_model = client_config.model_grn_model_override.clone()
         .unwrap_or_else(|| ModelType::GrnModel.as_str());
+    let red_model = client_config.model_red_model_override.clone()
+        .unwrap_or_else(|| ModelType::RedModel.as_str());
 
     // Register LLM clients based on per-model configuration
 
@@ -181,8 +189,51 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         ))
     };
 
+    // Configure red_model client
+    let red_model_client: Arc<dyn LlmClient> = if let Some(ref api_url) = client_config.api_url_red_model {
+        if api_url.contains("anthropic") {
+            println!("{} Using Anthropic API for 'red_model' at: {}", "🧠".cyan(), api_url);
+            Arc::new(AnthropicLlmClient::new(
+                client_config.api_key_red_model.clone().unwrap_or_default(),
+                red_model,
+                api_url.clone(),
+                "red_model".to_string()
+            ))
+        } else {
+            println!("{} Using llama.cpp for 'red_model' at: {}", "🦙".cyan(), api_url);
+            Arc::new(LlamaCppClient::new(
+                api_url.clone(),
+                red_model
+            ))
+        }
+    } else if env::var("ANTHROPIC_AUTH_TOKEN_RED").is_ok() ||
+              (env::var("ANTHROPIC_AUTH_TOKEN").is_ok() &&
+               (client_config.model_red_model_override.as_ref()
+                .map(|m| m.contains("claude") || m.contains("anthropic"))
+                .unwrap_or(false))) {
+        println!("{} Using Anthropic API for 'red_model'", "🧠".cyan());
+        let anthropic_key = env::var("ANTHROPIC_AUTH_TOKEN_RED")
+            .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+            .unwrap_or_default();
+        Arc::new(AnthropicLlmClient::new(
+            anthropic_key,
+            red_model,
+            "https://api.anthropic.com".to_string(),
+            "red_model".to_string()
+        ))
+    } else {
+        println!("{} Using Groq API for 'red_model'", "🚀".cyan());
+        Arc::new(GroqLlmClient::new(
+            client_config.api_key.clone(),
+            red_model,
+            GROQ_API_URL.to_string(),
+            "red_model".to_string()
+        ))
+    };
+
     agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);
     agent_factory.register_llm_client("grn_model".to_string(), grn_model_client);
+    agent_factory.register_llm_client("red_model".to_string(), red_model_client);
 
     // Create coordinator
     let agent_factory_arc = Arc::new(agent_factory);

@@ -8,7 +8,8 @@ pub fn get_system_prompt() -> String {
     "You are an AI assistant with access to file operations and model switching capabilities. \
     The system supports multiple models that can be switched during the conversation:\n\
     - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
-    - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\n\
+    - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\
+    - red_model (RedModel): Use for specialized tasks requiring different capabilities\n\n\
     IMPORTANT: You have been provided with a set of tools (functions) that you can use. \
     Only use the tools that are provided to you - do not make up tool names or attempt to use tools that are not available. \
     When making multiple file edits, use plan_edits to create a complete plan, then apply_edit_plan to execute all changes atomically. \
@@ -34,11 +35,19 @@ pub fn get_api_url(client_config: &ClientConfig, model: &ModelType) -> String {
                 .map(|s| s.clone())
                 .unwrap_or_else(|| GROQ_API_URL.to_string())
         }
+        ModelType::RedModel => {
+            client_config
+                .api_url_red_model
+                .as_ref()
+                .map(|s| s.clone())
+                .unwrap_or_else(|| GROQ_API_URL.to_string())
+        }
         ModelType::AnthropicModel => {
             // For Anthropic, default to the official API or look for Anthropic-specific URLs
             env::var("ANTHROPIC_BASE_URL")
                 .or_else(|_| env::var("ANTHROPIC_BASE_URL_BLU"))
                 .or_else(|_| env::var("ANTHROPIC_BASE_URL_GRN"))
+                .or_else(|_| env::var("ANTHROPIC_BASE_URL_RED"))
                 .unwrap_or_else(|_| "https://api.anthropic.com".to_string())
         }
         ModelType::Custom(_) => {
@@ -47,6 +56,7 @@ pub fn get_api_url(client_config: &ClientConfig, model: &ModelType) -> String {
                 .api_url_blu_model
                 .as_ref()
                 .or(client_config.api_url_grn_model.as_ref())
+                .or(client_config.api_url_red_model.as_ref())
                 .map(|s| s.clone())
                 .unwrap_or_else(|| GROQ_API_URL.to_string())
         }
@@ -73,12 +83,20 @@ pub fn get_api_key(client_config: &ClientConfig, api_key: &str, model: &ModelTyp
                 .map(|s| s.clone())
                 .unwrap_or_else(|| api_key.to_string())
         }
+        ModelType::RedModel => {
+            client_config
+                .api_key_red_model
+                .as_ref()
+                .map(|s| s.clone())
+                .unwrap_or_else(|| api_key.to_string())
+        }
         ModelType::AnthropicModel => {
             // For Anthropic, look for Anthropic-specific keys first
             env::var("ANTHROPIC_API_KEY")
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
+                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
                 .unwrap_or_else(|_| api_key.to_string())
         }
         ModelType::Custom(_) => {
@@ -87,6 +105,7 @@ pub fn get_api_key(client_config: &ClientConfig, api_key: &str, model: &ModelTyp
                 .api_key_blu_model
                 .as_ref()
                 .or(client_config.api_key_grn_model.as_ref())
+                .or(client_config.api_key_red_model.as_ref())
                 .map(|s| s.clone())
                 .unwrap_or_else(|| api_key.to_string())
         }
