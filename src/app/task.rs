@@ -51,7 +51,7 @@ pub async fn run_task_mode(
             Err(e) => {
                 eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
                 // Fallback to regular chat
-                match chat.chat(&task_text).await {
+                match crate::chat::session::chat(&mut chat, &task_text).await {
                     Ok(response) => response,
                     Err(e) => {
                         eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
@@ -62,7 +62,7 @@ pub async fn run_task_mode(
         }
     } else {
         // Use regular chat
-        match chat.chat(&task_text).await {
+        match crate::chat::session::chat(&mut chat, &task_text).await {
             Ok(response) => response,
             Err(e) => {
                 eprintln!("{} {}\n", "Error:".bright_red().bold(), e);

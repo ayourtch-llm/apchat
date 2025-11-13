@@ -60,7 +60,7 @@ pub(crate) async fn call_api(
         };
 
         // Get the appropriate API URL based on the current model
-        let api_url = chat.get_api_url(&current_model);
+        let api_url = crate::config::get_api_url(&chat.client_config, &current_model);
 
         // Log request details in verbose mode
         log_request(&api_url, &request, &chat.api_key, chat.verbose);
@@ -68,7 +68,7 @@ pub(crate) async fn call_api(
         // Log request to file for persistent debugging
         let _ = log_request_to_file(&api_url, &request, &current_model, &chat.api_key);
 
-        let api_key = chat.get_api_key(&current_model);
+        let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &current_model);
         let response = chat
             .client
             .post(&api_url)

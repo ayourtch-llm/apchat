@@ -101,12 +101,12 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
     };
 
     // Get the appropriate API URL for the summary model
-    let api_url = chat.get_api_url(&summary_model);
+    let api_url = crate::config::get_api_url(&chat.client_config, &summary_model);
 
     // Log request to file for persistent debugging
     let _ = log_request_to_file(&api_url, &request, &summary_model, &chat.api_key);
 
-    let api_key = chat.get_api_key(&summary_model);
+    let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &summary_model);
     let response = chat.client
         .post(&api_url)
         .header("Authorization", format!("Bearer {}", api_key))
@@ -214,12 +214,12 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
                 };
 
                 // Get the appropriate API URL for the current model
-                let decision_api_url = chat.get_api_url(&chat.current_model);
+                let decision_api_url = crate::config::get_api_url(&chat.client_config, &chat.current_model);
 
                 // Log request to file for persistent debugging
                 let _ = log_request_to_file(&decision_api_url, &decision_request, &chat.current_model, &chat.api_key);
 
-                let api_key = chat.get_api_key(&chat.current_model);
+                let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &chat.current_model);
                 let decision_response = chat.client
                     .post(&decision_api_url)
                     .header("Authorization", format!("Bearer {}", api_key))

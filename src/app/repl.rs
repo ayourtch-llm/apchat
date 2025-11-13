@@ -202,7 +202,7 @@ pub async fn run_repl_mode(
                         Err(e) => {
                             eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
                             // Fallback to regular chat
-                            match chat.chat(line).await {
+                            match crate::chat::session::chat(&mut chat, line).await {
                                 Ok(response) => response,
                                 Err(e) => {
                                     eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
@@ -213,7 +213,7 @@ pub async fn run_repl_mode(
                     }
                 } else {
                     // Use regular chat
-                    match chat.chat(line).await {
+                    match crate::chat::session::chat(&mut chat, line).await {
                         Ok(response) => response,
                         Err(e) => {
                             eprintln!("{} {}\n", "Error:".bright_red().bold(), e);

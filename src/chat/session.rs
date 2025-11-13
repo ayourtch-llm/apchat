@@ -17,7 +17,7 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
 
         // Summarize ONCE before starting the tool-calling loop, not during it
         // This prevents discarding recent tool results mid-conversation
-        chat.summarize_and_trim_history().await?;
+        crate::chat::history::summarize_and_trim_history(chat).await?;
 
         let mut tool_call_iterations = 0;
         let mut recent_tool_calls: Vec<String> = Vec::new(); // Track recent tool calls
@@ -26,8 +26,8 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
         const PROGRESS_EVAL_INTERVAL: u32 = 15; // Evaluate progress every 15 tool calls
 
         // Initialize progress evaluator for all operations
-        let blu_model_url = chat.get_api_url(&ModelType::BluModel);
-        let blu_model_key = chat.get_api_key(&ModelType::BluModel);
+        let blu_model_url = crate::config::get_api_url(&chat.client_config, &ModelType::BluModel);
+        let blu_model_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &ModelType::BluModel);
         let mut progress_evaluator = Some(crate::agents::progress_evaluator::ProgressEvaluator::new(
             std::sync::Arc::new(crate::agents::groq_client::GroqLlmClient::new(
                 blu_model_key,
@@ -48,7 +48,7 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
         loop {
             // Validate and fix tool calls in the conversation history before sending to API
             // This ensures fixes are permanent and consistent across requests (preserving cache)
-            if let Ok(fixed) = chat.validate_and_fix_tool_calls_in_place() {
+            if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
                 if fixed {
                     eprintln!("{} Tool calls were automatically fixed in conversation history", "✅".green());
                 }
@@ -72,13 +72,13 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
                     if chat.should_show_debug(1) {
                         println!("🔧 DEBUG: Using Anthropic streaming with format translation");
                     }
-                    chat.call_api_streaming_with_llm_client(&chat.messages, &chat.current_model).await?
+                    crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
                 } else {
                     // Use old streaming for OpenAI-compatible APIs
-                    chat.call_api_streaming(&chat.messages).await?
+                    crate::api::call_api_streaming(chat, &chat.messages).await?
                 }
             } else {
-                chat.call_api(&chat.messages).await?
+                crate::api::call_api(chat, &chat.messages).await?
             };
             if chat.current_model != current_model {
                 println!("Forced model switch: {:?} -> {:?}", &chat.current_model, &current_model);

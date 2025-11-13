@@ -74,26 +74,6 @@ pub(crate) struct KimiChat {
 }
 
 impl KimiChat {
-    /// Normalize API URL by ensuring it has the correct path for OpenAI-compatible endpoints
-    pub(crate) fn normalize_api_url(url: &str) -> String {
-        normalize_api_url(url)
-    }
-
-
-    /// Generate system prompt based on current model
-    pub(crate) fn get_system_prompt() -> String {
-        config::get_system_prompt()
-    }
-
-    /// Get the API URL to use based on the current model and client configuration
-    pub(crate) fn get_api_url(&self, model: &ModelType) -> String {
-        config::get_api_url(&self.client_config, model)
-    }
-
-    /// Get the appropriate API key for a given model based on configuration
-    pub(crate) fn get_api_key(&self, model: &ModelType) -> String {
-        config::get_api_key(&self.client_config, &self.api_key, model)
-    }
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
@@ -180,7 +160,7 @@ impl KimiChat {
         };
 
         // Add system message to inform the model about capabilities
-        let system_content = Self::get_system_prompt();
+        let system_content = config::get_system_prompt();
 
         chat.messages.push(Message {
             role: "system".to_string(),
@@ -221,8 +201,8 @@ impl KimiChat {
     /// Process user request using the agent system
     async fn process_with_agents(&mut self, user_request: &str) -> Result<String> {
         // Get API URL before mutable borrow
-        let api_url = self.get_api_url(&self.current_model);
-        let api_key = self.get_api_key(&self.current_model);
+        let api_url = config::get_api_url(&self.client_config, &self.current_model);
+        let api_key = config::get_api_key(&self.client_config, &self.api_key, &self.current_model);
 
         if let Some(coordinator) = &mut self.agent_coordinator {
             // Create execution context for agents
@@ -382,36 +362,7 @@ impl KimiChat {
         }
     }
 
-    async fn summarize_and_trim_history(&mut self) -> Result<()> {
-        summarize_and_trim_history(self).await
-    }
 
-    /// Attempt to repair malformed tool calls using a separate API call to a model
-    async fn repair_tool_call_with_model(&self, tool_call: &ToolCall, error_msg: &str) -> Result<ToolCall> {
-        repair_tool_call_with_model(self, tool_call, error_msg).await
-    }
-
-    fn validate_and_fix_tool_calls_in_place(&mut self) -> Result<bool> {
-        validate_and_fix_tool_calls_in_place(self)
-    }
-    async fn call_api_streaming(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
-        call_api_streaming(self, orig_messages).await
-    }
-
-    async fn call_api(&self, orig_messages: &[Message]) -> Result<(Message, Option<Usage>, ModelType)> {
-        call_api(self, orig_messages).await
-    }
-
-    async fn call_api_with_llm_client(&self, messages: &[Message], model: &ModelType) -> Result<(Message, Option<Usage>, ModelType)> {
-        call_api_with_llm_client(self, messages, model).await
-    }
-
-    async fn call_api_streaming_with_llm_client(&self, messages: &[Message], model: &ModelType) -> Result<(Message, Option<Usage>, ModelType)> {
-        call_api_streaming_with_llm_client(self, messages, model).await
-    }
-    async fn chat(&mut self, user_message: &str) -> Result<String> {
-        chat_session(self, user_message).await
-    }
 }
 
 #[tokio::main]

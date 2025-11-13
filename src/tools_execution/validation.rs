@@ -55,12 +55,12 @@ pub(crate) async fn repair_tool_call_with_model(
     };
 
     // Make API call using BluModel's API URL
-    let repair_api_url = chat.get_api_url(&ModelType::BluModel);
+    let repair_api_url = crate::config::get_api_url(&chat.client_config, &ModelType::BluModel);
 
     // Log request to file for persistent debugging
     let _ = log_request_to_file(&repair_api_url, &repair_request, &ModelType::BluModel, &chat.api_key);
 
-    let api_key = chat.get_api_key(&ModelType::BluModel);
+    let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &ModelType::BluModel);
     let response = chat.client
         .post(&repair_api_url)
         .header("Authorization", format!("Bearer {}", api_key))
