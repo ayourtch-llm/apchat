@@ -120,6 +120,11 @@ impl ConfigurableAgent {
                  available_tools.len(),
                  available_tools.iter().map(|t| &t.name).collect::<Vec<_>>());
 
+        eprintln!("[DEBUG] ═══ AGENT '{}' TOOLS SUMMARY ═══", self.config.name);
+        eprintln!("[DEBUG] Config tools: {:?}", self.config.tools);
+        eprintln!("[DEBUG] Available tools: {:?}", available_tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+        eprintln!("[DEBUG] ════════════════════════════════════");
+
         // Prepare conversation context with iteration management instructions
         let enhanced_system_prompt = format!(
             "{}\n\n\
@@ -202,6 +207,11 @@ impl ConfigurableAgent {
                 println!("{} Injected iteration limit warning to model", "⚠️".yellow());
             }
 
+            eprintln!("[DEBUG] Iteration {}: Calling LLM with {} tools: {:?}",
+                     iteration,
+                     available_tools.len(),
+                     available_tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+
             match self.llm_client.chat(current_messages.clone(), available_tools.clone()).await {
                 Ok(response) => {
                     // Check if LLM wants to call tools
@@ -216,10 +226,24 @@ impl ConfigurableAgent {
                             let tool_name = &tool_call.function.name;
                             let tool_args = &tool_call.function.arguments;
 
+                            // Check if LLM is calling a tool that wasn't in available_tools
+                            let was_tool_available = available_tools.iter().any(|t| &t.name == tool_name);
+                            if !was_tool_available {
+                                eprintln!("[DEBUG] ⚠️  WARNING: Agent '{}' LLM tried to call tool '{}' which was NOT in available_tools list!",
+                                         self.config.name, tool_name);
+                                eprintln!("[DEBUG]    Available tools were: {:?}",
+                                         available_tools.iter().map(|t| &t.name).collect::<Vec<_>>());
+                            }
+
                             println!("  {} Calling tool: {} with args: {}", "▶️".blue(), tool_name,
                                 if tool_args.len() > 100 { format!("{}...", &tool_args[..100]) } else { tool_args.clone() });
 
                             // Execute tool using registry
+                            eprintln!("[DEBUG] Agent '{}' executing tool '{}' (available in config: {})",
+                                     self.config.name,
+                                     tool_name,
+                                     self.config.tools.contains(&tool_name.to_string()));
+
                             let tool_result = if let Some(tool) = self.tool_registry.get_tool(tool_name) {
                                 // Parse arguments and execute
                                 match crate::core::ToolParameters::from_json(tool_args) {
