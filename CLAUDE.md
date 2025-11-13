@@ -38,7 +38,7 @@ KimiChat operates in two modes:
 5. Results are synthesized into final response
 
 **Specialized Agents:**
-- `planner` - Task decomposition and agent assignment
+- `planner` - Task decomposition and agent assignment (NO tool access)
 - `code_analyzer` - Code analysis and architecture review
 - `file_manager` - File operations (read, write, edit)
 - `search_specialist` - Search and discovery across codebase
@@ -49,6 +49,8 @@ KimiChat operates in two modes:
 - Iteration limits with dynamic extension via `request_more_iterations` tool
 - System prompts tuned for their specialty
 - Better for complex multi-step tasks requiring specialized expertise
+
+The system uses a single configurable agent implementation (`ConfigurableAgent`) that is instantiated based on JSON configurations. All agents are instances of the same underlying class, configured differently for their specific roles.
 
 ### Key Design Patterns
 
@@ -95,10 +97,13 @@ src/
 
 ```
 src/agents/
-├── coordinator.rs       # Planning and task distribution
+├── agent.rs             # Configurable agent implementation
 ├── agent_factory.rs     # Agent creation and execution loop
+├── agent_config.rs      # Agent configuration handling
+├── coordinator.rs       # Planning and task distribution
+├── progress_evaluator.rs # Agent progress tracking
 ├── visibility.rs        # Task tracking and progress display
-└── ...
+└── task.rs              # Task and subtask definitions
 
 agents/configs/          # Agent configurations (JSON)
 ├── planner.json
@@ -213,7 +218,7 @@ cargo run -- --llama-cpp-url http://localhost:8080 -i
 - Batch edits use file-based state (`.kimichat_edit_plan.json`)
 
 **Multi-agent mode specific:**
-- Planner agent is used only for planning, not execution
+- Planner agent is used only for planning, not execution (has no tools)
 - Task decomposition only happens for complex multi-step requests
 - Simple requests use `single_task` strategy (no decomposition)
 
