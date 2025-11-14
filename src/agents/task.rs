@@ -45,6 +45,7 @@ pub struct TaskContextBuilder {
     conversation_history: Vec<crate::agents::agent::ChatMessage>,
     terminal_manager: Option<std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>>,
     skill_registry: Option<std::sync::Arc<crate::skills::SkillRegistry>>,
+    todo_manager: Option<std::sync::Arc<crate::todo::TodoManager>>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
@@ -58,6 +59,7 @@ impl TaskContextBuilder {
             conversation_history: Vec::new(),
             terminal_manager: None,
             skill_registry: None,
+            todo_manager: None,
             cancellation_token: None,
         }
     }
@@ -97,6 +99,11 @@ impl TaskContextBuilder {
         self
     }
 
+    pub fn with_todo_manager(mut self, todo_manager: std::sync::Arc<crate::todo::TodoManager>) -> Self {
+        self.todo_manager = Some(todo_manager);
+        self
+    }
+
     pub fn build(self) -> Result<crate::agents::agent::ExecutionContext, String> {
         Ok(crate::agents::agent::ExecutionContext {
             workspace_dir: self.workspace_dir.ok_or("workspace_dir is required")?,
@@ -106,6 +113,7 @@ impl TaskContextBuilder {
             conversation_history: self.conversation_history,
             terminal_manager: self.terminal_manager,
             skill_registry: self.skill_registry,
+            todo_manager: self.todo_manager,
             cancellation_token: self.cancellation_token,
         })
     }

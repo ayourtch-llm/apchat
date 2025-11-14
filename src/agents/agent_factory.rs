@@ -315,6 +315,9 @@ impl ConfigurableAgent {
                                         if let Some(ref sr) = context.skill_registry {
                                             tool_context = tool_context.with_skill_registry(sr.clone());
                                         }
+                                        if let Some(ref todo_mgr) = context.todo_manager {
+                                            tool_context = tool_context.with_todo_manager(todo_mgr.clone());
+                                        }
                                         tool.execute(params, &tool_context).await
                                     }
                                     Err(e) => {

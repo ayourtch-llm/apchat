@@ -11,6 +11,7 @@ pub mod iteration_control;
 pub mod project_tools;
 pub mod helpers;
 pub mod skill_tools;
+pub mod todo_tools;
 
 pub use file_ops::*;
 pub use search::*;
@@ -19,3 +20,4 @@ pub use model_management::*;
 pub use iteration_control::*;
 pub use project_tools::*;
 pub use skill_tools::*;
+pub use todo_tools::*;

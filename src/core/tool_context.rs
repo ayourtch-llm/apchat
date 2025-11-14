@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::policy::PolicyManager;
 use crate::terminal::TerminalManager;
 use crate::skills::SkillRegistry;
+use crate::todo::TodoManager;
 
 /// Tool execution context
 ///
@@ -14,6 +15,7 @@ use crate::skills::SkillRegistry;
 /// - Policy manager for permission checking
 /// - Terminal manager for PTY session management
 /// - Skill registry for accessing skills
+/// - Todo manager for task tracking
 #[derive(Debug, Clone)]
 pub struct ToolContext {
     pub work_dir: PathBuf,
@@ -22,6 +24,7 @@ pub struct ToolContext {
     pub policy_manager: PolicyManager,
     pub terminal_manager: Option<Arc<Mutex<TerminalManager>>>,
     pub skill_registry: Option<Arc<SkillRegistry>>,
+    pub todo_manager: Option<Arc<TodoManager>>,
 }
 
 impl ToolContext {
@@ -33,6 +36,7 @@ impl ToolContext {
             policy_manager,
             terminal_manager: None,
             skill_registry: None,
+            todo_manager: None,
         }
     }
 
@@ -48,6 +52,11 @@ impl ToolContext {
 
     pub fn with_skill_registry(mut self, skill_registry: Arc<SkillRegistry>) -> Self {
         self.skill_registry = Some(skill_registry);
+        self
+    }
+
+    pub fn with_todo_manager(mut self, todo_manager: Arc<TodoManager>) -> Self {
+        self.todo_manager = Some(todo_manager);
         self
     }
 

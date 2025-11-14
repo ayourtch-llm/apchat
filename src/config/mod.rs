@@ -130,6 +130,10 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(ListSkillsTool, vec!["skills".to_string()]);
     registry.register_with_categories(FindRelevantSkillsTool, vec!["skills".to_string()]);
 
+    // Register todo/task tracking tools
+    registry.register_with_categories(TodoWriteTool::new(), vec!["task_tracking".to_string()]);
+    registry.register_with_categories(TodoListTool::new(), vec!["task_tracking".to_string()]);
+
     // Register PTY terminal tools
     registry.register_with_categories(PtyLaunchTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtySendKeysTool, vec!["terminal".to_string()]);

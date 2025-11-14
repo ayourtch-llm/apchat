@@ -132,6 +132,7 @@ pub struct ExecutionContext {
     pub conversation_history: Vec<ChatMessage>,
     pub terminal_manager: Option<std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>>,
     pub skill_registry: Option<std::sync::Arc<crate::skills::SkillRegistry>>,
+    pub todo_manager: Option<std::sync::Arc<crate::todo::TodoManager>>,
     pub cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 

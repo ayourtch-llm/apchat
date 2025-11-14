@@ -503,6 +503,7 @@ impl PlanningCoordinator {
             conversation_history: context.conversation_history.clone(),
             terminal_manager: context.terminal_manager.clone(),
             skill_registry: context.skill_registry.clone(),
+            todo_manager: context.todo_manager.clone(),
             cancellation_token: context.cancellation_token.clone(),
         };
 

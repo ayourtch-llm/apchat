@@ -24,6 +24,7 @@ mod api;
 mod app;
 mod terminal;
 mod skills;
+mod todo;
 
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
@@ -73,6 +74,8 @@ pub(crate) struct KimiChat {
     pub(crate) terminal_manager: Arc<Mutex<TerminalManager>>,
     // Skill registry
     pub(crate) skill_registry: Option<Arc<skills::SkillRegistry>>,
+    // Todo manager for task tracking
+    pub(crate) todo_manager: Arc<todo::TodoManager>,
     // Streaming mode
     pub(crate) stream_responses: bool,
     // Verbose debug mode
@@ -168,6 +171,9 @@ impl KimiChat {
         let log_dir = PathBuf::from("logs/terminals");
         let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(log_dir)));
 
+        // Initialize todo manager
+        let todo_manager = Arc::new(todo::TodoManager::new());
+
         // Determine initial model based on overrides or defaults
         // Default to GPT-OSS for cost efficiency - it's significantly cheaper than Kimi
         // while still providing good performance for most tasks
@@ -192,6 +198,7 @@ impl KimiChat {
             policy_manager,
             terminal_manager,
             skill_registry,
+            todo_manager,
             stream_responses,
             verbose,
             debug_level: 0, // Default debug level is 0 (off)
@@ -279,6 +286,7 @@ impl KimiChat {
                 conversation_history,
                 terminal_manager: Some(self.terminal_manager.clone()),
                 skill_registry: self.skill_registry.clone(),
+                todo_manager: Some(self.todo_manager.clone()),
                 cancellation_token,
             };
 
@@ -395,7 +403,9 @@ impl KimiChat {
                     self.work_dir.clone(),
                     format!("session_{}", chrono::Utc::now().timestamp()),
                     self.policy_manager.clone()
-                ).with_terminal_manager(self.terminal_manager.clone());
+                )
+                .with_terminal_manager(self.terminal_manager.clone())
+                .with_todo_manager(self.todo_manager.clone());
 
                 // Add skill registry if available
                 if let Some(ref registry) = self.skill_registry {
