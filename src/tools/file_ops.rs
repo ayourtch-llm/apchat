@@ -242,12 +242,14 @@ impl Tool for EditFileTool {
 
             // Create logs directory if it doesn't exist
             let log_dir = context.work_dir.join("logs");
+            let mut log_file_path_str = String::new();
             if let Err(e) = fs::create_dir_all(&log_dir) {
                 eprintln!("Warning: Failed to create log directory: {}", e);
             } else {
                 // Write to a timestamped log file
                 let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S_%3f");
                 let log_file = log_dir.join(format!("edit_failure_{}.json", timestamp));
+                log_file_path_str = log_file.display().to_string();
 
                 match fs::write(&log_file, serde_json::to_string_pretty(&log_entry).unwrap_or_else(|_| log_entry.to_string())) {
                     Ok(_) => eprintln!("Edit failure logged to: {}", log_file.display()),
