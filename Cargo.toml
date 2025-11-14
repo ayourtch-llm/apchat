@@ -34,3 +34,16 @@ vt100 = "0.15"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# Optional embedding support for semantic skill search
+fastembed = { version = "5", optional = true }
+
+[features]
+# Default features include embeddings for better skill matching
+default = ["embeddings"]
+
+# Semantic embeddings for skill search (using fastembed)
+embeddings = ["fastembed"]
+
+# Future: Alternative embedding backend using candle
+# candle-embeddings = ["candle-core", "candle-transformers"]

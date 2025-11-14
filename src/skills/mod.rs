@@ -1,8 +1,16 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
+
+// Embedding support for semantic skill search
+pub mod embeddings;
+
+#[cfg(feature = "fastembed")]
+use embeddings::fastembed_backend::FastEmbedBackend;
+use embeddings::EmbeddingBackend;
 
 /// Represents a skill loaded from a SKILL.md file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,10 +22,25 @@ pub struct Skill {
 }
 
 /// Manages the skill library
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SkillRegistry {
     skills: HashMap<String, Skill>,
     skills_dir: PathBuf,
+    // Optional embedding backend for semantic search
+    embedding_backend: Option<Arc<dyn EmbeddingBackend>>,
+    // Precomputed embeddings for each skill (name -> embedding)
+    skill_embeddings: HashMap<String, Vec<f32>>,
+}
+
+impl std::fmt::Debug for SkillRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SkillRegistry")
+            .field("skills", &self.skills)
+            .field("skills_dir", &self.skills_dir)
+            .field("has_embeddings", &self.embedding_backend.is_some())
+            .field("num_embeddings", &self.skill_embeddings.len())
+            .finish()
+    }
 }
 
 impl SkillRegistry {
@@ -26,10 +49,62 @@ impl SkillRegistry {
         let mut registry = Self {
             skills: HashMap::new(),
             skills_dir: skills_dir.clone(),
+            embedding_backend: None,
+            skill_embeddings: HashMap::new(),
         };
 
         registry.load_all_skills()?;
+        registry.initialize_embeddings();
         Ok(registry)
+    }
+
+    /// Initialize embedding backend and precompute skill embeddings
+    /// This is called automatically during registry creation
+    /// Falls back gracefully to keyword-only mode if embeddings fail
+    fn initialize_embeddings(&mut self) {
+        #[cfg(feature = "fastembed")]
+        {
+            match FastEmbedBackend::new() {
+                Ok(backend) => {
+                    eprintln!("Initializing skill embeddings...");
+                    let backend = Arc::new(backend);
+
+                    // Precompute embeddings for all skills
+                    let mut embeddings = HashMap::new();
+                    for (name, skill) in &self.skills {
+                        // Combine name and description for embedding
+                        let text = format!("{} {}", skill.name, skill.description);
+
+                        match backend.embed(&text) {
+                            Ok(embedding) => {
+                                embeddings.insert(name.clone(), embedding);
+                            }
+                            Err(e) => {
+                                eprintln!("Warning: Failed to embed skill '{}': {}", name, e);
+                            }
+                        }
+                    }
+
+                    if !embeddings.is_empty() {
+                        eprintln!("Successfully embedded {} skills", embeddings.len());
+                        self.skill_embeddings = embeddings;
+                        self.embedding_backend = Some(backend);
+                    } else {
+                        eprintln!("Warning: No skill embeddings generated, falling back to keyword search");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to initialize embedding backend: {}", e);
+                    eprintln!("Falling back to keyword-only skill search");
+                }
+            }
+        }
+
+        #[cfg(not(feature = "fastembed"))]
+        {
+            // Embeddings feature not enabled, using keyword-only search
+            eprintln!("Embedding feature not enabled, using keyword-only skill search");
+        }
     }
 
     /// Load all skills from the skills directory
@@ -142,7 +217,29 @@ impl SkillRegistry {
 
     /// Find skills relevant to a given task description
     /// Returns list of skill names that might apply, sorted by relevance score
+    /// Uses hybrid scoring: combines keyword matching with semantic embeddings (if available)
     pub fn find_relevant_skills(&self, task_description: &str) -> Vec<String> {
+        // Get keyword scores
+        let keyword_scores = self.compute_keyword_scores(task_description);
+
+        // Get embedding scores if available
+        let embedding_scores = self.compute_embedding_scores(task_description);
+
+        // Combine scores
+        let combined_scores = self.combine_scores(keyword_scores, embedding_scores);
+
+        // Sort by score (descending) and return top 5 skill names
+        let mut scored_skills: Vec<_> = combined_scores.into_iter().collect();
+        scored_skills.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        scored_skills.into_iter()
+            .take(5)
+            .map(|(name, _)| name)
+            .collect()
+    }
+
+    /// Compute keyword-based relevance scores for all skills
+    fn compute_keyword_scores(&self, task_description: &str) -> HashMap<String, f32> {
         let task_lower = task_description.to_lowercase();
 
         // Extract meaningful words from task (filter out common stop words)
@@ -158,11 +255,10 @@ impl SkillRegistry {
             .collect();
 
         if task_words.is_empty() {
-            return Vec::new();
+            return HashMap::new();
         }
 
-        // Score each skill based on relevance
-        let mut scored_skills: Vec<(String, f32)> = Vec::new();
+        let mut scores = HashMap::new();
 
         for (name, skill) in &self.skills {
             let mut score = 0.0;
@@ -200,20 +296,84 @@ impl SkillRegistry {
                 }
             }
 
-            // Only include skills with a minimum relevance score
-            if score > 8.0 {
-                scored_skills.push((name.clone(), score));
+            if score > 0.0 {
+                scores.insert(name.clone(), score);
             }
         }
 
-        // Sort by score (descending) and return skill names
-        scored_skills.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores
+    }
 
-        // Return top 5 most relevant skills
-        scored_skills.into_iter()
-            .take(5)
-            .map(|(name, _)| name)
-            .collect()
+    /// Compute embedding-based similarity scores for all skills
+    /// Returns empty map if embeddings are not available
+    fn compute_embedding_scores(&self, task_description: &str) -> HashMap<String, f32> {
+        let backend = match &self.embedding_backend {
+            Some(backend) => backend,
+            None => return HashMap::new(),
+        };
+
+        // Embed the task description
+        let task_embedding = match backend.embed(task_description) {
+            Ok(embedding) => embedding,
+            Err(e) => {
+                eprintln!("Warning: Failed to embed task description: {}", e);
+                return HashMap::new();
+            }
+        };
+
+        // Compute cosine similarity with all skill embeddings
+        let mut scores = HashMap::new();
+        for (name, skill_embedding) in &self.skill_embeddings {
+            let similarity = embeddings::cosine_similarity(&task_embedding, skill_embedding);
+            // Scale similarity (0-1) to match keyword score range
+            // Typical high similarity is 0.7-0.9, so multiply by 100 to get comparable scores
+            scores.insert(name.clone(), similarity * 100.0);
+        }
+
+        scores
+    }
+
+    /// Combine keyword and embedding scores with configurable weights
+    /// Falls back to keyword-only if embeddings are not available
+    fn combine_scores(
+        &self,
+        keyword_scores: HashMap<String, f32>,
+        embedding_scores: HashMap<String, f32>,
+    ) -> HashMap<String, f32> {
+        let mut combined = HashMap::new();
+
+        // If no embedding scores, use keyword-only (100% weight)
+        if embedding_scores.is_empty() {
+            for (name, score) in keyword_scores {
+                if score > 8.0 {
+                    combined.insert(name, score);
+                }
+            }
+            return combined;
+        }
+
+        // Hybrid scoring: 40% keyword, 60% embedding
+        // Embedding is weighted higher as it captures semantic meaning better
+        let keyword_weight = 0.4;
+        let embedding_weight = 0.6;
+
+        // Collect all skill names
+        let mut all_skills: std::collections::HashSet<String> = keyword_scores.keys().cloned().collect();
+        all_skills.extend(embedding_scores.keys().cloned());
+
+        for skill_name in all_skills {
+            let keyword_score = keyword_scores.get(&skill_name).copied().unwrap_or(0.0);
+            let embedding_score = embedding_scores.get(&skill_name).copied().unwrap_or(0.0);
+
+            let combined_score = keyword_score * keyword_weight + embedding_score * embedding_weight;
+
+            // Lower threshold for hybrid scoring (embeddings help find relevant skills)
+            if combined_score > 5.0 {
+                combined.insert(skill_name, combined_score);
+            }
+        }
+
+        combined
     }
 
     /// Check if two words are similar (common patterns for related words)
