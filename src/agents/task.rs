@@ -43,7 +43,7 @@ pub struct TaskContextBuilder {
     tool_registry: Option<std::sync::Arc<crate::core::tool_registry::ToolRegistry>>,
     llm_client: Option<std::sync::Arc<dyn crate::agents::agent::LlmClient>>,
     conversation_history: Vec<crate::agents::agent::ChatMessage>,
-    terminal_manager: Option<std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>>,
+    terminal_manager: Option<std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>>,
     skill_registry: Option<std::sync::Arc<crate::skills::SkillRegistry>>,
     todo_manager: Option<std::sync::Arc<crate::todo::TodoManager>>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
@@ -89,7 +89,7 @@ impl TaskContextBuilder {
         self
     }
 
-    pub fn with_terminal_manager(mut self, terminal_manager: std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>) -> Self {
+    pub fn with_terminal_manager(mut self, terminal_manager: std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>) -> Self {
         self.terminal_manager = Some(terminal_manager);
         self
     }

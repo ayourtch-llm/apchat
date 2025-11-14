@@ -255,65 +255,61 @@ pub async fn run_repl_mode(
                 }
 
                 if line == "/session list" {
-                    let manager = chat.terminal_manager.lock().unwrap();
-                    let session_ids = manager.list_sessions();
-
-                    if session_ids.is_empty() {
-                        println!("{} No active terminal sessions", "ℹ️".bright_blue());
-                    } else {
-                        println!("{} Active terminal sessions:", "🖥️".bright_cyan());
-                        for session_id in session_ids {
-                            if let Ok(session_arc) = manager.get_session(session_id) {
-                                let session = session_arc.lock().unwrap();
-                                let metadata = session.metadata();
-
-                                let status_icon = match &metadata.status {
-                                    crate::terminal::SessionStatus::Running => "▶️",
-                                    crate::terminal::SessionStatus::Exited(_) => "⏹️",
-                                    crate::terminal::SessionStatus::Stopped => "⏸️",
-                                };
-                                let status_str = format!("{:?}", metadata.status);
-                                println!("  {} Session {}: {} ({}x{}) - {}",
-                                    status_icon,
-                                    metadata.id,
-                                    metadata.command,
-                                    metadata.size.0,
-                                    metadata.size.1,
-                                    status_str
-                                );
+                    let manager = chat.terminal_manager.lock().await;
+                    match manager.list_sessions().await {
+                        Ok(sessions) => {
+                            if sessions.is_empty() {
+                                println!("{} No active terminal sessions", "ℹ️".bright_blue());
+                            } else {
+                                println!("{} Active terminal sessions:", "🖥️".bright_cyan());
+                                for session in sessions {
+                                    let status_icon = if session.status.contains("Running") {
+                                        "▶️"
+                                    } else if session.status.contains("Exited") {
+                                        "⏹️"
+                                    } else {
+                                        "⏸️"
+                                    };
+                                    println!("  {} Session {}: {} ({}x{}) - {}",
+                                        status_icon,
+                                        session.id,
+                                        session.command,
+                                        session.cols,
+                                        session.rows,
+                                        session.status
+                                    );
+                                }
                             }
+                        }
+                        Err(e) => {
+                            eprintln!("{} Failed to list sessions: {}", "❌".bright_red(), e);
                         }
                     }
                     continue;
                 }
 
                 if line.starts_with("/session show ") {
-                    let id_str = line[14..].trim();
-                    match id_str.parse::<u32>() {
-                        Ok(session_id) => {
-                            let manager = chat.terminal_manager.lock().unwrap();
-                            match manager.get_session(session_id) {
-                                Ok(session_arc) => {
-                                    let session = session_arc.lock().unwrap();
-                                    match session.get_screen(false, true) {
-                                        Ok(screen_contents) => {
-                                            println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
-                                            println!("┌{}┐", "─".repeat(session.metadata().size.0 as usize));
-                                            println!("{}", screen_contents);
-                                            println!("└{}┘", "─".repeat(session.metadata().size.0 as usize));
-                                        }
-                                        Err(e) => {
-                                            eprintln!("{} Failed to get screen: {}", "❌".bright_red(), e);
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!("{} Session {} not found: {}", "❌".bright_red(), session_id, e);
-                                }
-                            }
+                    let session_id = line[14..].trim();
+                    let manager = chat.terminal_manager.lock().await;
+                    match manager.get_screen(session_id, false, true).await {
+                        Ok(screen_contents) => {
+                            // Get session info for size
+                            let width = if let Ok(sessions) = manager.list_sessions().await {
+                                sessions.iter()
+                                    .find(|s| s.id == session_id)
+                                    .map(|s| s.cols as usize)
+                                    .unwrap_or(80)
+                            } else {
+                                80
+                            };
+
+                            println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
+                            println!("┌{}┐", "─".repeat(width));
+                            println!("{}", screen_contents);
+                            println!("└{}┘", "─".repeat(width));
                         }
-                        Err(_) => {
-                            eprintln!("{} Invalid session ID: '{}'. Use a number.", "❌".bright_red(), id_str);
+                        Err(e) => {
+                            eprintln!("{} Failed to get screen for session '{}': {}", "❌".bright_red(), session_id, e);
                         }
                     }
                     continue;

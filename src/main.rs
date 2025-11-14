@@ -3,7 +3,8 @@ use colored::Colorize;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use clap::Parser;
 

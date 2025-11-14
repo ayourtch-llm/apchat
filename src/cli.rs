@@ -393,7 +393,7 @@ impl Commands {
 }
 
 impl TerminalCommands {
-    pub fn execute(&self, terminal_manager: std::sync::Arc<std::sync::Mutex<crate::terminal::TerminalManager>>) -> Pin<Box<dyn Future<Output = Result<String>> + '_>> {
+    pub fn execute(&self, terminal_manager: std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>) -> Pin<Box<dyn Future<Output = Result<String>> + '_>> {
         match self {
             TerminalCommands::Launch { command, working_dir, cols, rows } => {
                 let command = command.clone();
