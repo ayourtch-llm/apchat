@@ -189,6 +189,80 @@ pub async fn run_repl_mode(
                     continue;
                 }
 
+                // Handle /session commands
+                if line == "/session" || line == "/session help" {
+                    println!("{} Session commands:", "🖥️".bright_cyan());
+                    println!("  /session list           - List all terminal sessions");
+                    println!("  /session show <id>      - Show screen buffer of session");
+                    println!("  /session help           - Show this help");
+                    continue;
+                }
+
+                if line == "/session list" {
+                    let manager = chat.terminal_manager.lock().unwrap();
+                    let session_ids = manager.list_sessions();
+
+                    if session_ids.is_empty() {
+                        println!("{} No active terminal sessions", "ℹ️".bright_blue());
+                    } else {
+                        println!("{} Active terminal sessions:", "🖥️".bright_cyan());
+                        for session_id in session_ids {
+                            if let Ok(session_arc) = manager.get_session(session_id) {
+                                let session = session_arc.lock().unwrap();
+                                let metadata = session.metadata();
+
+                                let status_icon = match &metadata.status {
+                                    crate::terminal::SessionStatus::Running => "▶️",
+                                    crate::terminal::SessionStatus::Exited(_) => "⏹️",
+                                    crate::terminal::SessionStatus::Stopped => "⏸️",
+                                };
+                                let status_str = format!("{:?}", metadata.status);
+                                println!("  {} Session {}: {} ({}x{}) - {}",
+                                    status_icon,
+                                    metadata.id,
+                                    metadata.command,
+                                    metadata.size.0,
+                                    metadata.size.1,
+                                    status_str
+                                );
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if line.starts_with("/session show ") {
+                    let id_str = line[14..].trim();
+                    match id_str.parse::<u32>() {
+                        Ok(session_id) => {
+                            let manager = chat.terminal_manager.lock().unwrap();
+                            match manager.get_session(session_id) {
+                                Ok(session_arc) => {
+                                    let session = session_arc.lock().unwrap();
+                                    match session.get_screen(false, true) {
+                                        Ok(screen_contents) => {
+                                            println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
+                                            println!("┌{}┐", "─".repeat(session.metadata().size.0 as usize));
+                                            println!("{}", screen_contents);
+                                            println!("└{}┘", "─".repeat(session.metadata().size.0 as usize));
+                                        }
+                                        Err(e) => {
+                                            eprintln!("{} Failed to get screen: {}", "❌".bright_red(), e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("{} Session {} not found: {}", "❌".bright_red(), session_id, e);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            eprintln!("{} Invalid session ID: '{}'. Use a number.", "❌".bright_red(), id_str);
+                        }
+                    }
+                    continue;
+                }
+
                 rl.add_history_entry(line)?;
 
                 // Log the user message before sending
