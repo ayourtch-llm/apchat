@@ -26,6 +26,9 @@ pub async fn run_task_mode(
     println!("{}", format!("Task: {}", task_text).bright_yellow());
     println!();
 
+    // Resolve terminal backend
+    let backend_type = crate::resolve_terminal_backend(cli)?;
+
     let mut chat = KimiChat::new_with_config(
         client_config.clone(),
         work_dir.clone(),
@@ -33,6 +36,7 @@ pub async fn run_task_mode(
         policy_manager.clone(),
         cli.stream,
         cli.verbose,
+        backend_type,
     );
 
     // Initialize logger for task mode

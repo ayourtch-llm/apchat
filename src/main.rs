@@ -103,7 +103,15 @@ impl KimiChat {
             model_red_model_override: None,
         };
         let policy_manager = PolicyManager::new();
-        Self::new_with_config(config, work_dir, false, policy_manager, false, false)
+        Self::new_with_config(
+            config,
+            work_dir,
+            false,
+            policy_manager,
+            false,
+            false,
+            terminal::TerminalBackendType::Pty,
+        )
     }
 
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
@@ -123,7 +131,15 @@ impl KimiChat {
             model_red_model_override: None,
         };
         let policy_manager = PolicyManager::new();
-        Self::new_with_config(config, work_dir, use_agents, policy_manager, false, false)
+        Self::new_with_config(
+            config,
+            work_dir,
+            use_agents,
+            policy_manager,
+            false,
+            false,
+            terminal::TerminalBackendType::Pty,
+        )
     }
 
     /// Set the debug level (0=off, 1=basic, 2=detailed, etc.)
@@ -141,7 +157,15 @@ impl KimiChat {
         self.debug_level & (1 << (level - 1)) != 0
     }
 
-    fn new_with_config(client_config: ClientConfig, work_dir: PathBuf, use_agents: bool, policy_manager: PolicyManager, stream_responses: bool, verbose: bool) -> Self {
+    fn new_with_config(
+        client_config: ClientConfig,
+        work_dir: PathBuf,
+        use_agents: bool,
+        policy_manager: PolicyManager,
+        stream_responses: bool,
+        verbose: bool,
+        backend_type: terminal::TerminalBackendType,
+    ) -> Self {
         let tool_registry = initialize_tool_registry();
 
         // Initialize skill registry
@@ -168,9 +192,11 @@ impl KimiChat {
             None
         };
 
-        // Initialize terminal manager
+        // Initialize terminal manager with specified backend
         let log_dir = PathBuf::from("logs/terminals");
-        let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(log_dir)));
+        let terminal_manager = Arc::new(Mutex::new(
+            TerminalManager::with_backend(log_dir, backend_type, terminal::MAX_CONCURRENT_SESSIONS)
+        ));
 
         // Initialize todo manager
         let todo_manager = Arc::new(todo::TodoManager::new());
@@ -429,6 +455,40 @@ impl KimiChat {
 
 }
 
+/// Resolve terminal backend type from CLI args and environment variable
+/// Priority: CLI arg > ENV var > default (PTY)
+pub(crate) fn resolve_terminal_backend(cli: &Cli) -> Result<terminal::TerminalBackendType> {
+    use terminal::TerminalBackendType;
+
+    // Get backend string from CLI or env var
+    let backend_str = cli.terminal_backend.as_deref()
+        .or_else(|| env::var("KIMICHAT_TERMINAL_BACKEND").ok().as_deref())
+        .unwrap_or("pty");
+
+    match backend_str.to_lowercase().as_str() {
+        "pty" => Ok(TerminalBackendType::Pty),
+        "tmux" => {
+            // Check if tmux is available
+            if let Ok(output) = std::process::Command::new("tmux").arg("-V").output() {
+                if output.status.success() {
+                    Ok(TerminalBackendType::Tmux)
+                } else {
+                    anyhow::bail!(
+                        "Tmux backend requested but 'tmux -V' failed. Please ensure tmux is installed and working."
+                    )
+                }
+            } else {
+                anyhow::bail!(
+                    "Tmux backend requested but tmux command not found. Please install tmux or use --terminal-backend pty"
+                )
+            }
+        }
+        other => anyhow::bail!(
+            "Invalid terminal backend '{}'. Valid options: pty, tmux", other
+        ),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Load environment variables from .env file if it exists
@@ -449,7 +509,10 @@ async fn main() -> Result<()> {
             Commands::Terminal { command: terminal_cmd } => {
                 // Initialize TerminalManager for terminal commands
                 let log_dir = PathBuf::from("logs/terminals");
-                let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(log_dir)));
+                let backend_type = resolve_terminal_backend(&cli)?;
+                let terminal_manager = Arc::new(Mutex::new(
+                    TerminalManager::with_backend(log_dir, backend_type, terminal::MAX_CONCURRENT_SESSIONS)
+                ));
                 terminal_cmd.execute(terminal_manager).await?
             }
             _ => command.execute().await?

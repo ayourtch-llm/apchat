@@ -125,6 +125,11 @@ pub struct Cli {
     /// Enable verbose debug output (shows HTTP requests, responses, headers, etc.)
     #[arg(long, short = 'v')]
     pub verbose: bool,
+
+    /// Terminal backend to use for PTY sessions (pty, tmux)
+    /// Default: pty. Can also be set via KIMICHAT_TERMINAL_BACKEND env var
+    #[arg(long, value_name = "BACKEND")]
+    pub terminal_backend: Option<String>,
 }
 
 #[derive(Subcommand)]

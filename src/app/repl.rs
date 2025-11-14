@@ -28,6 +28,9 @@ pub async fn run_repl_mode(
 
     println!("{}", "Type 'exit' or 'quit' to exit, or '/skills' to see available skill commands\n".bright_black());
 
+    // Resolve terminal backend
+    let backend_type = crate::resolve_terminal_backend(cli)?;
+
     let mut chat = KimiChat::new_with_config(
         client_config,
         work_dir,
@@ -35,6 +38,7 @@ pub async fn run_repl_mode(
         policy_manager,
         cli.stream,
         cli.verbose,
+        backend_type,
     );
 
     // Show the actual current model configuration
