@@ -8,6 +8,7 @@ pub mod llama_cpp_client;
 pub mod anthropic_client;
 pub mod progress_evaluator;
 pub mod visibility;
+pub mod embedded_configs;
 
 pub use agent::*;
 pub use agent_config::*;

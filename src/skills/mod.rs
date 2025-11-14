@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 
 // Embedding support for semantic skill search
 pub mod embeddings;
+// Embedded skills compiled into the binary
+pub mod embedded;
 
 #[cfg(feature = "fastembed")]
 use embeddings::fastembed_backend::FastEmbedBackend;
@@ -107,35 +109,67 @@ impl SkillRegistry {
         }
     }
 
-    /// Load all skills from the skills directory
+    /// Load all skills from embedded data and filesystem
+    /// Embedded skills are loaded first, then filesystem skills can override or complement them
     fn load_all_skills(&mut self) -> Result<()> {
-        if !self.skills_dir.exists() {
-            eprintln!("Skills directory does not exist: {:?}", self.skills_dir);
-            return Ok(());
+        // First, load embedded skills (always available)
+        let embedded = embedded::get_embedded_skills();
+        for (skill_name, content) in embedded {
+            match self.parse_frontmatter(content) {
+                Ok((name, description)) => {
+                    let skill = Skill {
+                        name: name.clone(),
+                        description,
+                        content: content.to_string(),
+                        file_path: PathBuf::from(format!("<embedded:{}>", skill_name)),
+                    };
+                    self.skills.insert(name, skill);
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to parse embedded skill '{}': {}", skill_name, e);
+                }
+            }
         }
+        eprintln!("Loaded {} embedded skills", self.skills.len());
 
-        // Iterate through all subdirectories in skills/
-        for entry in fs::read_dir(&self.skills_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        // Then, load from filesystem (can override embedded skills)
+        if self.skills_dir.exists() {
+            let initial_count = self.skills.len();
 
-            if path.is_dir() {
-                // Look for SKILL.md in each subdirectory
-                let skill_file = path.join("SKILL.md");
-                if skill_file.exists() {
-                    match self.load_skill(&skill_file) {
-                        Ok(skill) => {
-                            self.skills.insert(skill.name.clone(), skill);
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to load skill from {:?}: {}", skill_file, e);
+            for entry in fs::read_dir(&self.skills_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+
+                if path.is_dir() {
+                    // Look for SKILL.md in each subdirectory
+                    let skill_file = path.join("SKILL.md");
+                    if skill_file.exists() {
+                        match self.load_skill(&skill_file) {
+                            Ok(skill) => {
+                                let is_override = self.skills.contains_key(&skill.name);
+                                let skill_name = skill.name.clone();
+                                self.skills.insert(skill_name.clone(), skill);
+                                if is_override {
+                                    eprintln!("  ↳ Overriding embedded skill with filesystem version: {}", skill_name);
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!("Warning: Failed to load skill from {:?}: {}", skill_file, e);
+                            }
                         }
                     }
                 }
             }
+
+            let filesystem_count = self.skills.len() - initial_count;
+            if filesystem_count > 0 {
+                eprintln!("Loaded {} additional skills from filesystem", filesystem_count);
+            }
+        } else {
+            eprintln!("Skills directory does not exist: {:?} (using embedded skills only)", self.skills_dir);
         }
 
-        eprintln!("Loaded {} skills", self.skills.len());
+        eprintln!("Total skills available: {}", self.skills.len());
         Ok(())
     }
 

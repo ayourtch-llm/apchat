@@ -43,28 +43,67 @@ impl PlanningCoordinator {
         Arc::clone(&self.visibility_manager)
     }
 
-    /// Load agent configurations from directory
+    /// Load agent configurations from embedded data and filesystem
+    /// Embedded configs are loaded first, then filesystem configs can override them
     pub async fn load_agent_configs(&mut self, config_dir: &std::path::Path) -> Result<()> {
-        let mut entries = tokio::fs::read_dir(config_dir).await?;
-
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                let content = tokio::fs::read_to_string(&path).await?;
-                let config: AgentConfig = serde_json::from_str(&content)?;
-
-                // Validate configuration
-                config.validate()
-                    .map_err(|e| anyhow::anyhow!("Invalid config in {}: {}", path.display(), e))?;
-
-                println!("{} Loaded agent configuration: {}", "📋".blue(), path.display());
-                eprintln!("[DEBUG] Agent '{}' loaded with {} tools: {:?}",
-                         config.name, config.tools.len(), config.tools);
-
-                self.agent_configs.insert(config.name.clone(), config);
+        // First, load embedded agent configs (always available)
+        let embedded_configs = super::embedded_configs::get_embedded_agent_configs();
+        for (agent_name, config_json) in embedded_configs {
+            match serde_json::from_str::<AgentConfig>(config_json) {
+                Ok(config) => {
+                    if let Err(e) = config.validate() {
+                        eprintln!("Warning: Invalid embedded config for {}: {}", agent_name, e);
+                        continue;
+                    }
+                    println!("{} Loaded embedded agent configuration: {}", "📋".blue(), agent_name);
+                    eprintln!("[DEBUG] Embedded agent '{}' loaded with {} tools: {:?}",
+                             config.name, config.tools.len(), config.tools);
+                    self.agent_configs.insert(config.name.clone(), config);
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to parse embedded config for {}: {}", agent_name, e);
+                }
             }
         }
+        println!("{} Loaded {} embedded agent configurations", "✅".green(), self.agent_configs.len());
 
+        // Then, load from filesystem (can override embedded configs)
+        if config_dir.exists() {
+            let initial_count = self.agent_configs.len();
+            let mut entries = tokio::fs::read_dir(config_dir).await?;
+
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    let content = tokio::fs::read_to_string(&path).await?;
+                    let config: AgentConfig = serde_json::from_str(&content)?;
+
+                    // Validate configuration
+                    config.validate()
+                        .map_err(|e| anyhow::anyhow!("Invalid config in {}: {}", path.display(), e))?;
+
+                    let is_override = self.agent_configs.contains_key(&config.name);
+                    if is_override {
+                        println!("{} Overriding embedded agent with filesystem version: {}", "↳".yellow(), config.name);
+                    } else {
+                        println!("{} Loaded filesystem agent configuration: {}", "📋".blue(), path.display());
+                    }
+                    eprintln!("[DEBUG] Agent '{}' loaded with {} tools: {:?}",
+                             config.name, config.tools.len(), config.tools);
+
+                    self.agent_configs.insert(config.name.clone(), config);
+                }
+            }
+
+            let filesystem_count = self.agent_configs.len() - initial_count;
+            if filesystem_count > 0 {
+                println!("{} Loaded {} additional agent configs from filesystem", "✅".green(), filesystem_count);
+            }
+        } else {
+            println!("{} Config directory not found: {} (using embedded configs only)", "ℹ️".blue(), config_dir.display());
+        }
+
+        println!("{} Total agent configurations available: {}", "✅".green(), self.agent_configs.len());
         Ok(())
     }
 

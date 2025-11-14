@@ -204,18 +204,13 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
     let agent_factory_arc = Arc::new(agent_factory);
     let mut coordinator = PlanningCoordinator::new(agent_factory_arc);
 
-    // Load agent configurations
+    // Load agent configurations (from embedded + optional filesystem)
     let config_path = std::path::Path::new("agents/configs");
-    if config_path.exists() {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(
-                coordinator.load_agent_configs(config_path)
-            )
-        })?;
-        println!("{} Loaded agent configurations from {}", "📁".green(), config_path.display());
-    } else {
-        println!("{} Agent config directory not found: {}", "⚠️".yellow(), config_path.display());
-    }
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(
+            coordinator.load_agent_configs(config_path)
+        )
+    })?;
 
     println!("{} Agent system initialized successfully!", "✅".green());
     Ok(coordinator)
