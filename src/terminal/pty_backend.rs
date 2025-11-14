@@ -96,11 +96,10 @@ impl TerminalBackend for PtyBackend {
         session.send_keys(keys, false)
     }
 
-    async fn get_screen(&self, session_id: &str, include_colors: bool) -> Result<String> {
+    async fn get_screen(&self, session_id: &str, include_colors: bool, include_cursor: bool) -> Result<String> {
         let session = self.get_session(session_id)?;
         let session = session.lock().unwrap();
-        // Don't include cursor in screen output (keep it simple)
-        session.get_screen(include_colors, false)
+        session.get_screen(include_colors, include_cursor)
     }
 
     async fn list_sessions(&self) -> Result<Vec<SessionInfo>> {
@@ -114,6 +113,8 @@ impl TerminalBackend for PtyBackend {
                 created_at: metadata.created_at.into(),
                 rows: metadata.size.1,
                 cols: metadata.size.0,
+                working_dir: Some(metadata.working_dir.display().to_string()),
+                status: format!("{:?}", metadata.status),
             });
         }
         Ok(sessions)
@@ -154,6 +155,12 @@ impl TerminalBackend for PtyBackend {
         Ok(Some(session.get_screen(false, false)?))
     }
 
+    async fn set_scrollback(&mut self, session_id: &str, lines: usize) -> Result<()> {
+        let session = self.get_session(session_id)?;
+        let mut session = session.lock().unwrap();
+        session.set_scrollback(lines)
+    }
+
     async fn capture_start(&mut self, session_id: &str, output_file: String) -> Result<()> {
         let session = self.get_session(session_id)?;
         let mut session = session.lock().unwrap();
@@ -164,12 +171,12 @@ impl TerminalBackend for PtyBackend {
         Ok(())
     }
 
-    async fn capture_stop(&mut self, session_id: &str) -> Result<()> {
+    async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)> {
         let session = self.get_session(session_id)?;
         let mut session = session.lock().unwrap();
-        let (_path, _bytes, _duration) = session.stop_capture()?;
+        let (path, bytes, duration) = session.stop_capture()?;
         self.capture_files.remove(session_id);
-        Ok(())
+        Ok((path.display().to_string(), bytes, duration))
     }
 
     async fn session_exists(&self, session_id: &str) -> bool {

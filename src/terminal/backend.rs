@@ -11,6 +11,8 @@ pub struct SessionInfo {
     pub created_at: SystemTime,
     pub rows: u16,
     pub cols: u16,
+    pub working_dir: Option<String>,
+    pub status: String,
 }
 
 /// Cursor position in terminal
@@ -41,7 +43,7 @@ pub trait TerminalBackend: Send + Sync {
 
     /// Get current screen content
     /// Returns visible screen area (rows x cols)
-    async fn get_screen(&self, session_id: &str, include_colors: bool) -> Result<String>;
+    async fn get_screen(&self, session_id: &str, include_colors: bool, include_cursor: bool) -> Result<String>;
 
     /// List all active sessions
     async fn list_sessions(&self) -> Result<Vec<SessionInfo>>;
@@ -59,11 +61,15 @@ pub trait TerminalBackend: Send + Sync {
     /// Returns historical output beyond current screen
     async fn get_scrollback(&self, session_id: &str, lines: usize) -> Result<Option<String>>;
 
+    /// Set scrollback buffer size (if supported)
+    async fn set_scrollback(&mut self, session_id: &str, lines: usize) -> Result<()>;
+
     /// Start capturing session output to file
     async fn capture_start(&mut self, session_id: &str, output_file: String) -> Result<()>;
 
     /// Stop capturing session output
-    async fn capture_stop(&mut self, session_id: &str) -> Result<()>;
+    /// Returns (capture_file_path, bytes_captured, duration_seconds)
+    async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)>;
 
     /// Check if session exists
     async fn session_exists(&self, session_id: &str) -> bool;

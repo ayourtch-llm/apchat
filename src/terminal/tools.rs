@@ -4,9 +4,7 @@ use crate::{param, core::tool::{Tool, ToolParameters, ToolResult, ParameterDefin
 use crate::core::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::Arc;
 use serde_json::json;
-use tokio::time::{timeout, Duration};
 
 /// Tool for launching a new PTY terminal session
 pub struct PtyLaunchTool;
@@ -33,15 +31,21 @@ impl Tool for PtyLaunchTool {
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
         let command = params.get_optional::<String>("command").unwrap_or(None);
         let working_dir_str = params.get_optional::<String>("working_dir").unwrap_or(None);
-        let cols = params.get_optional::<i32>("cols").unwrap_or(None).map(|c| c as u16);
-        let rows = params.get_optional::<i32>("rows").unwrap_or(None).map(|r| r as u16);
+        let cols = params.get_optional::<i32>("cols").unwrap_or(None).map(|c| c as u16).unwrap_or(80);
+        let rows = params.get_optional::<i32>("rows").unwrap_or(None).map(|r| r as u16).unwrap_or(24);
 
         // Resolve working directory
-        let working_dir = if let Some(dir_str) = working_dir_str {
-            Some(context.work_dir.join(dir_str))
+        let working_dir = if let Some(dir_str) = &working_dir_str {
+            Some(context.work_dir.join(dir_str).display().to_string())
         } else {
-            None
+            Some(context.work_dir.display().to_string())
         };
+
+        // Generate unique session ID
+        let session_id = format!("pty-{}", std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis());
 
         // Get terminal manager from context
         let terminal_manager = match &context.terminal_manager {
@@ -50,16 +54,23 @@ impl Tool for PtyLaunchTool {
         };
 
         // Create session
-        let mut manager = terminal_manager.lock().unwrap();
-        match manager.create_session(command.clone(), working_dir.clone(), cols, rows) {
-            Ok(session_id) => {
+        let command_or_shell = command.clone().unwrap_or_else(|| "default shell".to_string());
+        let mut manager = terminal_manager.lock().await;
+        match manager.create_session(
+            session_id.clone(),
+            command_or_shell.clone(),
+            working_dir.clone(),
+            cols,
+            rows
+        ).await {
+            Ok(returned_id) => {
                 let result = json!({
-                    "session_id": session_id,
-                    "command": command.unwrap_or_else(|| "default shell".to_string()),
-                    "working_dir": working_dir.unwrap_or_else(|| context.work_dir.clone()).display().to_string(),
-                    "size": [cols.unwrap_or(80), rows.unwrap_or(24)],
+                    "session_id": returned_id,
+                    "command": command_or_shell,
+                    "working_dir": working_dir.unwrap_or_else(|| context.work_dir.display().to_string()),
+                    "size": [cols, rows],
                 });
-                ToolResult::success(format!("PTY session {} launched successfully\n{}", session_id, serde_json::to_string_pretty(&result).unwrap()))
+                ToolResult::success(format!("PTY session {} launched successfully\n{}", returned_id, serde_json::to_string_pretty(&result).unwrap()))
             }
             Err(e) => ToolResult::error(format!("Failed to launch PTY session: {}", e)),
         }
@@ -81,15 +92,14 @@ impl Tool for PtySendKeysTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to send keys to", required),
+            param!("session_id", "string", "Session ID to send keys to", required),
             param!("keys", "string", "Keys to send to the terminal. MUST end with \\n to execute commands (press Enter). Example: 'echo hello\\n'", required),
-            param!("special", "boolean", "Process special key sequences (default: true)", optional),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -98,46 +108,17 @@ impl Tool for PtySendKeysTool {
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
-        let special = params.get_optional::<bool>("special").unwrap_or(Some(true)).unwrap_or(true);
-
         // Get terminal manager from context
         let terminal_manager = match &context.terminal_manager {
             Some(tm) => tm,
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        // Get session - scope the lock to ensure it's dropped before await
-        let session_arc = {
-            let manager = terminal_manager.lock().unwrap();
-            manager.get_session(session_id)
-        }; // manager lock is dropped here
-
-        match session_arc {
-            Ok(session_arc) => {
-                // Clone Arc for async operation
-                let session_clone = Arc::clone(&session_arc);
-
-                // Send keys in a blocking task with timeout
-                // The background reader thread will automatically update the screen buffer
-                let task = tokio::task::spawn_blocking(move || -> Result<String, String> {
-                    let mut session = session_clone.lock().unwrap();
-
-                    // Send the keys
-                    session.send_keys(&keys, special)
-                        .map_err(|e| format!("Failed to send keys: {}", e))?;
-
-                    Ok(format!("Keys sent to session {}", session_id))
-                });
-
-                // Wrap with timeout to prevent hanging
-                match timeout(Duration::from_millis(100), task).await {
-                    Ok(Ok(Ok(msg))) => ToolResult::success(msg),
-                    Ok(Ok(Err(e))) => ToolResult::error(e),
-                    Ok(Err(e)) => ToolResult::error(format!("Task error: {}", e)),
-                    Err(_) => ToolResult::error("Operation timed out - PTY may be unresponsive".to_string()),
-                }
-            }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+        // Send keys
+        let mut manager = terminal_manager.lock().await;
+        match manager.send_input(&session_id, &keys).await {
+            Ok(_) => ToolResult::success(format!("Keys sent to session {}", session_id)),
+            Err(e) => ToolResult::error(format!("Failed to send keys: {}", e)),
         }
     }
 }
@@ -157,15 +138,15 @@ impl Tool for PtyGetScreenTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to get screen from", required),
+            param!("session_id", "string", "Session ID to get screen from", required),
             param!("include_colors", "boolean", "Include ANSI color codes (default: false)", optional),
             param!("include_cursor", "boolean", "Include cursor position (default: true)", optional),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -178,32 +159,34 @@ impl Tool for PtyGetScreenTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        // Get session and screen contents (just read from buffer, no PTY read)
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let session = session_arc.lock().unwrap();
+        // Get screen contents and cursor position
+        let manager = terminal_manager.lock().await;
+        match manager.get_screen(&session_id, include_colors, include_cursor).await {
+            Ok(contents) => {
+                let cursor = manager.get_cursor_position(&session_id).await
+                    .unwrap_or((0, 0));
 
-                // Just get the current screen buffer state without reading from PTY
-                // The buffer is updated when keys are sent or by background tasks
-                match session.get_screen(include_colors, include_cursor) {
-                    Ok(contents) => {
-                        let cursor = session.get_cursor();
-                        let metadata = session.metadata();
-
-                        let result = json!({
-                            "session_id": session_id,
-                            "contents": contents,
-                            "cursor_position": [cursor.0, cursor.1],
-                            "size": [metadata.size.0, metadata.size.1],
-                        });
-
-                        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
+                // Get session info for size
+                let size = match manager.list_sessions().await {
+                    Ok(sessions) => {
+                        sessions.iter()
+                            .find(|s| s.id == session_id)
+                            .map(|s| [s.cols, s.rows])
+                            .unwrap_or([80, 24])
                     }
-                    Err(e) => ToolResult::error(format!("Failed to get screen contents: {}", e)),
-                }
+                    Err(_) => [80, 24],
+                };
+
+                let result = json!({
+                    "session_id": session_id,
+                    "contents": contents,
+                    "cursor_position": [cursor.1, cursor.0],
+                    "size": size,
+                });
+
+                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to get screen contents: {}", e)),
         }
     }
 }
@@ -232,32 +215,31 @@ impl Tool for PtyListTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        let session_ids = manager.list_sessions();
+        let manager = terminal_manager.lock().await;
+        match manager.list_sessions().await {
+            Ok(sessions) => {
+                let sessions_info: Vec<_> = sessions.iter().map(|s| {
+                    json!({
+                        "id": s.id,
+                        "command": s.command,
+                        "working_dir": s.working_dir,
+                        "status": s.status,
+                        "created_at": s.created_at.duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0),
+                        "size": [s.cols, s.rows],
+                    })
+                }).collect();
 
-        let mut sessions_info = Vec::new();
-        for session_id in session_ids {
-            if let Ok(session_arc) = manager.get_session(session_id) {
-                let session = session_arc.lock().unwrap();
-                let metadata = session.metadata();
+                let result = json!({
+                    "sessions": sessions_info,
+                    "count": sessions_info.len(),
+                });
 
-                sessions_info.push(json!({
-                    "id": metadata.id,
-                    "command": metadata.command,
-                    "working_dir": metadata.working_dir.display().to_string(),
-                    "status": format!("{:?}", metadata.status),
-                    "created_at": metadata.created_at.to_rfc3339(),
-                    "size": [metadata.size.0, metadata.size.1],
-                }));
+                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
             }
+            Err(e) => ToolResult::error(format!("Failed to list sessions: {}", e)),
         }
-
-        let result = json!({
-            "sessions": sessions_info,
-            "count": sessions_info.len(),
-        });
-
-        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
     }
 }
 
@@ -276,13 +258,13 @@ impl Tool for PtyKillTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to kill", required),
+            param!("session_id", "string", "Session ID to kill", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -292,8 +274,8 @@ impl Tool for PtyKillTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let mut manager = terminal_manager.lock().unwrap();
-        match manager.kill_session(session_id) {
+        let mut manager = terminal_manager.lock().await;
+        match manager.kill_session(&session_id).await {
             Ok(_) => ToolResult::success(format!("Session {} killed successfully", session_id)),
             Err(e) => ToolResult::error(format!("Failed to kill session: {}", e)),
         }
@@ -315,13 +297,13 @@ impl Tool for PtyGetCursorTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to get cursor from", required),
+            param!("session_id", "string", "Session ID to get cursor from", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -330,21 +312,17 @@ impl Tool for PtyGetCursorTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let session = session_arc.lock().unwrap();
-
-                // Screen buffer is automatically updated by background reader thread
-                let cursor = session.get_cursor();
+        let manager = terminal_manager.lock().await;
+        match manager.get_cursor_position(&session_id).await {
+            Ok((row, col)) => {
                 let result = json!({
                     "session_id": session_id,
-                    "position": [cursor.0, cursor.1],
+                    "position": [col, row],
                 });
 
                 ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to get cursor position: {}", e)),
         }
     }
 }
@@ -364,15 +342,15 @@ impl Tool for PtyResizeTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to resize", required),
+            param!("session_id", "string", "Session ID to resize", required),
             param!("cols", "integer", "New terminal width in columns", required),
             param!("rows", "integer", "New terminal height in rows", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -391,24 +369,18 @@ impl Tool for PtyResizeTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let mut session = session_arc.lock().unwrap();
-                match session.resize(cols, rows) {
-                    Ok(_) => {
-                        let result = json!({
-                            "session_id": session_id,
-                            "size": [cols, rows],
-                        });
-                        ToolResult::success(format!("Session {} resized to {}x{}\n{}",
-                            session_id, cols, rows,
-                            serde_json::to_string_pretty(&result).unwrap()))
-                    }
-                    Err(e) => ToolResult::error(format!("Failed to resize session: {}", e)),
-                }
+        let mut manager = terminal_manager.lock().await;
+        match manager.resize_session(&session_id, rows, cols).await {
+            Ok(_) => {
+                let result = json!({
+                    "session_id": session_id,
+                    "size": [cols, rows],
+                });
+                ToolResult::success(format!("Session {} resized to {}x{}\n{}",
+                    session_id, cols, rows,
+                    serde_json::to_string_pretty(&result).unwrap()))
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to resize session: {}", e)),
         }
     }
 }
@@ -428,14 +400,14 @@ impl Tool for PtySetScrollbackTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to configure", required),
+            param!("session_id", "string", "Session ID to configure", required),
             param!("lines", "integer", "Number of scrollback lines to keep", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -449,22 +421,16 @@ impl Tool for PtySetScrollbackTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let mut session = session_arc.lock().unwrap();
-                match session.set_scrollback(lines) {
-                    Ok(_) => {
-                        let result = json!({
-                            "session_id": session_id,
-                            "scrollback_lines": lines,
-                        });
-                        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
-                    }
-                    Err(e) => ToolResult::error(format!("Failed to set scrollback: {}", e)),
-                }
+        let mut manager = terminal_manager.lock().await;
+        match manager.set_scrollback(&session_id, lines).await {
+            Ok(_) => {
+                let result = json!({
+                    "session_id": session_id,
+                    "scrollback_lines": lines,
+                });
+                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to set scrollback: {}", e)),
         }
     }
 }
@@ -484,13 +450,13 @@ impl Tool for PtyStartCaptureTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to start capturing", required),
+            param!("session_id", "string", "Session ID to start capturing", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -499,26 +465,19 @@ impl Tool for PtyStartCaptureTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let mut session = session_arc.lock().unwrap();
-                match session.start_capture() {
-                    Ok(capture_file) => {
-                        let result = json!({
-                            "session_id": session_id,
-                            "capture_file": capture_file.display().to_string(),
-                            "status": "capturing",
-                        });
-                        ToolResult::success(format!("Started capturing session {} to {}\n{}",
-                            session_id,
-                            capture_file.display(),
-                            serde_json::to_string_pretty(&result).unwrap()))
-                    }
-                    Err(e) => ToolResult::error(format!("Failed to start capture: {}", e)),
-                }
+        let mut manager = terminal_manager.lock().await;
+        // Backend generates the capture file path
+        match manager.capture_start(&session_id, String::new()).await {
+            Ok(_) => {
+                let result = json!({
+                    "session_id": session_id,
+                    "status": "capturing",
+                });
+                ToolResult::success(format!("Started capturing session {}\n{}",
+                    session_id,
+                    serde_json::to_string_pretty(&result).unwrap()))
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to start capture: {}", e)),
         }
     }
 }
@@ -538,13 +497,13 @@ impl Tool for PtyStopCaptureTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to stop capturing", required),
+            param!("session_id", "string", "Session ID to stop capturing", required),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -553,24 +512,18 @@ impl Tool for PtyStopCaptureTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let mut session = session_arc.lock().unwrap();
-                match session.stop_capture() {
-                    Ok((capture_file, bytes, duration)) => {
-                        let result = json!({
-                            "session_id": session_id,
-                            "capture_file": capture_file.display().to_string(),
-                            "bytes_captured": bytes,
-                            "duration_seconds": duration,
-                        });
-                        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
-                    }
-                    Err(e) => ToolResult::error(format!("Failed to stop capture: {}", e)),
-                }
+        let mut manager = terminal_manager.lock().await;
+        match manager.capture_stop(&session_id).await {
+            Ok((capture_file, bytes, duration)) => {
+                let result = json!({
+                    "session_id": session_id,
+                    "capture_file": capture_file,
+                    "bytes_captured": bytes,
+                    "duration_seconds": duration,
+                });
+                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
+            Err(e) => ToolResult::error(format!("Failed to stop capture: {}", e)),
         }
     }
 }
@@ -590,15 +543,15 @@ impl Tool for PtyRequestUserInputTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("session_id", "integer", "Session ID to hand over to user", required),
+            param!("session_id", "string", "Session ID to hand over to user", required),
             param!("message", "string", "Message to display to the user explaining what's needed", required),
             param!("timeout_seconds", "integer", "Timeout in seconds (default: 300/5 minutes)", optional),
         ])
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        let session_id = match params.get_required::<i32>("session_id") {
-            Ok(id) => id as u32,
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
@@ -616,45 +569,50 @@ impl Tool for PtyRequestUserInputTool {
             None => return ToolResult::error("Terminal manager not available".to_string()),
         };
 
-        let manager = terminal_manager.lock().unwrap();
-        match manager.get_session(session_id) {
-            Ok(session_arc) => {
-                let session = session_arc.lock().unwrap();
+        let manager = terminal_manager.lock().await;
 
-                // Screen buffer is automatically updated by background reader thread
-                // Get current screen contents
-                let screen_contents = match session.get_screen(false, true) {
-                    Ok(contents) => contents,
-                    Err(e) => return ToolResult::error(format!("Failed to get screen contents: {}", e)),
-                };
+        // Get current screen contents
+        let screen_contents = match manager.get_screen(&session_id, false, true).await {
+            Ok(contents) => contents,
+            Err(e) => return ToolResult::error(format!("Failed to get screen contents: {}", e)),
+        };
 
-                let metadata = session.metadata();
-
-                // For now, we return information about the session state and instructions
-                // A full implementation would involve complex async I/O handling to actually
-                // attach the terminal to the user's stdin/stdout
-                let result = json!({
-                    "session_id": session_id,
-                    "message": message,
-                    "timeout_seconds": timeout_seconds,
-                    "current_screen": screen_contents,
-                    "working_dir": metadata.working_dir.display().to_string(),
-                    "command": metadata.command,
-                    "instructions": format!(
-                        "User assistance requested for terminal session {}.\n\n\
-                        Message: {}\n\n\
-                        Current screen state:\n{}\n\n\
-                        To interact with this session, use:\n\
-                        - pty_send_keys to send commands\n\
-                        - pty_get_screen to see updated output\n\n\
-                        Session will remain available for {} seconds.",
-                        session_id, message, screen_contents, timeout_seconds
-                    ),
-                });
-
-                ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
+        // Get session info
+        let (working_dir, command) = match manager.list_sessions().await {
+            Ok(sessions) => {
+                sessions.iter()
+                    .find(|s| s.id == session_id)
+                    .map(|s| (
+                        s.working_dir.clone().unwrap_or_else(|| "unknown".to_string()),
+                        s.command.clone()
+                    ))
+                    .unwrap_or_else(|| ("unknown".to_string(), "unknown".to_string()))
             }
-            Err(e) => ToolResult::error(format!("Failed to get session: {}", e)),
-        }
+            Err(_) => ("unknown".to_string(), "unknown".to_string()),
+        };
+
+        // For now, we return information about the session state and instructions
+        // A full implementation would involve complex async I/O handling to actually
+        // attach the terminal to the user's stdin/stdout
+        let result = json!({
+            "session_id": session_id,
+            "message": message,
+            "timeout_seconds": timeout_seconds,
+            "current_screen": screen_contents,
+            "working_dir": working_dir,
+            "command": command,
+            "instructions": format!(
+                "User assistance requested for terminal session {}.\n\n\
+                Message: {}\n\n\
+                Current screen state:\n{}\n\n\
+                To interact with this session, use:\n\
+                - pty_send_keys to send commands\n\
+                - pty_get_screen to see updated output\n\n\
+                Session will remain available for {} seconds.",
+                session_id, message, screen_contents, timeout_seconds
+            ),
+        });
+
+        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
     }
 }

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use crate::policy::PolicyManager;
 use crate::terminal::TerminalManager;
 use crate::skills::SkillRegistry;
