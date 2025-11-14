@@ -178,6 +178,23 @@ impl ConfigurableAgent {
         let mut max_iterations = 50;
         let mut iteration = 0;
         loop {
+            // Check for cancellation at the start of each iteration
+            if let Some(ref token) = context.cancellation_token {
+                if token.is_cancelled() {
+                    eprintln!("[DEBUG] Agent '{}' iteration {} cancelled by user", self.config.name, iteration);
+                    let elapsed = start_time.elapsed();
+                    return crate::agents::agent::AgentResult {
+                        success: false,
+                        content: "Task cancelled by user".to_string(),
+                        task_id: task.id.clone(),
+                        agent_name: self.config.name.clone(),
+                        execution_time: elapsed.as_millis() as u64,
+                        next_tasks: None,
+                        metadata: HashMap::new(),
+                    };
+                }
+            }
+
             if iteration >= max_iterations {
                 break;
             }
@@ -223,6 +240,23 @@ impl ConfigurableAgent {
 
                         // Execute each tool call
                         for tool_call in tool_calls {
+                            // Check for cancellation before each tool call
+                            if let Some(ref token) = context.cancellation_token {
+                                if token.is_cancelled() {
+                                    eprintln!("[DEBUG] Agent '{}' tool execution cancelled by user", self.config.name);
+                                    let elapsed = start_time.elapsed();
+                                    return crate::agents::agent::AgentResult {
+                                        success: false,
+                                        content: "Task cancelled by user during tool execution".to_string(),
+                                        task_id: task.id.clone(),
+                                        agent_name: self.config.name.clone(),
+                                        execution_time: elapsed.as_millis() as u64,
+                                        next_tasks: None,
+                                        metadata: HashMap::new(),
+                                    };
+                                }
+                            }
+
                             let tool_name = &tool_call.function.name;
                             let tool_args = &tool_call.function.arguments;
 
