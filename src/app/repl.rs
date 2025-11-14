@@ -445,9 +445,13 @@ pub async fn run_repl_mode(
                         }
                         Err(e) => {
                             eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
-                            // Fallback to regular chat
-                            match crate::chat::session::chat(&mut chat, line).await {
+                            // Fallback to regular chat with same cancellation token
+                            match crate::chat::session::chat(&mut chat, line, Some(cancel_token.clone())).await {
                                 Ok(response) => response,
+                                Err(e) if e.to_string().contains("interrupted") => {
+                                    println!("{}", "Operation interrupted by user".bright_yellow());
+                                    continue;
+                                }
                                 Err(e) => {
                                     eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
                                     continue;
@@ -456,9 +460,29 @@ pub async fn run_repl_mode(
                         }
                     }
                 } else {
-                    // Use regular chat
-                    match crate::chat::session::chat(&mut chat, line).await {
+                    // Use regular chat with cancellation support
+                    let cancel_token = tokio_util::sync::CancellationToken::new();
+                    let cancel_token_clone = cancel_token.clone();
+
+                    // Set up Ctrl-C handler for single-agent mode
+                    let ctrl_c_task = tokio::spawn(async move {
+                        if let Ok(_) = tokio::signal::ctrl_c().await {
+                            println!("\n{}", "^C - Interrupting...".bright_yellow());
+                            cancel_token_clone.cancel();
+                        }
+                    });
+
+                    let result = crate::chat::session::chat(&mut chat, line, Some(cancel_token.clone())).await;
+
+                    // Clean up signal handler
+                    ctrl_c_task.abort();
+
+                    match result {
                         Ok(response) => response,
+                        Err(e) if e.to_string().contains("interrupted") => {
+                            println!("{}", "Operation interrupted by user".bright_yellow());
+                            continue;
+                        }
                         Err(e) => {
                             eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
                             continue;

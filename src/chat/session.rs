@@ -6,7 +6,11 @@ use crate::models::{ModelType, Message};
 use crate::agents::progress_evaluator::{ProgressEvaluator, ToolCallInfo};
 
 /// Main chat loop - handles user messages, tool calls, and model interactions
-pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<String> {
+pub(crate) async fn chat(
+    chat: &mut KimiChat,
+    user_message: &str,
+    cancellation_token: Option<tokio_util::sync::CancellationToken>,
+) -> Result<String> {
         chat.messages.push(Message {
             role: "user".to_string(),
             content: user_message.to_string(),
@@ -48,6 +52,13 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
         let mut errors_encountered: Vec<String> = Vec::new();
 
         loop {
+            // Check for cancellation at the start of each iteration
+            if let Some(ref token) = cancellation_token {
+                if token.is_cancelled() {
+                    return Err(anyhow::anyhow!("Chat interrupted by user"));
+                }
+            }
+
             // Validate and fix tool calls in the conversation history before sending to API
             // This ensures fixes are permanent and consistent across requests (preserving cache)
             if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
@@ -56,32 +67,71 @@ pub(crate) async fn chat(chat: &mut KimiChat, user_message: &str) -> Result<Stri
                 }
             }
 
-            let (response, usage, current_model) = if chat.stream_responses {
-                // Check if this is an Anthropic model that should use the new system
-                let is_custom_claude = if let ModelType::Custom(ref name) = chat.current_model {
-                    name.contains("claude")
-                } else {
-                    false
-                };
+            // Race API call against cancellation token
+            let (response, usage, current_model) = if let Some(ref token) = cancellation_token {
+                tokio::select! {
+                    result = async {
+                        if chat.stream_responses {
+                            // Check if this is an Anthropic model that should use the new system
+                            let is_custom_claude = if let ModelType::Custom(ref name) = chat.current_model {
+                                name.contains("claude")
+                            } else {
+                                false
+                            };
 
-                let should_use_anthropic = matches!(chat.current_model, ModelType::AnthropicModel) ||
-                    is_custom_claude ||
-                    (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-                    (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+                            let should_use_anthropic = matches!(chat.current_model, ModelType::AnthropicModel) ||
+                                is_custom_claude ||
+                                (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+                                (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
-                if should_use_anthropic {
-                    // Use the new streaming implementation for Anthropic
-                    if chat.should_show_debug(1) {
-                        println!("🔧 DEBUG: Using Anthropic streaming with format translation");
+                            if should_use_anthropic {
+                                // Use the new streaming implementation for Anthropic
+                                if chat.should_show_debug(1) {
+                                    println!("🔧 DEBUG: Using Anthropic streaming with format translation");
+                                }
+                                crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await
+                            } else {
+                                // Use old streaming for OpenAI-compatible APIs
+                                crate::api::call_api_streaming(chat, &chat.messages).await
+                            }
+                        } else {
+                            crate::api::call_api(chat, &chat.messages).await
+                        }
+                    } => result?,
+                    _ = token.cancelled() => {
+                        return Err(anyhow::anyhow!("LLM call interrupted by user"));
                     }
-                    crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
-                } else {
-                    // Use old streaming for OpenAI-compatible APIs
-                    crate::api::call_api_streaming(chat, &chat.messages).await?
                 }
             } else {
-                crate::api::call_api(chat, &chat.messages).await?
+                // No cancellation token, call normally
+                if chat.stream_responses {
+                    // Check if this is an Anthropic model that should use the new system
+                    let is_custom_claude = if let ModelType::Custom(ref name) = chat.current_model {
+                        name.contains("claude")
+                    } else {
+                        false
+                    };
+
+                    let should_use_anthropic = matches!(chat.current_model, ModelType::AnthropicModel) ||
+                        is_custom_claude ||
+                        (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+                        (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+
+                    if should_use_anthropic {
+                        // Use the new streaming implementation for Anthropic
+                        if chat.should_show_debug(1) {
+                            println!("🔧 DEBUG: Using Anthropic streaming with format translation");
+                        }
+                        crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
+                    } else {
+                        // Use old streaming for OpenAI-compatible APIs
+                        crate::api::call_api_streaming(chat, &chat.messages).await?
+                    }
+                } else {
+                    crate::api::call_api(chat, &chat.messages).await?
+                }
             };
+
             if chat.current_model != current_model {
                 println!("Forced model switch: {:?} -> {:?}", &chat.current_model, &current_model);
                 chat.current_model = current_model.clone();
