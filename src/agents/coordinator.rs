@@ -197,11 +197,46 @@ impl PlanningCoordinator {
         // Debug: Print the agent list being sent to planner
         eprintln!("[DEBUG] Sending agent list to planner:\n{}", agent_list);
 
+        // Build conversation context summary for planner
+        let mut context_summary = String::new();
+        if !context.conversation_history.is_empty() {
+            context_summary.push_str("\n\nRECENT CONVERSATION CONTEXT:\n");
+            context_summary.push_str("The following information has already been discussed/gathered:\n");
+
+            // Include last few conversation messages for context
+            let recent_limit = 5; // Last 5 exchanges
+            let start_idx = if context.conversation_history.len() > recent_limit {
+                context.conversation_history.len() - recent_limit
+            } else {
+                0
+            };
+
+            for msg in &context.conversation_history[start_idx..] {
+                let role_prefix = match msg.role.as_str() {
+                    "user" => "User: ",
+                    "assistant" => "Assistant: ",
+                    _ => &format!("{}: ", msg.role),
+                };
+
+                // Truncate very long messages
+                let content_preview = if msg.content.len() > 300 {
+                    format!("{}... [truncated]", &msg.content[..300])
+                } else {
+                    msg.content.clone()
+                };
+
+                context_summary.push_str(&format!("{}{}\n", role_prefix, content_preview));
+            }
+
+            context_summary.push_str("\nIMPORTANT: Use this context to create SPECIFIC tasks that build on what's already known.\n");
+            context_summary.push_str("Don't ask agents to re-discover information that's already in the conversation above.\n");
+        }
+
         // Create planner agent
         let planner = self.agent_factory.create_agent(planner_config)?;
 
-        // Create planning task with dynamic agent list prepended
-        let task_description = format!("{}\n\nAnalyze and decompose this request: {}", agent_list, request);
+        // Create planning task with dynamic agent list and conversation context
+        let task_description = format!("{}{}\n\nAnalyze and decompose this request: {}", agent_list, context_summary, request);
 
         // Debug: Show first 500 chars of what we're sending to planner
         let preview = if task_description.len() > 500 {
