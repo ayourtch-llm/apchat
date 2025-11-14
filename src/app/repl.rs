@@ -99,6 +99,42 @@ pub async fn run_repl_mode(
         }
     }
 
+    // Run session-start hook to inject skill context
+    let hook_path = chat.work_dir.join("hooks/session-start.sh");
+    if hook_path.exists() {
+        use std::process::Command;
+        match Command::new(&hook_path)
+            .arg(chat.work_dir.to_string_lossy().to_string())
+            .output()
+        {
+            Ok(output) if output.status.success() => {
+                let hook_content = String::from_utf8_lossy(&output.stdout).to_string();
+                if !hook_content.trim().is_empty() {
+                    // Add hook output as a system message
+                    chat.messages.push(Message {
+                        role: "system".to_string(),
+                        content: hook_content,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                    });
+
+                    if cli.verbose {
+                        println!("{}", "✓ Session-start hook executed".green());
+                    }
+                }
+            }
+            Ok(output) => {
+                eprintln!("{} Session-start hook failed: {}",
+                    "⚠️".yellow(),
+                    String::from_utf8_lossy(&output.stderr));
+            }
+            Err(e) => {
+                eprintln!("{} Failed to execute session-start hook: {}", "⚠️".yellow(), e);
+            }
+        }
+    }
+
     let mut rl = DefaultEditor::new()?;
 
     // Read kimi.md if it exists to get project context
