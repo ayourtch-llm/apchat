@@ -461,8 +461,9 @@ pub(crate) fn resolve_terminal_backend(cli: &Cli) -> Result<terminal::TerminalBa
     use terminal::TerminalBackendType;
 
     // Get backend string from CLI or env var
+    let env_backend = env::var("KIMICHAT_TERMINAL_BACKEND").ok();
     let backend_str = cli.terminal_backend.as_deref()
-        .or_else(|| env::var("KIMICHAT_TERMINAL_BACKEND").ok().as_deref())
+        .or_else(|| env_backend.as_deref())
         .unwrap_or("pty");
 
     match backend_str.to_lowercase().as_str() {
@@ -498,10 +499,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // If a subcommand was provided, execute it and exit
-    if let Some(command) = cli.command {
+    if let Some(ref command) = cli.command {
         // Special handling for commands that need KimiChat or TerminalManager
         let work_dir = env::current_dir()?;
-        let result = match &command {
+        let result = match command {
             Commands::Switch { model, reason } => {
                 let mut chat = KimiChat::new("".to_string(), work_dir.clone());
                 chat.switch_model(model, reason)?

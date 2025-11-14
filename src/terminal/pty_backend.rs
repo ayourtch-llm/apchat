@@ -176,7 +176,7 @@ impl TerminalBackend for PtyBackend {
         let mut session = session.lock().unwrap();
         let (path, bytes, duration) = session.stop_capture()?;
         self.capture_files.remove(session_id);
-        Ok((path.display().to_string(), bytes, duration))
+        Ok((path.display().to_string(), bytes as usize, duration))
     }
 
     async fn session_exists(&self, session_id: &str) -> bool {

@@ -3,6 +3,7 @@ use anyhow::Result;
 
 use super::backend::{TerminalBackend, TerminalBackendType, SessionInfo};
 use super::pty_backend::PtyBackend;
+use super::tmux_backend::TmuxBackend;
 use super::MAX_CONCURRENT_SESSIONS;
 
 /// Manages all terminal sessions globally using pluggable backends
@@ -37,9 +38,14 @@ impl TerminalManager {
                 Box::new(PtyBackend::new(log_dir.clone(), max_sessions))
             }
             TerminalBackendType::Tmux => {
-                // TODO: Implement TmuxBackend
-                eprintln!("⚠️  Tmux backend not yet implemented, falling back to PTY");
-                Box::new(PtyBackend::new(log_dir.clone(), max_sessions))
+                match TmuxBackend::new(log_dir.clone(), max_sessions) {
+                    Ok(backend) => Box::new(backend),
+                    Err(e) => {
+                        eprintln!("⚠️  Failed to initialize tmux backend: {}", e);
+                        eprintln!("⚠️  Falling back to PTY backend");
+                        Box::new(PtyBackend::new(log_dir.clone(), max_sessions))
+                    }
+                }
             }
         };
 
