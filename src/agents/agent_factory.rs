@@ -165,10 +165,26 @@ impl ConfigurableAgent {
         // Add recent conversation history
         messages.extend(context.conversation_history.iter().cloned());
 
-        // Add task description
+        // Add task description with explicit skill check reminder
+        // This forces agents to use the skills system proactively
+        let task_with_skill_reminder = format!(
+            "Task: {}\n\n\
+            ══════════════════════════════════════════════════════════════\n\
+            ⚠️  CRITICAL FIRST STEP: CHECK FOR APPLICABLE SKILLS\n\
+            ══════════════════════════════════════════════════════════════\n\n\
+            Your FIRST action MUST be:\n\
+            1. Call find_relevant_skills with this task description\n\
+            2. If relevant skills are found → use load_skill and follow them\n\
+            3. If no skills found → proceed with the task normally\n\n\
+            Skills are proven workflows that prevent common mistakes.\n\
+            Skipping the skill check will likely result in suboptimal work.\n\n\
+            Start by calling find_relevant_skills now.",
+            task.description
+        );
+
         messages.push(crate::agents::agent::ChatMessage {
             role: "user".to_string(),
-            content: format!("Task: {}\n\nPlease execute this task using your available tools.", task.description),
+            content: task_with_skill_reminder,
             tool_calls: None,
             tool_call_id: None,
             name: None,
