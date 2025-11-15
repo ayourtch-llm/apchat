@@ -692,6 +692,40 @@
             setupInputHandlers();
         });
 
+        // Handle page restoration from back/forward cache
+        // This fixes the bug where message bubbles appear empty when navigating back
+        window.addEventListener('pageshow', (event) => {
+            // Check if page was restored from bfcache
+            if (event.persisted) {
+                console.log('Page restored from bfcache - cleaning up streaming message DOM');
+
+                // Clean up any malformed streaming message structures
+                const streamingElements = document.querySelectorAll('.streaming-text, .streaming-cursor');
+                streamingElements.forEach(el => {
+                    // If the streaming-text span still exists, move its content to the parent
+                    if (el.classList.contains('streaming-text')) {
+                        const parent = el.parentElement;
+                        if (parent && parent.classList.contains('message-content')) {
+                            const text = el.textContent || el.innerHTML;
+                            parent.textContent = text;
+                        }
+                    }
+                    // Remove streaming elements
+                    el.remove();
+                });
+
+                // Reset streaming state
+                isStreaming = false;
+                streamingMessageDiv = null;
+
+                // Reconnect WebSocket if disconnected
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    console.log('WebSocket disconnected after bfcache restore - reconnecting');
+                    connectWebSocket();
+                }
+            }
+        });
+
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/${sessionId}`;
