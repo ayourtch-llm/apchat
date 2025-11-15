@@ -191,7 +191,13 @@ async fn handle_client_message(
 
     match message {
         SendMessage { content } => {
-            handle_send_message(client_id, content, session).await;
+            // Spawn chat handling in separate task to avoid blocking WebSocket reader
+            // This is critical: if we await here, the WebSocket reader can't receive
+            // confirmation messages because it's blocked waiting for this to complete
+            let session_clone = Arc::clone(session);
+            tokio::spawn(async move {
+                handle_send_message(client_id, content, &session_clone).await;
+            });
         }
         ConfirmTool {
             tool_call_id,
