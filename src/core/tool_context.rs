@@ -87,7 +87,14 @@ impl ToolContext {
             Decision::Allow => Ok((true, None)),
             Decision::Deny => Ok((false, Some("Denied by policy".to_string()))),
             Decision::Ask => {
-                // Ask the user for confirmation
+                // In non-interactive mode (web/API), auto-approve since confirmation
+                // was already handled via web UI
+                if self.non_interactive {
+                    println!("{} {}", "✓".green(), "Auto-confirmed (web UI)".bright_black());
+                    return Ok((true, None));
+                }
+
+                // Ask the user for confirmation in interactive mode
                 println!("\n{}", prompt_message.bright_green().bold());
                 print!(">>> ");
                 io::stdout().flush()?;
