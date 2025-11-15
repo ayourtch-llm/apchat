@@ -5,6 +5,12 @@ Cargo.lock
 # Environment variables
 .env
 
+# logs directory
+/logs/
+
+# random projects, possibly written using kimi
+/projects/
+
 # Workspace directory
 /workspace/
 
