@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
 use crate::config::ClientConfig;
@@ -11,6 +11,13 @@ use crate::models::Message;
 use crate::policy::PolicyManager;
 use crate::web::protocol::{ServerMessage, SessionConfig, SessionInfo};
 use crate::KimiChat;
+
+/// Pending tool confirmation
+pub struct PendingConfirmation {
+    pub tool_name: String,
+    pub tool_args: String,
+    pub responder: oneshot::Sender<bool>,
+}
 
 pub type SessionId = Uuid;
 
@@ -48,6 +55,7 @@ pub struct Session {
     pub clients: Arc<RwLock<Vec<ClientConnection>>>,
     pub created_at: DateTime<Utc>,
     pub last_activity: Arc<tokio::sync::Mutex<DateTime<Utc>>>,
+    pub pending_confirmations: Arc<RwLock<HashMap<String, PendingConfirmation>>>,
 }
 
 impl Session {
@@ -63,6 +71,35 @@ impl Session {
             clients: Arc::new(RwLock::new(Vec::new())),
             created_at: Utc::now(),
             last_activity: Arc::new(tokio::sync::Mutex::new(Utc::now())),
+            pending_confirmations: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Register a pending confirmation and return a receiver to wait on
+    pub async fn register_confirmation(
+        &self,
+        tool_call_id: String,
+        tool_name: String,
+        tool_args: String,
+    ) -> oneshot::Receiver<bool> {
+        let (tx, rx) = oneshot::channel();
+        let confirmation = PendingConfirmation {
+            tool_name,
+            tool_args,
+            responder: tx,
+        };
+        self.pending_confirmations.write().await.insert(tool_call_id, confirmation);
+        rx
+    }
+
+    /// Respond to a pending confirmation
+    pub async fn respond_to_confirmation(&self, tool_call_id: &str, confirmed: bool) -> bool {
+        if let Some(pending) = self.pending_confirmations.write().await.remove(tool_call_id) {
+            // Send response (ignore error if receiver dropped)
+            let _ = pending.responder.send(confirmed);
+            true
+        } else {
+            false
         }
     }
 

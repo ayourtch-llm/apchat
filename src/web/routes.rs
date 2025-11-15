@@ -186,6 +186,13 @@ async fn handle_client_message(
         SendMessage { content } => {
             handle_send_message(client_id, content, session).await;
         }
+        ConfirmTool {
+            tool_call_id,
+            confirmed,
+        } => {
+            // Respond to pending confirmation
+            session.respond_to_confirmation(&tool_call_id, confirmed).await;
+        }
         ListSessions => {
             let sessions = state.session_manager.list_sessions().await;
             let msg = ServerMessage::SessionList { sessions };
@@ -198,6 +205,48 @@ async fn handle_client_message(
             // TODO: Implement other message handlers
             eprintln!("Unhandled client message: {:?}", message);
         }
+    }
+}
+
+/// Check if tool requires confirmation and extract plan/diff
+async fn check_tool_confirmation(
+    tool_name: &str,
+    tool_args: &str,
+    work_dir: &std::path::Path,
+) -> (bool, Option<String>) {
+    match tool_name {
+        "apply_edit_plan" => {
+            // Try to load and format the edit plan
+            let plan_path = work_dir.join(".kimichat_edit_plan.json");
+            if let Ok(content) = tokio::fs::read_to_string(&plan_path).await {
+                if let Ok(plan) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                    let mut diff_text = String::new();
+                    for (idx, edit) in plan.iter().enumerate() {
+                        diff_text.push_str(&format!(
+                            "Edit #{} {} - {}\n",
+                            idx + 1,
+                            edit.get("file_path").and_then(|v| v.as_str()).unwrap_or("?"),
+                            edit.get("description").and_then(|v| v.as_str()).unwrap_or("?")
+                        ));
+                        if let Some(old) = edit.get("old_content").and_then(|v| v.as_str()) {
+                            for line in old.lines() {
+                                diff_text.push_str(&format!("  -{}\n", line));
+                            }
+                        }
+                        if let Some(new) = edit.get("new_content").and_then(|v| v.as_str()) {
+                            for line in new.lines() {
+                                diff_text.push_str(&format!("  +{}\n", line));
+                            }
+                        }
+                        diff_text.push('\n');
+                    }
+                    return (true, Some(diff_text));
+                }
+            }
+            (true, None)
+        }
+        "write_file" | "edit_file" => (true, None), // These also need confirmation but no pre-extracted diff
+        _ => (false, None),
     }
 }
 
@@ -244,20 +293,83 @@ async fn handle_chat_with_broadcast(
             tool_call_iterations += 1;
 
             for tool_call in tool_calls {
+                // Check if tool requires confirmation
+                let work_dir = session.kimichat.lock().await.work_dir.clone();
+                let (requires_confirmation, diff) = check_tool_confirmation(
+                    &tool_call.function.name,
+                    &tool_call.function.arguments,
+                    &work_dir,
+                )
+                .await;
+
                 // Broadcast tool call request
                 let tool_msg = ServerMessage::ToolCallRequest {
                     tool_call_id: tool_call.id.clone(),
                     name: tool_call.function.name.clone(),
                     arguments: serde_json::from_str(&tool_call.function.arguments)
                         .unwrap_or(serde_json::json!({})),
-                    requires_confirmation: false, // TODO: Integrate with policy manager
-                    diff: None, // TODO: Extract diff for file operations
+                    requires_confirmation,
+                    diff,
                     iteration: Some(tool_call_iterations),
                     max_iterations: Some(MAX_TOOL_ITERATIONS),
                 };
                 session.broadcast(tool_msg).await;
 
-                // Execute tool
+                // If requires confirmation, wait for user response
+                if requires_confirmation {
+                    let confirmation_rx = session
+                        .register_confirmation(
+                            tool_call.id.clone(),
+                            tool_call.function.name.clone(),
+                            tool_call.function.arguments.clone(),
+                        )
+                        .await;
+
+                    // Wait for confirmation (with timeout)
+                    let confirmed = match tokio::time::timeout(
+                        std::time::Duration::from_secs(300), // 5 minute timeout
+                        confirmation_rx,
+                    )
+                    .await
+                    {
+                        Ok(Ok(confirmed)) => confirmed,
+                        Ok(Err(_)) => false, // Channel closed
+                        Err(_) => {
+                            // Timeout
+                            let error_msg = ServerMessage::Error {
+                                message: "Tool confirmation timeout (5 minutes)".to_string(),
+                                recoverable: true,
+                            };
+                            session.broadcast(error_msg).await;
+                            false
+                        }
+                    };
+
+                    if !confirmed {
+                        // User denied, send error result
+                        let error_str = "Tool execution cancelled by user".to_string();
+                        let result_msg = ServerMessage::ToolCallResult {
+                            tool_call_id: tool_call.id.clone(),
+                            result: error_str.clone(),
+                            success: false,
+                            formatted_result: Some(error_str.clone()),
+                        };
+                        session.broadcast(result_msg).await;
+
+                        // Add cancellation to history
+                        session.kimichat.lock().await.messages.push(ChatMessage {
+                            role: "tool".to_string(),
+                            content: error_str,
+                            tool_calls: None,
+                            tool_call_id: Some(tool_call.id.clone()),
+                            name: Some(tool_call.function.name.clone()),
+                            reasoning: None,
+                        });
+                        continue; // Skip to next tool call
+                    }
+                }
+
+                // Execute tool (either confirmed or doesn't need confirmation)
                 let mut kimichat = session.kimichat.lock().await;
                 let result = kimichat
                     .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
