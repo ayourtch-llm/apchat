@@ -1,14 +1,6 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! LLM API clients and communication for kimichat
+//!
+//! This crate will provide API communication with various LLM backends.
+//! Implementation deferred until all dependencies are in place.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// Placeholder - will be implemented once kimichat-chat and kimichat-app are ready

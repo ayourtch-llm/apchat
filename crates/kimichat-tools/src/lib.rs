@@ -1,14 +1,18 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Tool system for kimichat
+//!
+//! This crate provides the tool framework and all tool implementations.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Core tool system
+pub mod core;
+pub use core::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// Tool implementations
+pub mod tools;
+pub use tools::*;
+
+// Terminal tools
+pub mod terminal_tools;
+pub use terminal_tools::*;
+
+// Re-export commonly used types from kimichat-types
+pub use kimichat_types::{param, ToolParameters, ToolResult, ParameterDefinition};

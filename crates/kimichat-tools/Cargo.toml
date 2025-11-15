@@ -4,3 +4,21 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+kimichat-types = { workspace = true }
+kimichat-models = { workspace = true }
+kimichat-policy = { workspace = true }
+kimichat-terminal = { workspace = true }
+kimichat-skills = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+regex = { workspace = true }
+glob = { workspace = true }
+ignore = { workspace = true }
+similar = { workspace = true }
+anyhow = { workspace = true }
+colored = { workspace = true }
+chrono = { workspace = true }
+rustyline = { workspace = true }
+uuid = { workspace = true }
