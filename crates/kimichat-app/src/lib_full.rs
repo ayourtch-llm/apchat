@@ -442,7 +442,7 @@ impl KimiChat {
                     self.policy_manager.clone()
                 )
                 .with_terminal_manager(self.terminal_manager.clone())
-                .with_todo_manager(self.todo_manager.clone())
+                // .with_todo_manager(self.todo_manager.clone()) // TODO: Re-enable when ToolContext supports todo_manager
                 .with_non_interactive(self.non_interactive);
 
                 // Add skill registry if available

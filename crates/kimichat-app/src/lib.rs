@@ -84,7 +84,8 @@ pub struct KimiChat {
 impl KimiChat {
     pub fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig::default();
-        
+        let log_dir = work_dir.join("logs/terminals");
+
         Self {
             api_key: api_key.clone(),
             work_dir: work_dir.clone(),
@@ -98,7 +99,7 @@ impl KimiChat {
             use_agents: false,
             client_config: config,
             policy_manager: PolicyManager::new(),
-            terminal_manager: Arc::new(Mutex::new(TerminalManager::new(terminal::backend::TerminalBackendType::Pty))),
+            terminal_manager: Arc::new(Mutex::new(TerminalManager::new(log_dir))),
             skill_registry: None,
             non_interactive: false,
             todo_manager: Arc::new(TodoManager::new()),
@@ -121,7 +122,45 @@ impl KimiChat {
     }
 
     pub fn get_tools(&self) -> Vec<models::Tool> {
-        self.tool_registry.get_tools()
+        self.tool_registry.get_openai_tool_definitions()
+            .into_iter()
+            .filter_map(|def| serde_json::from_value(def).ok())
+            .collect()
+    }
+
+    /// Read a file from the work directory
+    pub fn read_file(&self, path: &str) -> Result<String> {
+        let file_path = self.work_dir.join(path);
+        std::fs::read_to_string(&file_path)
+            .with_context(|| format!("Failed to read file: {}", file_path.display()))
+    }
+
+    /// Save conversation state to a file
+    pub fn save_state(&self, file_path: &str) -> Result<String> {
+        chat::state::save_state(
+            &self.messages,
+            &self.current_model,
+            self.total_tokens_used,
+            file_path,
+        )
+    }
+
+    /// Load conversation state from a file
+    pub fn load_state(&mut self, file_path: &str) -> Result<String> {
+        let (messages, current_model, total_tokens_used, version) =
+            chat::state::load_state(file_path)?;
+
+        self.messages = messages;
+        self.current_model = current_model;
+        self.total_tokens_used = total_tokens_used;
+
+        Ok(format!(
+            "Loaded conversation state from {} (version {}, {} messages, {} total tokens)",
+            file_path,
+            version,
+            self.messages.len(),
+            self.total_tokens_used
+        ))
     }
 
     pub fn resolve_terminal_backend(cli: &Cli) -> Result<terminal::backend::TerminalBackendType> {
@@ -276,7 +315,7 @@ impl KimiChat {
                 conversation_history,
                 terminal_manager: Some(self.terminal_manager.clone()),
                 skill_registry: self.skill_registry.clone(),
-                todo_manager: Some(self.todo_manager.clone()),
+                // todo_manager: Some(self.todo_manager.clone()), // TODO: Re-enable when ExecutionContext supports todo_manager
                 cancellation_token,
             };
 
@@ -358,7 +397,7 @@ impl KimiChat {
                     self.policy_manager.clone()
                 )
                 .with_terminal_manager(self.terminal_manager.clone())
-                .with_todo_manager(self.todo_manager.clone())
+                // .with_todo_manager(self.todo_manager.clone()) // TODO: Re-enable when ToolContext supports todo_manager
                 .with_non_interactive(self.non_interactive);
 
                 if let Some(ref registry) = self.skill_registry {

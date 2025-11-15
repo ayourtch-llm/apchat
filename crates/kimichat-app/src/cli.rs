@@ -5,15 +5,10 @@ use std::env;
 use std::future::Future;
 use std::pin::Pin;
 
-use kimichat_tools::tool::{Tool, ToolParameters};
-use kimichat_tools::tool_context::ToolContext;
+use kimichat_tools::core::tool::{Tool, ToolParameters};
+use kimichat_tools::core::tool_context::ToolContext;
+use kimichat_tools::tools::{SearchFilesTool, RunCommandTool};
 use kimichat_policy::PolicyManager;
-// TODO: Re-enable file_ops
-// use crate::tools::file_ops::*;
-use crate::tools::system::*;
-use crate::tools::search::*;
-// TODO: Re-enable terminal tools
-// use kimichat_terminal::{PtyLaunchTool, PtySendKeysTool, PtyGetScreenTool, PtyListTool, PtyKillTool};
 
 // Note: KimiChat is needed for the Switch command
 // It will be imported from the parent module when needed

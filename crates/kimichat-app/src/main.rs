@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use clap::Parser;
 
 // Import workspace crates
-use kimichat_types::{ModelType, Message, ToolCall, FunctionCall, SwitchModelArgs, ClientConfig};
+use kimichat_types::{ModelType, Message, ToolCall, FunctionCall, SwitchModelArgs};
 use kimichat_models::{Tool, FunctionDef, ChatResponse, Usage};
 use kimichat_policy::PolicyManager;
 use kimichat_tools::{ToolRegistry, ToolParameters, ToolContext};
@@ -24,6 +24,7 @@ use kimichat_agents::{PlanningCoordinator, GroqLlmClient, ChatMessage, Execution
 // Local modules
 mod cli;
 mod config;
+use config::ClientConfig;
 mod app;
 mod web;
 mod todo;
@@ -412,7 +413,7 @@ impl KimiChat {
                     self.policy_manager.clone()
                 )
                 .with_terminal_manager(self.terminal_manager.clone())
-                .with_todo_manager(self.todo_manager.clone())
+                // .with_todo_manager(self.todo_manager.clone()) // TODO: Re-enable when ToolContext supports todo_manager
                 .with_non_interactive(self.non_interactive);
 
                 // Add skill registry if available

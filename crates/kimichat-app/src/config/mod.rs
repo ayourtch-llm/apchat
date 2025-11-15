@@ -3,9 +3,8 @@ use colored::Colorize;
 use std::env;
 use std::sync::Arc;
 
-use kimichat_tools::ToolRegistry;
+use kimichat_tools::{ToolRegistry, tools::*, terminal_tools::*};
 use kimichat_policy::PolicyManager;
-use crate::tools::*;
 use kimichat_terminal::*;
 use kimichat_agents::{
     PlanningCoordinator, AgentFactory, LlmClient,
@@ -125,11 +124,12 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
-    registry.register_with_categories(OpenFileTool, vec!["file_ops".to_string()]);
-    registry.register_with_categories(ReadFileTool, vec!["file_ops".to_string()]);
-    registry.register_with_categories(WriteFileTool, vec!["file_ops".to_string()]);
-    registry.register_with_categories(EditFileTool, vec!["file_ops".to_string()]);
-    registry.register_with_categories(ListFilesTool, vec!["file_ops".to_string()]);
+    // TODO: Re-enable when file_ops tools are available in kimichat_tools
+    // registry.register_with_categories(OpenFileTool, vec!["file_ops".to_string()]);
+    // registry.register_with_categories(ReadFileTool, vec!["file_ops".to_string()]);
+    // registry.register_with_categories(WriteFileTool, vec!["file_ops".to_string()]);
+    // registry.register_with_categories(EditFileTool, vec!["file_ops".to_string()]);
+    // registry.register_with_categories(ListFilesTool, vec!["file_ops".to_string()]);
 
     // Register search tools
     registry.register_with_categories(SearchFilesTool, vec!["search".to_string()]);
@@ -151,8 +151,9 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(FindRelevantSkillsTool, vec!["skills".to_string()]);
 
     // Register todo/task tracking tools
-    registry.register_with_categories(TodoWriteTool::new(), vec!["task_tracking".to_string()]);
-    registry.register_with_categories(TodoListTool::new(), vec!["task_tracking".to_string()]);
+    // TODO: Re-enable when todo tools are available in kimichat_tools
+    // registry.register_with_categories(TodoWriteTool::new(), vec!["task_tracking".to_string()]);
+    // registry.register_with_categories(TodoListTool::new(), vec!["task_tracking".to_string()]);
 
     // Register PTY terminal tools
     registry.register_with_categories(PtyLaunchTool, vec!["terminal".to_string()]);
