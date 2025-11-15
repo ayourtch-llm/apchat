@@ -697,7 +697,7 @@
         window.addEventListener('pageshow', (event) => {
             // Check if page was restored from bfcache
             if (event.persisted) {
-                console.log('Page restored from bfcache - cleaning up streaming message DOM');
+                console.log('Page restored from bfcache - cleaning up DOM');
 
                 // Clean up any malformed streaming message structures
                 const streamingElements = document.querySelectorAll('.streaming-text, .streaming-cursor');
@@ -712,6 +712,50 @@
                     }
                     // Remove streaming elements
                     el.remove();
+                });
+
+                // Fix tool notifications that may have corrupted innerHTML
+                const toolDivs = document.querySelectorAll('[id^="tool-"]');
+                toolDivs.forEach(toolDiv => {
+                    const toolCall = toolDiv.querySelector('.tool-call');
+                    if (toolCall) {
+                        // Get the current text content to preserve data
+                        const header = toolCall.querySelector('.tool-call-header');
+                        const resultDiv = toolCall.querySelector('.tool-call-result');
+
+                        if (header) {
+                            // Extract and rebuild header content
+                            const headerText = header.textContent || header.innerText;
+                            // If header has lost its structure, rebuild it
+                            if (!header.querySelector('.tool-call-name')) {
+                                // Header is corrupted, try to preserve at least the text
+                                const span = document.createElement('span');
+                                span.textContent = headerText;
+                                header.innerHTML = '';
+                                header.appendChild(span);
+                            }
+                        }
+
+                        if (resultDiv && resultDiv.style.display !== 'none') {
+                            // Ensure result has proper structure
+                            const pre = resultDiv.querySelector('pre.tool-result-content');
+                            if (!pre && resultDiv.textContent) {
+                                const resultText = resultDiv.textContent || resultDiv.innerText;
+                                resultDiv.innerHTML = `<div class="tool-result-label">📋 Result:</div><pre class="tool-result-content">${escapeHtml(resultText.replace('📋 Result:', '').trim())}</pre>`;
+                            }
+                        }
+                    }
+                });
+
+                // Fix confirmation dialogs that may be corrupted
+                const confirmDivs = document.querySelectorAll('[id^="tool-confirm-"]');
+                confirmDivs.forEach(div => {
+                    // If confirmation dialog exists but structure is broken, remove it
+                    // (it should have been completed anyway if we're navigating back)
+                    const hasProperStructure = div.querySelector('.tool-confirmation-header');
+                    if (!hasProperStructure) {
+                        div.remove();
+                    }
                 });
 
                 // Reset streaming state
