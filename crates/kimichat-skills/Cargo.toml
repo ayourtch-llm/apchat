@@ -4,3 +4,13 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+regex = { workspace = true }
+fastembed = { workspace = true, optional = true }
+
+[features]
+default = ["embeddings"]
+embeddings = ["fastembed"]
