@@ -282,6 +282,7 @@ async fn handle_chat_with_broadcast(
                             tool_calls: None,
                             tool_call_id: Some(tool_call.id.clone()),
                             name: Some(tool_call.function.name.clone()),
+                            reasoning: None,
                         });
                     }
                     Err(e) => {
@@ -301,6 +302,7 @@ async fn handle_chat_with_broadcast(
                             tool_calls: None,
                             tool_call_id: Some(tool_call.id.clone()),
                             name: Some(tool_call.function.name.clone()),
+                            reasoning: None,
                         });
                     }
                 }
@@ -348,6 +350,7 @@ async fn handle_send_message(
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning: None,
     });
 
     // Handle based on mode

@@ -128,6 +128,7 @@ pub(crate) async fn call_api(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     });
 
                     // Retry with BluModel - continue the loop to retry
@@ -191,6 +192,7 @@ pub(crate) async fn call_api(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     });
 
                     // Retry with GrnModel - continue the loop to retry
@@ -279,6 +281,7 @@ pub(crate) async fn call_api_with_llm_client(
             }),
             tool_call_id: msg.tool_call_id.clone(),
             name: msg.name.clone(),
+            reasoning: None,
         }
     }).collect();
 
@@ -472,6 +475,7 @@ pub(crate) async fn call_api_with_llm_client(
         }),
         tool_call_id: response.message.tool_call_id,
         name: response.message.name,
+        reasoning: None,
     };
 
     let usage = response.usage.map(|u| Usage {

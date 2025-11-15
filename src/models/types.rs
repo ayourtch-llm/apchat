@@ -55,17 +55,20 @@ where
 }
 
 /// Message structure for chat API
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Message {
+    #[serde(default)]
     pub role: String,
-    #[serde(deserialize_with = "deserialize_string_or_null")]
+    #[serde(deserialize_with = "deserialize_string_or_null", default)]
     pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tool_calls: Option<Vec<ToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub reasoning: Option<String>,
 }
 
 /// Tool call structure

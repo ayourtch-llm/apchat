@@ -241,6 +241,7 @@ impl KimiChat {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         // Add initial model notification
@@ -250,6 +251,7 @@ impl KimiChat {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         chat
@@ -303,6 +305,7 @@ impl KimiChat {
                     }),
                     tool_call_id: msg.tool_call_id.clone(),
                     name: msg.name.clone(),
+                    reasoning: None,
                 }
             }).collect();
 
@@ -333,6 +336,7 @@ impl KimiChat {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             });
 
             self.messages.push(Message {
@@ -341,6 +345,7 @@ impl KimiChat {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             });
 
             Ok(result.content)
@@ -384,6 +389,7 @@ impl KimiChat {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         Ok(format!(

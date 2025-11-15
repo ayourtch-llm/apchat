@@ -121,6 +121,7 @@ pub async fn run_repl_mode(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     });
 
                     if cli.verbose {
@@ -157,6 +158,7 @@ pub async fn run_repl_mode(
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         };
         // Log this system addition
         if let Some(logger) = &mut chat.logger {
@@ -343,6 +345,7 @@ pub async fn run_repl_mode(
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
+                                    reasoning: None,
                                 };
                                 chat.messages.push(skill_msg.clone());
 
@@ -377,6 +380,7 @@ pub async fn run_repl_mode(
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
+                                    reasoning: None,
                                 };
                                 chat.messages.push(skill_msg.clone());
 
@@ -411,6 +415,7 @@ pub async fn run_repl_mode(
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
+                                    reasoning: None,
                                 };
                                 chat.messages.push(skill_msg.clone());
 

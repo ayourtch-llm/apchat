@@ -80,6 +80,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning: None,
     }];
 
     // Format the conversation to summarize
@@ -107,6 +108,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        reasoning: None,
     });
 
     // Call API to get summary using the OTHER model
@@ -172,6 +174,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         // Add recent messages
@@ -212,6 +215,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     },
                     Message {
                         role: "user".to_string(),
@@ -226,6 +230,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     },
                 ];
 
@@ -274,6 +279,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
+                                    reasoning: None,
                                 });
                             } else {
                                 println!(

@@ -233,6 +233,7 @@ pub(crate) async fn call_api_streaming(
         tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
         tool_call_id: None,
         name: None,
+        reasoning: None,
     };
 
     // If no structured tool calls were received, check for XML format in content
@@ -274,6 +275,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
             }),
             tool_call_id: msg.tool_call_id.clone(),
             name: msg.name.clone(),
+            reasoning: None,
         }
     }).collect();
 
@@ -496,6 +498,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
         }),
         tool_call_id: response.message.tool_call_id,
         name: response.message.name,
+        reasoning: None,
     };
 
     let usage = response.usage.map(|u| Usage {

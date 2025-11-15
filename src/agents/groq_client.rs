@@ -65,6 +65,7 @@ impl LlmClient for GroqLlmClient {
                 }),
                 tool_call_id: choice.message.tool_call_id,
                 name: choice.message.name,
+                reasoning: None,
             }
         } else {
             ChatMessage {
@@ -73,6 +74,7 @@ impl LlmClient for GroqLlmClient {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             }
         };
 
@@ -200,6 +202,7 @@ impl GroqLlmClient {
                 }),
                 tool_call_id: msg.tool_call_id,
                 name: msg.name,
+                reasoning: None,
             }
         }).collect();
 

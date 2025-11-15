@@ -40,6 +40,7 @@ pub(crate) async fn repair_tool_call_with_model(
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             },
             Message {
                 role: "user".to_string(),
@@ -47,6 +48,7 @@ pub(crate) async fn repair_tool_call_with_model(
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             },
         ],
         tools: vec![], // No tools for repair request

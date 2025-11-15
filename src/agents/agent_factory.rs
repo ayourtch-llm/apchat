@@ -160,6 +160,7 @@ impl ConfigurableAgent {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             }
         ];
 
@@ -189,6 +190,7 @@ impl ConfigurableAgent {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         // Execute with LLM and tool calling loop
@@ -237,6 +239,7 @@ impl ConfigurableAgent {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning: None,
                 });
                 println!("{} Injected iteration limit warning to model", "⚠️".yellow());
             }
@@ -386,6 +389,7 @@ impl ConfigurableAgent {
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_name.clone()),
+                                reasoning: None,
                             });
                         }
 

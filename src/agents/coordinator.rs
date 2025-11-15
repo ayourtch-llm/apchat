@@ -578,6 +578,7 @@ impl PlanningCoordinator {
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
+                reasoning: None,
             });
         }
 

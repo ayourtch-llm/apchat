@@ -18,6 +18,7 @@ pub(crate) async fn chat(
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            reasoning: None,
         });
 
         // Summarize ONCE before starting the tool-calling loop, not during it
@@ -144,6 +145,7 @@ pub(crate) async fn chat(
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    reasoning: None,
                 });
             }
 
@@ -232,6 +234,7 @@ pub(crate) async fn chat(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     });
                     return Ok("Repeated tool call pattern detected. Please refine your request.".to_string());
                 }
@@ -294,6 +297,7 @@ pub(crate) async fn chat(
                                         tool_calls: None,
                                         tool_call_id: None,
                                         name: None,
+                                        reasoning: None,
                                     });
                                     return Ok("Intelligent progress evaluation suggested stopping this approach.".to_string());
                                 }
@@ -310,6 +314,7 @@ pub(crate) async fn chat(
                                         tool_calls: None,
                                         tool_call_id: None,
                                         name: None,
+                                        reasoning: None,
                                     });
                                 } else {
                                     // should_continue is true and no strategy change needed
@@ -341,6 +346,7 @@ pub(crate) async fn chat(
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
+                        reasoning: None,
                     });
                     return Ok(format!(
                         "Reached maximum tool call limit ({} iterations). Please simplify your request.",
@@ -490,6 +496,7 @@ pub(crate) async fn chat(
                         tool_calls: None,
                         tool_call_id: Some(tool_call.id.clone()),
                         name: Some(tool_call.function.name.clone()),
+                        reasoning: None,
                     });
                 }
             } else {
