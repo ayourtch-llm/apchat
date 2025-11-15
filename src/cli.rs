@@ -130,6 +130,22 @@ pub struct Cli {
     /// Default: pty. Can also be set via KIMICHAT_TERMINAL_BACKEND env var
     #[arg(long, value_name = "BACKEND")]
     pub terminal_backend: Option<String>,
+
+    /// Enable web server
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub web: bool,
+
+    /// Web server port
+    #[arg(long, default_value = "8080", env = "KIMICHAT_WEB_PORT")]
+    pub web_port: u16,
+
+    /// Web server bind address
+    #[arg(long, default_value = "127.0.0.1", env = "KIMICHAT_WEB_BIND")]
+    pub web_bind: String,
+
+    /// Allow TUI session to be attached from web
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub web_attachable: bool,
 }
 
 #[derive(Subcommand)]

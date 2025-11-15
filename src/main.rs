@@ -26,6 +26,7 @@ mod app;
 mod terminal;
 mod skills;
 mod todo;
+mod web;
 
 use logging::ConversationLogger;
 use core::{ToolRegistry, ToolParameters};
@@ -530,6 +531,17 @@ async fn main() -> Result<()> {
         return run_task_mode(
             &cli,
             task_text,
+            app_config.client_config,
+            app_config.work_dir,
+            app_config.policy_manager,
+        )
+        .await;
+    }
+
+    // Handle web server mode
+    if cli.web {
+        return app::run_web_server(
+            &cli,
             app_config.client_config,
             app_config.work_dir,
             app_config.policy_manager,

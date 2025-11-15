@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KimiChat - Sessions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #111827;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: #9CA3AF;
+            margin-bottom: 2rem;
+        }
+        .btn {
+            background: #2563EB;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 2rem;
+        }
+        .btn:hover {
+            background: #1D4ED8;
+        }
+        .session-list {
+            display: grid;
+            gap: 1rem;
+        }
+        .session-card {
+            background: #1F2937;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .session-card:hover {
+            background: #2563EB15;
+            border-color: #2563EB;
+        }
+        .session-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .session-type {
+            font-weight: 600;
+        }
+        .badge {
+            background: #10B981;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+        .session-id {
+            color: #9CA3AF;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .session-meta {
+            display: flex;
+            gap: 1.5rem;
+            color: #9CA3AF;
+            font-size: 0.875rem;
+        }
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: #9CA3AF;
+        }
+        .error {
+            background: #991B1B;
+            border: 1px solid #DC2626;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 KimiChat</h1>
+            <p class="subtitle">Multi-agent AI CLI with web interface</p>
+        </header>
+
+        <button class="btn" id="newSessionBtn">+ New Session</button>
+
+        <div id="sessionList" class="session-list"></div>
+        <div id="loading" class="loading" style="display:none;">Loading sessions...</div>
+        <div id="error" class="error" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSessions();
+            document.getElementById('newSessionBtn').addEventListener('click', createNewSession);
+        });
+
+        async function loadSessions() {
+            const loading = document.getElementById('loading');
+            const sessionList = document.getElementById('sessionList');
+            const errorDiv = document.getElementById('error');
+
+            loading.style.display = 'block';
+            sessionList.innerHTML = '';
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/sessions`);
+                if (!response.ok) throw new Error('Failed to load sessions');
+
+                const data = await response.json();
+                displaySessions(data.sessions);
+            } catch (error) {
+                errorDiv.textContent = 'Error loading sessions: ' + error.message;
+                errorDiv.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function displaySessions(sessions) {
+            const container = document.getElementById('sessionList');
+
+            if (sessions.length === 0) {
+                container.innerHTML = '<div class="loading">No active sessions. Click "New Session" to get started.</div>';
+                return;
+            }
+
+            sessions.forEach(session => {
+                const card = document.createElement('div');
+                card.className = 'session-card';
+                card.onclick = () => window.location.href = `/session/${session.id}`;
+
+                const typeIcon = session.type === 'Tui' ? '💻' : '🌐';
+                const attachableBadge = session.attachable ? '<span class="badge">Attachable</span>' : '';
+
+                card.innerHTML = `
+                    <div class="session-header">
+                        <span style="font-size: 1.5rem;">${typeIcon}</span>
+                        <span class="session-type">${session.type} Session</span>
+                        ${attachableBadge}
+                    </div>
+                    <div class="session-id">#${session.id.substring(0, 8)}</div>
+                    <div class="session-meta">
+                        <span>📝 ${session.message_count} messages</span>
+                        <span>👥 ${session.active_clients} client${session.active_clients !== 1 ? 's' : ''}</span>
+                        <span>🤖 ${session.current_model}</span>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        async function createNewSession() {
+            const loading = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+
+            loading.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/sessions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        config: {
+                            model: 'grn_model',
+                            agents_enabled: false,
+                            stream_responses: true
+                        }
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to create session');
+
+                const data = await response.json();
+                window.location.href = `/session/${data.session_id}`;
+            } catch (error) {
+                errorDiv.textContent = 'Error creating session: ' + error.message;
+                errorDiv.style.display = 'block';
+                loading.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
