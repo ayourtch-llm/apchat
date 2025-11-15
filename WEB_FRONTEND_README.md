@@ -63,7 +63,28 @@ Open your web browser and navigate to:
   - Code search
   - Command execution
   - Terminal/PTY sessions
-  - Tool confirmations handled by existing policy manager
+  - **Interactive tool confirmations** with visual diff viewer
+  - Color-coded file change previews (additions/removals/context)
+
+- **Advanced UI Features**
+  - **Markdown rendering** with syntax highlighting
+    - Powered by marked.js and highlight.js
+    - Toggle between markdown and plain text view
+    - Automatic code block highlighting
+  - **Multi-agent progress visualization**
+    - Real-time progress bars for each agent task
+    - Shows agent name, task description, and completion %
+    - Auto-fades when tasks complete
+  - **Interactive tool confirmation modal**
+    - Shows tool name and arguments
+    - Displays unified diff for file changes
+    - User approval required for destructive operations
+
+- **Progressive Web App (PWA)**
+  - Install as native app on mobile devices
+  - Works offline (when cached)
+  - App-like experience with manifest
+  - Apple/Android optimizations
 
 - **Responsive Design**
   - Works on desktop browsers (Chrome, Firefox, Safari, Edge)
@@ -381,21 +402,28 @@ To customize the web UI:
 3. Rebuild: `cargo build --release`
 4. Changes are embedded via `include_str!` macro
 
+## Implemented Features (Phase 2)
+
+Recently added enhancements:
+
+- [x] **Tool confirmation UI** - Interactive approval dialogs with diff viewer
+- [x] **File diff rendering** - Color-coded unified diffs for file changes
+- [x] **Multi-agent progress visualization** - Real-time progress bars
+- [x] **Progressive Web App (PWA) features** - Manifest and mobile optimizations
+- [x] **Markdown rendering** - Syntax-highlighted markdown with toggle
+
 ## Future Enhancements
 
 Planned features (not yet implemented):
 
 - [ ] TUI session attachment (join running terminal sessions)
-- [ ] Tool confirmation UI (interactive approval dialogs)
-- [ ] File diff rendering (syntax-highlighted diffs)
-- [ ] Multi-agent progress visualization
 - [ ] Session state save/load via web UI
 - [ ] Model switching from web interface
 - [ ] Skill invocation from web UI
 - [ ] Dark/light theme toggle
 - [ ] User authentication
-- [ ] Progressive Web App (PWA) features
 - [ ] Service worker for offline support
+- [ ] PWA app icons (192x192 and 512x512)
 
 ## Performance
 
