@@ -145,6 +145,35 @@
             0%, 50% { opacity: 1; }
             51%, 100% { opacity: 0; }
         }
+
+        /* Mobile responsiveness */
+        @media (max-width: 640px) {
+            header {
+                padding: 0.75rem;
+            }
+            .header-left h1 {
+                font-size: 1rem;
+            }
+            .session-info {
+                font-size: 0.75rem;
+            }
+            .model-badge {
+                font-size: 0.75rem;
+                padding: 3px 8px;
+            }
+            #chatContainer {
+                padding: 1rem;
+            }
+            .message {
+                max-width: 90%;
+            }
+            .input-area {
+                padding: 0.75rem;
+            }
+            #sendBtn {
+                padding: 0.75rem 1rem;
+            }
+        }
     </style>
 </head>
 <body>
