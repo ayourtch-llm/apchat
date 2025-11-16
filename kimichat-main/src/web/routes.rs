@@ -187,8 +187,9 @@ async fn handle_client_message(
             // This is critical: if we await here, the WebSocket reader can't receive
             // confirmation messages because it's blocked waiting for this to complete
             let session_clone = Arc::clone(session);
+            let state_clone = state.clone();
             tokio::spawn(async move {
-                handle_send_message(client_id, content, &session_clone).await;
+                handle_send_message(client_id, content, &session_clone, &state_clone).await;
             });
         }
         ConfirmTool {
@@ -263,6 +264,7 @@ async fn handle_chat_with_broadcast(
 ) -> anyhow::Result<()> {
     const MAX_TOOL_ITERATIONS: usize = 100;
     let mut tool_call_iterations = 0;
+    let session_id = session.id;
 
     loop {
         let kimichat = session.kimichat.lock().await;
@@ -470,6 +472,7 @@ async fn handle_send_message(
     _client_id: Uuid,
     content: String,
     session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
 ) {
     let mut kimichat = session.kimichat.lock().await;
 
@@ -491,6 +494,9 @@ async fn handle_send_message(
     session.broadcast(ServerMessage::UserMessage {
         content: content.clone(),
     }).await;
+
+    // Update session activity timestamp
+    session.update_activity().await;
 
     // Handle based on mode
     if use_agents {
@@ -524,6 +530,12 @@ async fn handle_send_message(
             };
             session.broadcast(error_msg).await;
         }
+    }
+
+    // Save session to disk after processing message
+    let session_id = session.id;
+    if let Err(e) = state.session_manager.save_session(&session_id).await {
+        eprintln!("⚠️  Failed to save session after message: {}", e);
     }
 }
 

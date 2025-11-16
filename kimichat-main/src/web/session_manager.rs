@@ -9,6 +9,8 @@ use uuid::Uuid;
 use crate::config::ClientConfig;
 use kimichat_policy::PolicyManager;
 use crate::web::protocol::{ServerMessage, SessionConfig, SessionInfo};
+use crate::web::persistence::{SessionPersistence, PersistentSession};
+use crate::chat::state::ChatState;
 use crate::KimiChat;
 
 /// Pending tool confirmation
@@ -163,6 +165,7 @@ pub struct SessionManager {
     work_dir: PathBuf,
     client_config: ClientConfig,
     policy_manager: PolicyManager,
+    persistence: Option<SessionPersistence>,
 }
 
 impl SessionManager {
@@ -170,13 +173,52 @@ impl SessionManager {
         work_dir: PathBuf,
         client_config: ClientConfig,
         policy_manager: PolicyManager,
+        sessions_dir: PathBuf,
     ) -> Self {
+        // Create persistence manager, log error if it fails but don't crash
+        let persistence = match SessionPersistence::new(&sessions_dir) {
+            Ok(p) => {
+                println!("📁 Session persistence enabled: {}", sessions_dir.display());
+                Some(p)
+            }
+            Err(e) => {
+                eprintln!("⚠️  Failed to initialize session persistence: {}", e);
+                eprintln!("   Sessions will not be saved to disk");
+                None
+            }
+        };
+
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             work_dir,
             client_config,
             policy_manager,
+            persistence,
         }
+    }
+
+    /// Save a session to disk
+    async fn save_session_to_disk(&self, session: &Arc<Session>) -> Result<()> {
+        if let Some(persistence) = &self.persistence {
+            let kimichat = session.kimichat.lock().await;
+            let last_activity = *session.last_activity.lock().await;
+
+            let chat_state = ChatState::new(
+                kimichat.messages.clone(),
+                kimichat.current_model.clone(),
+                kimichat.total_tokens_used,
+            );
+
+            let persistent_session = PersistentSession {
+                session_id: session.id,
+                chat_state,
+                created_at: session.created_at.to_rfc3339(),
+                last_activity: last_activity.to_rfc3339(),
+            };
+
+            persistence.save_session(&persistent_session)?;
+        }
+        Ok(())
     }
 
     /// Create a new web session
@@ -209,7 +251,12 @@ impl SessionManager {
         ));
 
         // Store session
-        self.sessions.write().await.insert(session_id, session);
+        self.sessions.write().await.insert(session_id, session.clone());
+
+        // Save to disk
+        if let Err(e) = self.save_session_to_disk(&session).await {
+            eprintln!("⚠️  Failed to save session to disk: {}", e);
+        }
 
         Ok(session_id)
     }
@@ -237,7 +284,92 @@ impl SessionManager {
     /// Remove a session
     pub async fn remove_session(&self, session_id: &SessionId) -> Result<()> {
         self.sessions.write().await.remove(session_id);
+
+        // Delete from disk
+        if let Some(persistence) = &self.persistence {
+            if let Err(e) = persistence.delete_session(session_id) {
+                eprintln!("⚠️  Failed to delete session from disk: {}", e);
+            }
+        }
+
         Ok(())
+    }
+
+    /// Save a session to disk (public method for external use)
+    pub async fn save_session(&self, session_id: &SessionId) -> Result<()> {
+        if let Some(session) = self.get_session(session_id).await {
+            self.save_session_to_disk(&session).await
+        } else {
+            Err(anyhow::anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Load all saved sessions from disk
+    pub async fn load_saved_sessions(&self) -> Result<usize> {
+        if let Some(persistence) = &self.persistence {
+            let session_ids = persistence.list_sessions()?;
+            let mut loaded_count = 0;
+
+            for session_id in session_ids {
+                match persistence.load_session(&session_id) {
+                    Ok(persistent_session) => {
+                        // Create KimiChat instance from saved state
+                        let mut kimichat = KimiChat::new_with_config(
+                            self.client_config.clone(),
+                            self.work_dir.clone(),
+                            false, // agents_enabled - default to false for loaded sessions
+                            self.policy_manager.clone(),
+                            false, // stream_responses - default to false
+                            false, // verbose
+                            crate::terminal::TerminalBackendType::Pty,
+                        );
+
+                        // Restore state
+                        kimichat.messages = persistent_session.chat_state.messages;
+                        kimichat.current_model = persistent_session.chat_state.current_model;
+                        kimichat.total_tokens_used = persistent_session.chat_state.total_tokens_used;
+                        kimichat.non_interactive = true;
+
+                        // Parse timestamps
+                        let created_at = match DateTime::parse_from_rfc3339(&persistent_session.created_at) {
+                            Ok(dt) => dt.with_timezone(&Utc),
+                            Err(_) => Utc::now(),
+                        };
+
+                        let last_activity = match DateTime::parse_from_rfc3339(&persistent_session.last_activity) {
+                            Ok(dt) => dt.with_timezone(&Utc),
+                            Err(_) => Utc::now(),
+                        };
+
+                        // Create session with restored state
+                        let mut session = Session::new(
+                            session_id,
+                            SessionType::Web,
+                            kimichat,
+                        );
+
+                        // Update timestamps
+                        session.created_at = created_at;
+                        *session.last_activity.lock().await = last_activity;
+
+                        // Store session
+                        self.sessions.write().await.insert(session_id, Arc::new(session));
+                        loaded_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("⚠️  Failed to load session {}: {}", session_id, e);
+                    }
+                }
+            }
+
+            if loaded_count > 0 {
+                println!("📂 Loaded {} saved session(s)", loaded_count);
+            }
+
+            Ok(loaded_count)
+        } else {
+            Ok(0)
+        }
     }
 
     /// Register a TUI session (for attachment)

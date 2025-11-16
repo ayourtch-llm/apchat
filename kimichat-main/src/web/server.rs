@@ -18,6 +18,7 @@ pub struct WebServerConfig {
     pub client_config: ClientConfig,
     pub policy_manager: PolicyManager,
     pub web_dir: Option<PathBuf>,
+    pub sessions_dir: PathBuf,
 }
 
 /// Web server instance
@@ -33,7 +34,16 @@ impl WebServer {
             config.work_dir.clone(),
             config.client_config.clone(),
             config.policy_manager.clone(),
+            config.sessions_dir.clone(),
         ));
+
+        // Load saved sessions on startup
+        let session_manager_clone = session_manager.clone();
+        tokio::spawn(async move {
+            if let Err(e) = session_manager_clone.load_saved_sessions().await {
+                eprintln!("⚠️  Failed to load saved sessions: {}", e);
+            }
+        });
 
         Self {
             config,

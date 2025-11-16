@@ -146,6 +146,10 @@ pub struct Cli {
     /// Allow TUI session to be attached from web
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub web_attachable: bool,
+
+    /// Directory for persistent web session storage
+    #[arg(long, default_value = "~/.okaychat/sessions", env = "OKAYCHAT_SESSIONS_DIR")]
+    pub sessions_dir: String,
 }
 
 #[derive(Subcommand)]
