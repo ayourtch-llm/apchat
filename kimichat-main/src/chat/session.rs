@@ -35,8 +35,8 @@ pub(crate) async fn chat(
         // Initialize progress evaluator for all operations
         let blu_model_url = crate::config::get_api_url(&chat.client_config, &ModelType::BluModel);
         let blu_model_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &ModelType::BluModel);
-        let mut progress_evaluator = Some(crate::agents::progress_evaluator::ProgressEvaluator::new(
-            std::sync::Arc::new(crate::agents::GroqLlmClient::new(
+        let mut progress_evaluator = Some(kimichat_agents::progress_evaluator::ProgressEvaluator::new(
+            std::sync::Arc::new(kimichat_agents::GroqLlmClient::new(
                 blu_model_key,
                 "kimi".to_string(),
                 blu_model_url,
@@ -47,7 +47,7 @@ pub(crate) async fn chat(
         ));
 
         // Track tool calls for progress evaluation
-        let mut tool_call_history: Vec<crate::agents::progress_evaluator::ToolCallInfo> = Vec::new();
+        let mut tool_call_history: Vec<kimichat_agents::progress_evaluator::ToolCallInfo> = Vec::new();
         let mut files_changed: std::collections::HashSet<String> = std::collections::HashSet::new();
         let start_time = std::time::Instant::now();
         let mut errors_encountered: Vec<String> = Vec::new();
@@ -256,7 +256,7 @@ pub(crate) async fn chat(
                             *tool_usage.entry(call.tool_name.clone()).or_insert(0) += 1;
                         }
 
-                        let summary = crate::agents::progress_evaluator::ToolCallSummary {
+                        let summary = kimichat_agents::progress_evaluator::ToolCallSummary {
                             total_calls: tool_call_iterations as u32,
                             tool_usage,
                             recent_calls: tool_call_history.iter().rev().take(10).cloned().collect(),
@@ -480,7 +480,7 @@ pub(crate) async fn chat(
                         }
                     }
 
-                    let call_info = crate::agents::progress_evaluator::ToolCallInfo {
+                    let call_info = kimichat_agents::progress_evaluator::ToolCallInfo {
                         tool_name: tool_call.function.name.clone(),
                         parameters: tool_call.function.arguments.clone(),
                         success: !result.contains("failed") && !result.contains("cancelled"),

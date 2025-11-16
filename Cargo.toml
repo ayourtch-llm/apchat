@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "kimichat-main",
+    "crates/kimichat-agents",
     "crates/kimichat-models",
     "crates/kimichat-logging",
     "crates/kimichat-llm-api",

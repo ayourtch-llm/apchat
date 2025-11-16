@@ -10,7 +10,6 @@ use clap::Parser;
 
 
 mod preview;
-mod agents;
 mod tools_execution;
 mod cli;
 mod config;
@@ -20,6 +19,10 @@ mod app;
 mod terminal;
 mod web;
 
+use kimichat_agents::{
+    PlanningCoordinator, GroqLlmClient,
+    ChatMessage, ExecutionContext,
+};
 use kimichat_logging::ConversationLogger;
 use kimichat_policy::PolicyManager;
 use kimichat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
@@ -28,10 +31,6 @@ use cli::{Cli, Commands};
 use config::{ClientConfig, GROQ_API_URL, initialize_tool_registry, initialize_agent_system};
 use chat::{save_state, load_state};
 use app::{setup_from_cli, run_task_mode, run_repl_mode};
-use agents::{
-    PlanningCoordinator, GroqLlmClient,
-    ChatMessage, ExecutionContext,
-};
 use kimichat_models::{
     ModelType, Message, ToolCall, FunctionCall,
     SwitchModelArgs,
@@ -285,9 +284,9 @@ impl KimiChat {
                     role: msg.role.clone(),
                     content: msg.content.clone(),
                     tool_calls: msg.tool_calls.clone().map(|calls| {
-                        calls.into_iter().map(|call| crate::agents::agent::ToolCall {
+                        calls.into_iter().map(|call| kimichat_agents::agent::ToolCall {
                             id: call.id,
-                            function: crate::agents::agent::FunctionCall {
+                            function: kimichat_agents::agent::FunctionCall {
                                 name: call.function.name,
                                 arguments: call.function.arguments,
                             },

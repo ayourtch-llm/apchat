@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::agents::agent::Capability;
+use crate::agent::Capability;
 
 /// Agent configuration loaded from JSON
 #[derive(Debug, Clone, Serialize, Deserialize)]
