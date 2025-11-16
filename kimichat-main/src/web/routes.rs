@@ -265,7 +265,7 @@ async fn check_tool_confirmation(
 async fn handle_chat_with_broadcast(
     session: &Arc<crate::web::session_manager::Session>,
 ) -> anyhow::Result<()> {
-    const MAX_TOOL_ITERATIONS: usize = 100;
+    const MAX_TOOL_ITERATIONS: usize = 250;
     let mut tool_call_iterations = 0;
     let session_id = session.id;
 
