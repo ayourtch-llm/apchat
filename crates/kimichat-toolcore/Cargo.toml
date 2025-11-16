@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1.0"
 async-trait = "0.1"
 colored = "2.1"
+kimichat-models = { path = "../kimichat-models" }
 kimichat-policy = { path = "../kimichat-policy" }
 kimichat-skills = { path = "../kimichat-skills" }
 kimichat-terminal = { path = "../kimichat-terminal" }
