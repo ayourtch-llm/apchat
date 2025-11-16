@@ -56,6 +56,11 @@ impl ClientFactory {
                     .or_else(|| env::var("OPENAI_API_KEY").ok())
                     .unwrap_or_default();
 
+                // Ensure we don't fall back to GROQ_API_KEY for OpenAI
+                if key.is_empty() {
+                    panic!("OPENAI_API_KEY must be set when using OpenAI backend");
+                }
+
                 // OpenAI uses the same client as Groq (OpenAI-compatible)
                 Arc::new(GroqLlmClient::new(key, model, url, agent_name))
             }
