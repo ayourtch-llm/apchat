@@ -130,7 +130,7 @@ pub struct ExecutionContext {
     pub llm_client: std::sync::Arc<dyn LlmClient>,
     pub conversation_history: Vec<ChatMessage>,
     pub terminal_manager: Option<std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>>,
-    pub skill_registry: Option<std::sync::Arc<crate::skills::SkillRegistry>>,
+    pub skill_registry: Option<std::sync::Arc<kimichat_skills::SkillRegistry>>,
     pub todo_manager: Option<std::sync::Arc<kimichat_todo::TodoManager>>,
     pub cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }

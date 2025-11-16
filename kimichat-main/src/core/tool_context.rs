@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use kimichat_policy::PolicyManager;
 use crate::terminal::TerminalManager;
-use crate::skills::SkillRegistry;
+use kimichat_skills::SkillRegistry;
 use kimichat_todo::TodoManager;
 
 /// Tool execution context

@@ -21,7 +21,6 @@ mod chat;
 mod api;
 mod app;
 mod terminal;
-mod skills;
 mod web;
 
 use kimichat_logging::ConversationLogger;
@@ -67,7 +66,7 @@ pub(crate) struct KimiChat {
     // Terminal manager
     pub(crate) terminal_manager: Arc<Mutex<TerminalManager>>,
     // Skill registry
-    pub(crate) skill_registry: Option<Arc<skills::SkillRegistry>>,
+    pub(crate) skill_registry: Option<Arc<kimichat_skills::SkillRegistry>>,
     // Non-interactive mode (web/API)
     pub(crate) non_interactive: bool,
     // Todo manager for task tracking
@@ -165,7 +164,7 @@ impl KimiChat {
 
         // Initialize skill registry
         let skills_dir = work_dir.join("skills");
-        let skill_registry = match skills::SkillRegistry::new(skills_dir) {
+        let skill_registry = match kimichat_skills::SkillRegistry::new(skills_dir) {
             Ok(registry) => Some(Arc::new(registry)),
             Err(e) => {
                 eprintln!("{} Failed to load skills: {}", "⚠️".yellow(), e);
