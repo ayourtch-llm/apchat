@@ -51,7 +51,7 @@ impl ClientFactory {
                 Arc::new(GroqLlmClient::new(key, model, url, agent_name))
             }
             BackendType::OpenAI => {
-                let url = api_url.unwrap_or_else(|| OPENAI_API_URL.to_string());
+                let url = api_url.or_else(|| env::var("OPENAI_API_URL").ok()).unwrap_or_else(|| OPENAI_API_URL.to_string());
                 let key = api_key
                     .or_else(|| env::var("OPENAI_API_KEY").ok())
                     .unwrap_or_default();
