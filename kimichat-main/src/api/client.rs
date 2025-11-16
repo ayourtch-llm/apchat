@@ -5,12 +5,11 @@ use tokio::time::sleep;
 
 use crate::KimiChat;
 use kimichat_models::{ModelType, Message, Usage, ChatRequest, ChatResponse};
-use crate::agents::agent::ToolDefinition;
+use kimichat_agents::{ToolDefinition, ChatMessage};
 use kimichat_logging::{log_request, log_request_to_file, log_response};
 use kimichat_logging::safe_truncate;
 use kimichat_toolcore::parse_xml_tool_calls;
 use crate::MAX_RETRIES;
-use crate::agents::agent::ChatMessage;
 
 /// Non-streaming API call for Groq-style APIs
 pub(crate) async fn call_api(
@@ -189,9 +188,9 @@ pub(crate) async fn call_api_with_llm_client(
             role: msg.role.clone(),
             content: msg.content.clone(),
             tool_calls: msg.tool_calls.clone().map(|calls| {
-                calls.into_iter().map(|call| crate::agents::agent::ToolCall {
+                calls.into_iter().map(|call| kimichat_agents::ToolCall {
                     id: call.id,
-                    function: crate::agents::agent::FunctionCall {
+                    function: kimichat_agents::FunctionCall {
                         name: call.function.name,
                         arguments: call.function.arguments,
                     },

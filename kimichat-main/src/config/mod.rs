@@ -2,12 +2,12 @@ use anyhow::Result;
 use colored::Colorize;
 use std::sync::Arc;
 
+use kimichat_agents::{
+    PlanningCoordinator, AgentFactory,
+};
 use kimichat_toolcore::ToolRegistry;
 use kimichat_policy::PolicyManager;
 use kimichat_tools::*;
-use crate::agents::{
-    PlanningCoordinator, AgentFactory,
-};
 use kimichat_models::ModelType;
 
 pub mod helpers;

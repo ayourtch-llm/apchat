@@ -1,0 +1,24 @@
+[package]
+name = "kimichat-agents"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+colored = "2.1"
+futures = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.41", features = ["sync"] }
+tokio-util = "0.7"
+
+# Internal dependencies
+kimichat-llm-api = { path = "../kimichat-llm-api" }
+kimichat-logging = { path = "../kimichat-logging" }
+kimichat-policy = { path = "../kimichat-policy" }
+kimichat-skills = { path = "../kimichat-skills" }
+kimichat-terminal = { path = "../kimichat-terminal" }
+kimichat-todo = { path = "../kimichat-todo" }
+kimichat-toolcore = { path = "../kimichat-toolcore" }

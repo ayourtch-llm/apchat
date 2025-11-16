@@ -5,11 +5,10 @@ use std::io::Write;
 
 use crate::KimiChat;
 use kimichat_models::{ModelType, Message, Usage, ChatRequest, StreamChunk};
-use crate::agents::agent::ToolDefinition;
+use kimichat_agents::{ToolDefinition, ChatMessage};
 use kimichat_logging::{log_request, log_request_to_file, log_response, log_stream_chunk};
 use kimichat_toolcore::parse_xml_tool_calls;
 use crate::{ToolCall, FunctionCall};
-use crate::agents::agent::ChatMessage;
 
 /// Handle streaming API response for Groq-style APIs
 pub(crate) async fn call_api_streaming(
@@ -271,9 +270,9 @@ pub(crate) async fn call_api_streaming_with_llm_client(
             role: msg.role.clone(),
             content: msg.content.clone(),
             tool_calls: msg.tool_calls.clone().map(|calls| {
-                calls.into_iter().map(|call| crate::agents::agent::ToolCall {
+                calls.into_iter().map(|call| kimichat_agents::ToolCall {
                     id: call.id,
-                    function: crate::agents::agent::FunctionCall {
+                    function: kimichat_agents::FunctionCall {
                         name: call.function.name,
                         arguments: call.function.arguments,
                     },

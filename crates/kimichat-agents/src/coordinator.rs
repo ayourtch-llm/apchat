@@ -1,7 +1,7 @@
-use crate::agents::agent::{Agent, Task, TaskType, TaskPriority, AgentResult, ExecutionContext};
-use crate::agents::agent_factory::AgentFactory;
-use crate::agents::agent_config::AgentConfig;
-use crate::agents::visibility::{VisibilityManager, ExecutionPhase};
+use crate::agent::{Agent, Task, TaskType, TaskPriority, AgentResult, ExecutionContext};
+use crate::agent_factory::AgentFactory;
+use crate::agent_config::AgentConfig;
+use crate::visibility::{VisibilityManager, ExecutionPhase};
 use kimichat_logging::safe_truncate;
 use anyhow::Result;
 use std::collections::{HashMap, VecDeque};
@@ -15,7 +15,7 @@ pub struct PlanningCoordinator {
     agent_configs: HashMap<String, AgentConfig>,
     task_queue: Arc<RwLock<VecDeque<Task>>>,
     active_agents: Arc<RwLock<HashMap<String, AgentHandle>>>,
-    conversation_state: Arc<RwLock<Vec<crate::agents::agent::ChatMessage>>>,
+    conversation_state: Arc<RwLock<Vec<crate::agent::ChatMessage>>>,
     visibility_manager: Arc<RwLock<VisibilityManager>>,
 }
 
@@ -572,7 +572,7 @@ impl PlanningCoordinator {
         // Update conversation history
         {
             let mut history = self.conversation_state.write().await;
-            history.push(crate::agents::agent::ChatMessage {
+            history.push(crate::agent::ChatMessage {
                 role: "assistant".to_string(),
                 content: format!("Agent '{}' completed task: {}", agent.name(), task.description),
                 tool_calls: None,

@@ -1,3 +1,12 @@
+//! Agent orchestration system for multi-agent task execution
+//!
+//! This crate provides a comprehensive agent system with:
+//! - Agent trait and execution framework
+//! - Planning coordinator for multi-agent orchestration
+//! - Progress evaluation and monitoring
+//! - Task management and visibility
+//! - Dynamic agent factory with configuration support
+
 pub mod agent;
 pub mod agent_config;
 pub mod agent_factory;

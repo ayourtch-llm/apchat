@@ -41,9 +41,9 @@ pub struct TaskContextBuilder {
     workspace_dir: Option<std::path::PathBuf>,
     session_id: Option<String>,
     tool_registry: Option<std::sync::Arc<kimichat_toolcore::tool_registry::ToolRegistry>>,
-    llm_client: Option<std::sync::Arc<dyn crate::agents::agent::LlmClient>>,
-    conversation_history: Vec<crate::agents::agent::ChatMessage>,
-    terminal_manager: Option<std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>>,
+    llm_client: Option<std::sync::Arc<dyn crate::agent::LlmClient>>,
+    conversation_history: Vec<crate::agent::ChatMessage>,
+    terminal_manager: Option<std::sync::Arc<tokio::sync::Mutex<kimichat_terminal::TerminalManager>>>,
     skill_registry: Option<std::sync::Arc<kimichat_skills::SkillRegistry>>,
     todo_manager: Option<std::sync::Arc<kimichat_todo::TodoManager>>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
@@ -79,17 +79,17 @@ impl TaskContextBuilder {
         self
     }
 
-    pub fn with_llm_client(mut self, client: std::sync::Arc<dyn crate::agents::agent::LlmClient>) -> Self {
+    pub fn with_llm_client(mut self, client: std::sync::Arc<dyn crate::agent::LlmClient>) -> Self {
         self.llm_client = Some(client);
         self
     }
 
-    pub fn with_conversation_history(mut self, history: Vec<crate::agents::agent::ChatMessage>) -> Self {
+    pub fn with_conversation_history(mut self, history: Vec<crate::agent::ChatMessage>) -> Self {
         self.conversation_history = history;
         self
     }
 
-    pub fn with_terminal_manager(mut self, terminal_manager: std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>) -> Self {
+    pub fn with_terminal_manager(mut self, terminal_manager: std::sync::Arc<tokio::sync::Mutex<kimichat_terminal::TerminalManager>>) -> Self {
         self.terminal_manager = Some(terminal_manager);
         self
     }
@@ -104,8 +104,8 @@ impl TaskContextBuilder {
         self
     }
 
-    pub fn build(self) -> Result<crate::agents::agent::ExecutionContext, String> {
-        Ok(crate::agents::agent::ExecutionContext {
+    pub fn build(self) -> Result<crate::agent::ExecutionContext, String> {
+        Ok(crate::agent::ExecutionContext {
             workspace_dir: self.workspace_dir.ok_or("workspace_dir is required")?,
             session_id: self.session_id.ok_or("session_id is required")?,
             tool_registry: self.tool_registry.ok_or("tool_registry is required")?,
@@ -130,62 +130,62 @@ pub struct TaskUtils;
 
 impl TaskUtils {
     /// Create a simple task
-    pub fn simple_task(id: String, description: String) -> crate::agents::agent::Task {
-        crate::agents::agent::Task {
+    pub fn simple_task(id: String, description: String) -> crate::agent::Task {
+        crate::agent::Task {
             id,
             description,
-            task_type: crate::agents::agent::TaskType::Simple,
-            priority: crate::agents::agent::TaskPriority::Medium,
+            task_type: crate::agent::TaskType::Simple,
+            priority: crate::agent::TaskPriority::Medium,
             metadata: HashMap::new(),
         }
     }
 
     /// Create a high-priority task
-    pub fn high_priority_task(id: String, description: String) -> crate::agents::agent::Task {
-        crate::agents::agent::Task {
+    pub fn high_priority_task(id: String, description: String) -> crate::agent::Task {
+        crate::agent::Task {
             id,
             description,
-            task_type: crate::agents::agent::TaskType::Simple,
-            priority: crate::agents::agent::TaskPriority::High,
+            task_type: crate::agent::TaskType::Simple,
+            priority: crate::agent::TaskPriority::High,
             metadata: HashMap::new(),
         }
     }
 
     /// Create a complex task
-    pub fn complex_task(id: String, description: String) -> crate::agents::agent::Task {
-        crate::agents::agent::Task {
+    pub fn complex_task(id: String, description: String) -> crate::agent::Task {
+        crate::agent::Task {
             id,
             description,
-            task_type: crate::agents::agent::TaskType::Complex,
-            priority: crate::agents::agent::TaskPriority::High,
+            task_type: crate::agent::TaskType::Complex,
+            priority: crate::agent::TaskPriority::High,
             metadata: HashMap::new(),
         }
     }
 
     /// Create a sequential task set
-    pub fn sequential_task(id: String, description: String, subtasks: Vec<crate::agents::agent::Task>) -> crate::agents::agent::Task {
-        crate::agents::agent::Task {
+    pub fn sequential_task(id: String, description: String, subtasks: Vec<crate::agent::Task>) -> crate::agent::Task {
+        crate::agent::Task {
             id,
             description,
-            task_type: crate::agents::agent::TaskType::Sequential(subtasks),
-            priority: crate::agents::agent::TaskPriority::High,
+            task_type: crate::agent::TaskType::Sequential(subtasks),
+            priority: crate::agent::TaskPriority::High,
             metadata: HashMap::new(),
         }
     }
 
     /// Create a parallel task set
-    pub fn parallel_task(id: String, description: String, subtasks: Vec<crate::agents::agent::Task>) -> crate::agents::agent::Task {
-        crate::agents::agent::Task {
+    pub fn parallel_task(id: String, description: String, subtasks: Vec<crate::agent::Task>) -> crate::agent::Task {
+        crate::agent::Task {
             id,
             description,
-            task_type: crate::agents::agent::TaskType::Parallel(subtasks),
-            priority: crate::agents::agent::TaskPriority::High,
+            task_type: crate::agent::TaskType::Parallel(subtasks),
+            priority: crate::agent::TaskPriority::High,
             metadata: HashMap::new(),
         }
     }
 
     /// Add metadata to a task
-    pub fn with_metadata(mut task: crate::agents::agent::Task, key: String, value: String) -> crate::agents::agent::Task {
+    pub fn with_metadata(mut task: crate::agent::Task, key: String, value: String) -> crate::agent::Task {
         task.metadata.insert(key, value);
         task
     }

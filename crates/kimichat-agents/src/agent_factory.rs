@@ -1,5 +1,5 @@
-use crate::agents::agent::{Agent, ExecutionContext, LlmClient};
-use crate::agents::agent_config::AgentConfig;
+use crate::agent::{Agent, ExecutionContext, LlmClient};
+use crate::agent_config::AgentConfig;
 use kimichat_logging::safe_truncate;
 use kimichat_toolcore::tool_registry::ToolRegistry;
 use anyhow::Result;
@@ -85,9 +85,9 @@ impl ConfigurableAgent {
 
     async fn execute_with_tools(
         &self,
-        task: &crate::agents::agent::Task,
+        task: &crate::agent::Task,
         context: &ExecutionContext,
-    ) -> crate::agents::agent::AgentResult {
+    ) -> crate::agent::AgentResult {
         let start_time = std::time::Instant::now();
 
         // Prepare tools for this agent
@@ -108,7 +108,7 @@ impl ConfigurableAgent {
                 // Extract just the parameters schema from the full definition
                 let parameters = openai_def["function"]["parameters"].clone();
 
-                crate::agents::agent::ToolDefinition {
+                crate::agent::ToolDefinition {
                     name: tool.name().to_string(),
                     description: tool.description().to_string(),
                     parameters,
@@ -154,7 +154,7 @@ impl ConfigurableAgent {
                  &self.config.system_prompt.chars().take(200).collect::<String>());
 
         let mut messages = vec![
-            crate::agents::agent::ChatMessage {
+            crate::agent::ChatMessage {
                 role: "system".to_string(),
                 content: enhanced_system_prompt,
                 tool_calls: None,
@@ -184,7 +184,7 @@ impl ConfigurableAgent {
             task.description
         );
 
-        messages.push(crate::agents::agent::ChatMessage {
+        messages.push(crate::agent::ChatMessage {
             role: "user".to_string(),
             content: task_with_skill_reminder,
             tool_calls: None,
@@ -202,7 +202,7 @@ impl ConfigurableAgent {
                 if token.is_cancelled() {
                     eprintln!("[DEBUG] Agent '{}' iteration {} cancelled by user", self.config.name, iteration);
                     let elapsed = start_time.elapsed();
-                    return crate::agents::agent::AgentResult {
+                    return crate::agent::AgentResult {
                         success: false,
                         content: "Task cancelled by user".to_string(),
                         task_id: task.id.clone(),
@@ -226,7 +226,7 @@ impl ConfigurableAgent {
             if iteration >= max_iterations - 3 {
                 let remaining = max_iterations - iteration;
                 let urgency = if remaining <= 2 { "🚨 CRITICAL" } else { "⚠️ WARNING" };
-                current_messages.push(crate::agents::agent::ChatMessage {
+                current_messages.push(crate::agent::ChatMessage {
                     role: "system".to_string(),
                     content: format!(
                         "{}: Only {} iteration(s) remain before maximum limit!\n\n\
@@ -256,7 +256,7 @@ impl ConfigurableAgent {
                     _ = token.cancelled() => {
                         eprintln!("[DEBUG] LLM call interrupted by user (Ctrl-C)");
                         let elapsed = start_time.elapsed();
-                        return crate::agents::agent::AgentResult {
+                        return crate::agent::AgentResult {
                             success: false,
                             content: "Task interrupted during LLM call".to_string(),
                             task_id: task.id.clone(),
@@ -287,7 +287,7 @@ impl ConfigurableAgent {
                                 if token.is_cancelled() {
                                     eprintln!("[DEBUG] Agent '{}' tool execution cancelled by user", self.config.name);
                                     let elapsed = start_time.elapsed();
-                                    return crate::agents::agent::AgentResult {
+                                    return crate::agent::AgentResult {
                                         success: false,
                                         content: "Task cancelled by user during tool execution".to_string(),
                                         task_id: task.id.clone(),
@@ -383,7 +383,7 @@ impl ConfigurableAgent {
                                 tool_result.error.unwrap_or_else(|| "Unknown error".to_string())
                             };
 
-                            messages.push(crate::agents::agent::ChatMessage {
+                            messages.push(crate::agent::ChatMessage {
                                 role: "tool".to_string(),
                                 content: tool_result_content,
                                 tool_calls: None,
@@ -399,7 +399,7 @@ impl ConfigurableAgent {
                         // No tool calls - return final response
                         println!("{} LLM returned final response (length: {})", "✅".green(), response.message.content.len());
                         let execution_time = start_time.elapsed().as_millis() as u64;
-                        return crate::agents::agent::AgentResult::success(
+                        return crate::agent::AgentResult::success(
                             response.message.content,
                             task.id.clone(),
                             self.name().to_string(),
@@ -409,7 +409,7 @@ impl ConfigurableAgent {
                 }
                 Err(e) => {
                     let execution_time = start_time.elapsed().as_millis() as u64;
-                    return crate::agents::agent::AgentResult::error(
+                    return crate::agent::AgentResult::error(
                         format!("LLM execution failed: {}", e),
                         task.id.clone(),
                         self.name().to_string(),
@@ -421,7 +421,7 @@ impl ConfigurableAgent {
 
         // Max iterations reached
         let execution_time = start_time.elapsed().as_millis() as u64;
-        crate::agents::agent::AgentResult::error(
+        crate::agent::AgentResult::error(
             format!("Max iterations ({}) reached without final response", max_iterations),
             task.id.clone(),
             self.name().to_string(),
@@ -440,11 +440,11 @@ impl Agent for ConfigurableAgent {
         &self.config.description
     }
 
-    fn capabilities(&self) -> Vec<crate::agents::agent::Capability> {
+    fn capabilities(&self) -> Vec<crate::agent::Capability> {
         self.config.capabilities()
     }
 
-    fn can_handle(&self, task: &crate::agents::agent::Task) -> bool {
+    fn can_handle(&self, task: &crate::agent::Task) -> bool {
         // Check if we have the required tools for this task
         // For now, use a simple heuristic based on task description
         let task_desc = task.description.to_lowercase();
@@ -469,7 +469,7 @@ impl Agent for ConfigurableAgent {
         true // Default to can handle
     }
 
-    async fn execute(&self, task: crate::agents::agent::Task, context: &ExecutionContext) -> crate::agents::agent::AgentResult {
+    async fn execute(&self, task: crate::agent::Task, context: &ExecutionContext) -> crate::agent::AgentResult {
         self.execute_with_tools(&task, context).await
     }
 
