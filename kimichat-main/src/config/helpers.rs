@@ -105,15 +105,33 @@ pub fn get_api_key(client_config: &ClientConfig, api_key: &str, model: &ModelTyp
                 .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
                 .unwrap_or_else(|_| api_key.to_string())
         }
-        ModelType::Custom(_) => {
-            // For custom models, default to the first available override or default key
-            client_config
-                .api_key_blu_model
-                .as_ref()
-                .or(client_config.api_key_grn_model.as_ref())
-                .or(client_config.api_key_red_model.as_ref())
-                .map(|s| s.clone())
-                .unwrap_or_else(|| api_key.to_string())
+        ModelType::Custom(ref name) => {
+            // For custom models, check if it's an OpenAI model or Anthropic model, otherwise use per-model keys
+            if name.contains("claude") || name.contains("anthropic") {
+                // For Anthropic custom models, look for Anthropic-specific keys
+                env::var("ANTHROPIC_API_KEY")
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
+                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
+                    .unwrap_or_else(|_| api_key.to_string())
+            } else if name.contains("openai") || name.contains("gpt") {
+                // For OpenAI custom models, look for OpenAI-specific keys with per-model precedence
+                env::var("OPENAI_API_KEY")
+                    .or_else(|_| env::var("OPENAI_API_KEY_BLU"))
+                    .or_else(|_| env::var("OPENAI_API_KEY_GRN"))
+                    .or_else(|_| env::var("OPENAI_API_KEY_RED"))
+                    .unwrap_or_else(|_| api_key.to_string())
+            } else {
+                // For other custom models, default to the first available override or default key
+                client_config
+                    .api_key_blu_model
+                    .as_ref()
+                    .or(client_config.api_key_grn_model.as_ref())
+                    .or(client_config.api_key_red_model.as_ref())
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|| api_key.to_string())
+            }
         }
     }
 }
