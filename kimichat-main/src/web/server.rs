@@ -63,7 +63,7 @@ impl WebServer {
             if web_dir.exists() {
                 println!("Serving static files from: {}", web_dir.display());
                 let serve_dir = ServeDir::new(web_dir);
-                app = app.nest_service("/static", serve_dir);
+                app = app.fallback_service(serve_dir);
             }
         }
 

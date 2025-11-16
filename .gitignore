@@ -2,6 +2,9 @@
 /target/
 Cargo.lock
 
+# WASM build artifacts
+/web/pkg/
+
 # Environment variables
 .env
 
