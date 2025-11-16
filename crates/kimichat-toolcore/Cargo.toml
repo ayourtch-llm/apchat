@@ -1,0 +1,16 @@
+[package]
+name = "kimichat-toolcore"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+colored = "2.1"
+kimichat-policy = { path = "../kimichat-policy" }
+kimichat-skills = { path = "../kimichat-skills" }
+kimichat-terminal = { path = "../kimichat-terminal" }
+kimichat-todo = { path = "../kimichat-todo" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.41", features = ["sync"] }

@@ -40,7 +40,7 @@ pub enum DependencyType {
 pub struct TaskContextBuilder {
     workspace_dir: Option<std::path::PathBuf>,
     session_id: Option<String>,
-    tool_registry: Option<std::sync::Arc<crate::core::tool_registry::ToolRegistry>>,
+    tool_registry: Option<std::sync::Arc<kimichat_toolcore::tool_registry::ToolRegistry>>,
     llm_client: Option<std::sync::Arc<dyn crate::agents::agent::LlmClient>>,
     conversation_history: Vec<crate::agents::agent::ChatMessage>,
     terminal_manager: Option<std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>>,
@@ -74,7 +74,7 @@ impl TaskContextBuilder {
         self
     }
 
-    pub fn with_tool_registry(mut self, registry: std::sync::Arc<crate::core::tool_registry::ToolRegistry>) -> Self {
+    pub fn with_tool_registry(mut self, registry: std::sync::Arc<kimichat_toolcore::tool_registry::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
         self
     }

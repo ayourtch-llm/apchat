@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use std::collections::HashMap;
 
-use crate::{param, core::tool::{Tool, ToolParameters, ToolResult, ParameterDefinition}};
-use crate::core::tool_context::ToolContext;
+use kimichat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefinition};
+use kimichat_toolcore::tool_context::ToolContext;
 use kimichat_todo::{Task, TaskStatus};
 
 /// Tool for managing the todo list

@@ -102,7 +102,7 @@ pub trait Tool: Send + Sync {
     fn parameters(&self) -> HashMap<String, ParameterDefinition>;
 
     /// Execute the tool
-    async fn execute(&self, params: ToolParameters, context: &crate::core::tool_context::ToolContext) -> ToolResult;
+    async fn execute(&self, params: ToolParameters, context: &crate::tool_context::ToolContext) -> ToolResult;
 
     /// Get OpenAI-compatible tool definition
     fn to_openai_definition(&self) -> serde_json::Value {

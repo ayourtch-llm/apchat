@@ -2,7 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 use std::sync::Arc;
 
-use crate::core::ToolRegistry;
+use kimichat_toolcore::ToolRegistry;
 use kimichat_policy::PolicyManager;
 use crate::tools::*;
 use crate::terminal::*;

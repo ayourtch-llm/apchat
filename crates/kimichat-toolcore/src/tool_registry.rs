@@ -114,7 +114,7 @@ impl Default for ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::tool::ParameterDefinition;
+    use crate::tool::ParameterDefinition;
 
     struct MockTool {
         name: String,

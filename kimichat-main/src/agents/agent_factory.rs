@@ -1,7 +1,7 @@
 use crate::agents::agent::{Agent, ExecutionContext, LlmClient};
 use crate::agents::agent_config::AgentConfig;
 use kimichat_logging::safe_truncate;
-use crate::core::tool_registry::ToolRegistry;
+use kimichat_toolcore::tool_registry::ToolRegistry;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -322,9 +322,9 @@ impl ConfigurableAgent {
 
                             let tool_result = if let Some(tool) = self.tool_registry.get_tool(tool_name) {
                                 // Parse arguments and execute
-                                match crate::core::ToolParameters::from_json(tool_args) {
+                                match kimichat_toolcore::ToolParameters::from_json(tool_args) {
                                     Ok(params) => {
-                                        let mut tool_context = crate::core::tool_context::ToolContext::new(
+                                        let mut tool_context = kimichat_toolcore::tool_context::ToolContext::new(
                                             context.workspace_dir.clone(),
                                             context.session_id.clone(),
                                             self.policy_manager.clone(),
@@ -341,11 +341,11 @@ impl ConfigurableAgent {
                                         tool.execute(params, &tool_context).await
                                     }
                                     Err(e) => {
-                                        crate::core::tool::ToolResult::error(format!("Failed to parse tool arguments: {}", e))
+                                        kimichat_toolcore::ToolResult::error(format!("Failed to parse tool arguments: {}", e))
                                     }
                                 }
                             } else {
-                                crate::core::tool::ToolResult::error(format!("Tool '{}' not found", tool_name))
+                                kimichat_toolcore::ToolResult::error(format!("Tool '{}' not found", tool_name))
                             };
 
                             let result_preview = if tool_result.success {

@@ -11,7 +11,6 @@ use clap::Parser;
 
 mod open_file;
 mod preview;
-mod core;
 mod tools;
 mod agents;
 mod tools_execution;
@@ -26,8 +25,7 @@ mod web;
 use kimichat_logging::ConversationLogger;
 use kimichat_policy::PolicyManager;
 use kimichat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
-use core::{ToolRegistry, ToolParameters};
-use core::tool_context::ToolContext;
+use kimichat_toolcore::{ToolRegistry, ToolParameters, ToolContext};
 use cli::{Cli, Commands};
 use config::{ClientConfig, GROQ_API_URL, initialize_tool_registry, initialize_agent_system};
 use chat::{save_state, load_state};

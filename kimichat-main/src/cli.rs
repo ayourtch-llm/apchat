@@ -5,8 +5,8 @@ use std::env;
 use std::future::Future;
 use std::pin::Pin;
 
-use crate::core::tool::{Tool, ToolParameters};
-use crate::core::tool_context::ToolContext;
+use kimichat_toolcore::{Tool, ToolParameters};
+use kimichat_toolcore::tool_context::ToolContext;
 use kimichat_policy::PolicyManager;
 use crate::tools::file_ops::*;
 use crate::tools::system::*;

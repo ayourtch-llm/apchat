@@ -1,4 +1,4 @@
-use crate::core::tool_registry::ToolRegistry;
+use kimichat_toolcore::tool_registry::ToolRegistry;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

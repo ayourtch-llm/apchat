@@ -7,5 +7,6 @@ members = [
     "crates/kimichat-policy",
     "crates/kimichat-skills",
     "crates/kimichat-terminal",
+    "crates/kimichat-toolcore",
 ]
 resolver = "2"
