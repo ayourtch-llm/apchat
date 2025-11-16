@@ -545,9 +545,19 @@ impl ChatApp {
         if let Ok(Some(btn)) = document.query_selector(&format!("button.confirm[data-tool-id='{}']", tool_id)) {
             let tool_id_clone = tool_id.clone();
             let sink_clone = sink.clone();
+            let doc_clone = document.clone();
             let closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
                 let tool_id = tool_id_clone.clone();
                 let sink = sink_clone.clone();
+                let doc = doc_clone.clone();
+
+                // Update UI immediately
+                if let Ok(Some(tool_elem)) = doc.query_selector(&format!("#tool-{}", tool_id)) {
+                    if let Ok(Some(actions)) = tool_elem.query_selector(".tool-confirmation-actions") {
+                        actions.set_inner_html(r#"<div class="tool-status confirmed">✓ Confirmed - Executing...</div>"#);
+                    }
+                }
+
                 wasm_bindgen_futures::spawn_local(async move {
                     let msg = ClientMessage::ConfirmTool {
                         tool_call_id: tool_id,
@@ -567,9 +577,19 @@ impl ChatApp {
         if let Ok(Some(btn)) = document.query_selector(&format!("button.deny[data-tool-id='{}']", tool_id)) {
             let tool_id_clone = tool_id.clone();
             let sink_clone = sink.clone();
+            let doc_clone = document.clone();
             let closure = Closure::wrap(Box::new(move |_event: web_sys::Event| {
                 let tool_id = tool_id_clone.clone();
                 let sink = sink_clone.clone();
+                let doc = doc_clone.clone();
+
+                // Update UI immediately
+                if let Ok(Some(tool_elem)) = doc.query_selector(&format!("#tool-{}", tool_id)) {
+                    if let Ok(Some(actions)) = tool_elem.query_selector(".tool-confirmation-actions") {
+                        actions.set_inner_html(r#"<div class="tool-status denied">✗ Denied</div>"#);
+                    }
+                }
+
                 wasm_bindgen_futures::spawn_local(async move {
                     let msg = ClientMessage::ConfirmTool {
                         tool_call_id: tool_id,
@@ -597,9 +617,15 @@ impl ChatApp {
         formatted_result: Option<String>,
     ) -> Result<(), JsValue> {
         if let Some(tool_element) = document.get_element_by_id(&format!("tool-{}", tool_call_id)) {
-            // Remove confirmation buttons if present
-            if let Some(confirmation) = tool_element.query_selector(".tool-confirmation")? {
+            // Remove confirmation buttons/status if present
+            if let Ok(Some(confirmation)) = tool_element.query_selector(".tool-confirmation") {
                 confirmation.remove();
+            }
+            if let Ok(Some(actions)) = tool_element.query_selector(".tool-confirmation-actions") {
+                actions.remove();
+            }
+            if let Ok(Some(status)) = tool_element.query_selector(".tool-status") {
+                status.remove();
             }
 
             // Add result
