@@ -483,6 +483,9 @@ async fn handle_send_message(
         reasoning: None,
     });
 
+    // Capture the use_agents flag before dropping the lock
+    let use_agents = kimichat.use_agents;
+
     // Broadcast user message to all clients in this session
     drop(kimichat); // Release lock before broadcast
     session.broadcast(ServerMessage::UserMessage {
@@ -490,9 +493,8 @@ async fn handle_send_message(
     }).await;
 
     // Handle based on mode
-    if kimichat.use_agents {
+    if use_agents {
         // Multi-agent mode - use existing process_with_agents
-        drop(kimichat); // Release lock before async call
         match session.kimichat.lock().await
             .process_with_agents(&content, None)
             .await
@@ -515,7 +517,6 @@ async fn handle_send_message(
         }
     } else {
         // Single LLM mode - use custom loop with broadcasts
-        drop(kimichat); // Release lock
         if let Err(e) = handle_chat_with_broadcast(session).await {
             let error_msg = ServerMessage::Error {
                 message: format!("Chat failed: {}", e),
