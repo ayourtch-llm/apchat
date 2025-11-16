@@ -1,6 +1,3 @@
-// Tools execution module - tool parsing, execution, and validation
-pub mod parsing;
+// Tools execution module - tool validation
+// Note: Tool parsing (parse_xml_tool_calls) has been moved to kimichat-toolcore
 pub mod validation;
-
-// Re-export commonly used functions
-pub use parsing::parse_xml_tool_calls;

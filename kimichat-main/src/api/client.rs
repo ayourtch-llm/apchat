@@ -9,7 +9,7 @@ use kimichat_models::{ModelType, Message, Usage, ChatRequest, ChatResponse};
 use crate::agents::agent::ToolDefinition;
 use kimichat_logging::{log_request, log_request_to_file, log_response};
 use kimichat_logging::safe_truncate;
-use crate::tools_execution::parse_xml_tool_calls;
+use kimichat_toolcore::parse_xml_tool_calls;
 use crate::MAX_RETRIES;
 use crate::agents::agent::ChatMessage;
 
