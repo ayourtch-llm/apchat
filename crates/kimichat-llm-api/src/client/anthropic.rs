@@ -3,10 +3,12 @@ use anyhow::{Result, Context};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::fs;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use futures::Stream;
 use futures::StreamExt;
 use async_stream::stream;
+use kimichat_logging::get_logs_dir;
 
 /// Anthropic LLM client implementation using native Anthropic API
 pub struct AnthropicLlmClient {
@@ -436,8 +438,8 @@ impl AnthropicLlmClient {
     }
 
     fn log_request_to_file(&self, url: &str, request: &serde_json::Value) -> Result<()> {
-        // Create logs directory if it doesn't exist
-        fs::create_dir_all("logs")?;
+        // Use centralized logs directory
+        let logs_dir: PathBuf = get_logs_dir()?;
 
         // Generate timestamp for filename
         let timestamp = SystemTime::now()
@@ -447,7 +449,7 @@ impl AnthropicLlmClient {
 
         // Create filename with timestamp and model name
         let model_name = self.model.replace('/', "-");
-        let filename = format!("logs/req-{}-{}-agent-{}.txt", timestamp, model_name, self.agent_name);
+        let filename = logs_dir.join(format!("req-{}-{}-agent-{}.txt", timestamp, model_name, self.agent_name));
 
         // Build the log content
         let mut log_content = String::new();
@@ -489,7 +491,7 @@ impl AnthropicLlmClient {
 
         // Write to file
         fs::write(&filename, log_content)
-            .with_context(|| format!("Failed to write request log to {}", filename))?;
+            .with_context(|| format!("Failed to write request log to {}", filename.display()))?;
 
         Ok(())
     }

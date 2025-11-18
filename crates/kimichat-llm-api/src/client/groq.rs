@@ -2,7 +2,9 @@ use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUs
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use std::fs;
+use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use kimichat_logging::get_logs_dir;
 
 /// Groq LLM client implementation (OpenAI-compatible API)
 pub struct GroqLlmClient {
@@ -127,8 +129,8 @@ impl LlmClient for GroqLlmClient {
 
 impl GroqLlmClient {
     fn log_request_to_file(&self, url: &str, request: &serde_json::Value) -> Result<()> {
-        // Create logs directory if it doesn't exist
-        fs::create_dir_all("logs")?;
+        // Use centralized logs directory
+        let logs_dir: PathBuf = get_logs_dir()?;
 
         // Generate timestamp for filename
         let timestamp = SystemTime::now()
@@ -138,7 +140,7 @@ impl GroqLlmClient {
 
         // Create filename with timestamp and model name
         let model_name = self.model.replace('/', "-");
-        let filename = format!("logs/req-{}-{}-agent-{}.txt", timestamp, model_name, self.agent_name);
+        let filename = logs_dir.join(format!("req-{}-{}-agent-{}.txt", timestamp, model_name, self.agent_name));
 
         // Build the log content
         let mut log_content = String::new();
@@ -179,7 +181,7 @@ impl GroqLlmClient {
 
         // Write to file
         fs::write(&filename, log_content)
-            .with_context(|| format!("Failed to write request log to {}", filename))?;
+            .with_context(|| format!("Failed to write request log to {}", filename.display()))?;
 
         Ok(())
     }
