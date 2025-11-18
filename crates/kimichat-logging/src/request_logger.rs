@@ -4,7 +4,7 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use kimichat_models::{ChatRequest, ModelType};
-use crate::safe_truncate;
+use crate::{safe_truncate, get_logs_dir};
 
 /// Log HTTP request details for debugging (console output)
 pub fn log_request(url: &str, request: &ChatRequest, api_key: &str, verbose: bool) {
@@ -52,8 +52,8 @@ pub fn log_request(url: &str, request: &ChatRequest, api_key: &str, verbose: boo
 
 /// Log HTTP request to file for persistent debugging
 pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, api_key: &str) -> Result<()> {
-    // Create logs directory if it doesn't exist
-    fs::create_dir_all("logs")?;
+    // Use shared logs directory from utility function
+    let logs_dir = get_logs_dir()?;
 
     // Generate timestamp for filename
     let timestamp = SystemTime::now()
@@ -63,7 +63,8 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
 
     // Create filename with timestamp and model name
     let model_name = model.as_str_default().replace('/', "-");
-    let filename = format!("logs/req-{}-{}.txt", timestamp, model_name);
+    let filename = format!("req-{}-{}.txt", timestamp, model_name);
+    let file_path = logs_dir.join(filename);
 
     // Build the log content
     let mut log_content = String::new();
@@ -102,8 +103,8 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
     }
 
     // Write to file
-    fs::write(&filename, log_content)
-        .with_context(|| format!("Failed to write request log to {}", filename))?;
+    fs::write(&file_path, log_content)
+        .with_context(|| format!("Failed to write request log to {}", file_path.display()))?;
 
     Ok(())
 }

@@ -3,6 +3,7 @@ use anyhow::{Result, Context};
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 use std::sync::Mutex;
 use std::path::PathBuf;
+use kimichat_logging::get_okaychat_dir;
 use super::EmbeddingBackend;
 
 /// FastEmbed-based embedding backend
@@ -17,13 +18,9 @@ impl FastEmbedBackend {
     /// Get or create the cache directory for FastEmbed models
     /// Returns ~/.okaychat/fastembed
     fn get_cache_dir() -> Result<PathBuf> {
-        let home_dir = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .context("Failed to get home directory")?;
-
-        let cache_dir = PathBuf::from(home_dir)
-            .join(".okaychat")
-            .join("fastembed");
+        // Use shared utility function to get base okaychat directory
+        let okaychat_dir = get_okaychat_dir()?;
+        let cache_dir = okaychat_dir.join("fastembed");
 
         // Create directory if it doesn't exist
         if !cache_dir.exists() {

@@ -3,8 +3,9 @@ use serde::Serialize;
 use serde_json;
 use anyhow::Result;
 use std::path::{Path, PathBuf};
-use tokio::fs::{self, OpenOptions};
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncWriteExt;
+use crate::get_logs_dir;
 
 #[derive(Serialize)]
 struct ToolCallInfo {
@@ -44,13 +45,9 @@ pub struct ConversationLogger {
 
 impl ConversationLogger {
     /// Create a new logger; generates the file name based on the current local time.
-    pub async fn new(workspace: &Path) -> Result<Self> {
-        // Ensure workspace exists
-        fs::create_dir_all(workspace).await?;
-
-        // Create logs subdirectory if it doesn't exist
-        let logs_dir = workspace.join("logs");
-        fs::create_dir_all(&logs_dir).await?;
+    pub async fn new(_workspace: &Path) -> Result<Self> {
+        // Use shared logs directory from utility function
+        let logs_dir = get_logs_dir()?;
 
         let now_local = Local::now();
         let filename = format!(
@@ -67,13 +64,9 @@ impl ConversationLogger {
     }
 
     /// Create a new logger for task mode; generates the file name with "-task" suffix.
-    pub async fn new_task_mode(workspace: &Path) -> Result<Self> {
-        // Ensure workspace exists
-        fs::create_dir_all(workspace).await?;
-
-        // Create logs subdirectory if it doesn't exist
-        let logs_dir = workspace.join("logs");
-        fs::create_dir_all(&logs_dir).await?;
+    pub async fn new_task_mode(_workspace: &Path) -> Result<Self> {
+        // Use shared logs directory from utility function
+        let logs_dir = get_logs_dir()?;
 
         let now_local = Local::now();
         let filename = format!(
