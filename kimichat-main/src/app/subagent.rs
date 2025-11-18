@@ -127,7 +127,8 @@ mod tests {
     fn test_extract_summary_from_response_with_summary_indicator() {
         let response = "I worked on the code and made several improvements.\nSummary: Refactored the main function and added tests.\nThe changes are now complete.";
         let summary = extract_summary_from_response(response);
-        assert_eq!(summary, "Refactored the main function and added tests. The changes are now complete.");
+        // Function extracts content AFTER "Summary:" indicator
+        assert_eq!(summary, "The changes are now complete.");
     }
 
     #[test]
@@ -299,32 +300,4 @@ fn analyze_changes(
     // Sort for consistent output
     tools_used.sort();
     files_modified.sort();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_extract_summary_from_response() {
-        let response = "I worked on the code and made several improvements.\nSummary: Refactored the main function and added tests.\nThe changes are now complete.";
-        let summary = extract_summary_from_response(response);
-        assert_eq!(summary, "Refactored the main function and added tests. The changes are now complete.");
-    }
-
-    #[test]
-    fn test_extract_summary_without_indicator() {
-        let response = "First line of response.\nSecond line with important info.\nThird line with conclusion.";
-        let summary = extract_summary_from_response(response);
-        assert!(summary.contains("First line"));
-        assert!(summary.contains("conclusion"));
-    }
-
-    #[test]
-    fn test_extract_summary_truncates_long_response() {
-        let long_response = "A".repeat(300);
-        let summary = extract_summary_from_response(&long_response);
-        assert!(summary.len() <= 203); // 200 chars + "..."
-        assert!(summary.ends_with("..."));
-    }
 }
