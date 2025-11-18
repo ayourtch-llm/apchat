@@ -32,7 +32,7 @@ pub(crate) async fn repair_tool_call_with_model(
 
     // Create a simple repair request using Kimi (fast and good at structured output)
     let repair_request = ChatRequest {
-        model: ModelType::BluModel.as_str().to_string(),
+        model: ModelType::BluModel.as_str_default().to_string(),
         messages: vec![
             Message {
                 role: "system".to_string(),

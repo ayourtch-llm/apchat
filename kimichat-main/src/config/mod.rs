@@ -112,12 +112,21 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
     let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
 
     // Determine model names with overrides
-    let blu_model = client_config.model_blu_model_override.clone()
-        .unwrap_or_else(|| ModelType::BluModel.as_str());
-    let grn_model = client_config.model_grn_model_override.clone()
-        .unwrap_or_else(|| ModelType::GrnModel.as_str());
-    let red_model = client_config.model_red_model_override.clone()
-        .unwrap_or_else(|| ModelType::RedModel.as_str());
+    let blu_model = ModelType::BluModel.as_str(
+        client_config.model_blu_model_override.as_deref(),
+        client_config.model_grn_model_override.as_deref(),
+        client_config.model_red_model_override.as_deref()
+    );
+    let grn_model = ModelType::GrnModel.as_str(
+        client_config.model_blu_model_override.as_deref(),
+        client_config.model_grn_model_override.as_deref(),
+        client_config.model_red_model_override.as_deref()
+    );
+    let red_model = ModelType::RedModel.as_str(
+        client_config.model_blu_model_override.as_deref(),
+        client_config.model_grn_model_override.as_deref(),
+        client_config.model_red_model_override.as_deref()
+    );
 
     // Register LLM clients based on per-model configuration
     // Use the centralized helper function to create clients for all three models

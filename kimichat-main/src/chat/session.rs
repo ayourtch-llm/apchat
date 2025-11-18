@@ -392,7 +392,7 @@ pub(crate) async fn chat(
                         eprintln!("[DEBUG] Logging {} tool calls", tool_call_info.len());
                     }
 
-                    let model_name = chat.current_model.as_str();
+                    let model_name = chat.current_model.as_str_default();
                     logger.log_with_tool_calls(
                         "assistant",
                         &response.content,

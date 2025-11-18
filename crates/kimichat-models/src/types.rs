@@ -11,12 +11,34 @@ pub enum ModelType {
 }
 
 impl ModelType {
-    pub fn as_str(&self) -> String {
+    pub fn as_str_default(&self) -> String {
         match self {
             ModelType::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelType::GrnModel => "openai/gpt-oss-120b".to_string(),
             ModelType::RedModel => "meta-llama/llama-3.1-70b-versatile".to_string(),
             ModelType::AnthropicModel => "claude-3-5-sonnet-20241022".to_string(),
+            ModelType::Custom(name) => name.clone(),
+        }
+    }
+
+    /// Get model identifier with optional overrides
+    pub fn as_str(
+        &self,
+        blu_model_override: Option<&str>,
+        grn_model_override: Option<&str>,
+        red_model_override: Option<&str>,
+    ) -> String {
+        match self {
+            ModelType::BluModel => blu_model_override
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| self.as_str_default()),
+            ModelType::GrnModel => grn_model_override
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| self.as_str_default()),
+            ModelType::RedModel => red_model_override
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| self.as_str_default()),
+            ModelType::AnthropicModel => self.as_str_default(), // No override available
             ModelType::Custom(name) => name.clone(),
         }
     }
@@ -36,7 +58,9 @@ impl ModelType {
             "blu_model" | "blu-model" | "blumodel" => ModelType::BluModel,
             "grn_model" | "grn-model" | "grnmodel" => ModelType::GrnModel,
             "red_model" | "red-model" | "redmodel" => ModelType::RedModel,
-            "anthropic" | "claude" | "anthropic_model" | "anthropic-model" => ModelType::AnthropicModel,
+            "anthropic" | "claude" | "anthropic_model" | "anthropic-model" => {
+                ModelType::AnthropicModel
+            }
             _ => ModelType::Custom(s.to_string()),
         }
     }
@@ -44,7 +68,7 @@ impl ModelType {
 
 impl std::str::FromStr for ModelType {
     type Err = String;
-    
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(ModelType::from_string(s))
     }

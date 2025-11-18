@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::types::Message;
+use serde::{Deserialize, Serialize};
 
 /// Token usage information from API response
 #[derive(Debug, Deserialize)]

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::types::Message;
+use serde::{Deserialize, Serialize};
 
 /// Tool definition for chat API
 #[derive(Debug, Serialize, Deserialize)]

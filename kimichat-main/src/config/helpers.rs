@@ -208,7 +208,11 @@ pub fn create_client_for_model_type(
                 Some(BackendType::Anthropic),
                 api_url,
                 api_key,
-                Some(model.as_str().to_string()),
+                Some(model.as_str(
+                    client_config.model_blu_model_override.as_deref(),
+                    client_config.model_grn_model_override.as_deref(),
+                    client_config.model_red_model_override.as_deref()
+                ).to_string()),
                 default_api_key,
             )
         }
@@ -248,10 +252,10 @@ pub fn create_model_client(
         override_str.clone()
     } else {
         match model_name {
-            "blu" => ModelType::BluModel.as_str(),
-            "grn" => ModelType::GrnModel.as_str(),
-            "red" => ModelType::RedModel.as_str(),
-            _ => ModelType::GrnModel.as_str(),
+            "blu" => ModelType::BluModel.as_str_default(),
+            "grn" => ModelType::GrnModel.as_str_default(),
+            "red" => ModelType::RedModel.as_str_default(),
+            _ => ModelType::GrnModel.as_str_default(),
         }
     };
 

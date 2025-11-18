@@ -273,7 +273,11 @@ impl KimiChat {
             let tool_registry_arc = std::sync::Arc::new(self.tool_registry.clone());
             let llm_client = std::sync::Arc::new(GroqLlmClient::new(
                 api_key,
-                self.current_model.as_str().to_string(),
+                self.current_model.as_str(
+                    self.client_config.model_blu_model_override.as_deref(),
+                    self.client_config.model_grn_model_override.as_deref(),
+                    self.client_config.model_red_model_override.as_deref()
+                ).to_string(),
                 api_url,
                 "process_with_agents".to_string()
             ));

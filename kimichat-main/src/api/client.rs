@@ -56,7 +56,11 @@ pub(crate) async fn call_api(
     let mut retry_count = 0;
     loop {
         let request = ChatRequest {
-            model: current_model.as_str().to_string(),
+            model: current_model.as_str(
+                chat.client_config.model_blu_model_override.as_deref(),
+                chat.client_config.model_grn_model_override.as_deref(),
+                chat.client_config.model_red_model_override.as_deref()
+            ).to_string(),
             messages: messages.clone(),
             tools: chat.get_tools(),
             tool_choice: "auto".to_string(),

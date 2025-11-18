@@ -183,7 +183,11 @@ pub async fn intelligent_compaction(chat: &mut KimiChat, current_tool_iteration:
     
     // Call API to get summary using the OTHER model
     let request = ChatRequest {
-        model: summary_model.as_str().to_string(),
+        model: summary_model.as_str(
+            chat.client_config.model_blu_model_override.as_deref(),
+            chat.client_config.model_grn_model_override.as_deref(),
+            chat.client_config.model_red_model_override.as_deref()
+        ).to_string(),
         messages: summary_history,
         tools: vec![],
         tool_choice: "none".to_string(),
@@ -359,7 +363,11 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
 
     // Call API to get summary using the OTHER model
     let request = ChatRequest {
-        model: summary_model.as_str().to_string(),
+        model: summary_model.as_str(
+            chat.client_config.model_blu_model_override.as_deref(),
+            chat.client_config.model_grn_model_override.as_deref(),
+            chat.client_config.model_red_model_override.as_deref()
+        ).to_string(),
         messages: summary_history,
         tools: vec![],
         tool_choice: "none".to_string(),
@@ -481,7 +489,11 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
                 ];
 
                 let decision_request = ChatRequest {
-                    model: chat.current_model.as_str().to_string(),
+                    model: chat.current_model.as_str(
+                        chat.client_config.model_blu_model_override.as_deref(),
+                        chat.client_config.model_grn_model_override.as_deref(),
+                        chat.client_config.model_red_model_override.as_deref()
+                    ).to_string(),
                     messages: decision_prompt,
                     tools: vec![],
                     tool_choice: "none".to_string(),

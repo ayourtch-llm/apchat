@@ -62,7 +62,7 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
         .as_secs();
 
     // Create filename with timestamp and model name
-    let model_name = model.as_str().replace('/', "-");
+    let model_name = model.as_str_default().replace('/', "-");
     let filename = format!("logs/req-{}-{}.txt", timestamp, model_name);
 
     // Build the log content
@@ -70,7 +70,7 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
     log_content.push_str(&format!("HTTP REQUEST LOG\n"));
     log_content.push_str(&format!("================\n\n"));
     log_content.push_str(&format!("Timestamp: {}\n", timestamp));
-    log_content.push_str(&format!("Model: {}\n\n", model.as_str()));
+    log_content.push_str(&format!("Model: {}\n\n", model.as_str_default()));
 
     // Parse URL to show host and port
     if let Ok(parsed_url) = reqwest::Url::parse(url) {
