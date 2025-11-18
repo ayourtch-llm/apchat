@@ -64,7 +64,7 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
     // Create filename with timestamp and model name
     let model_name = model.as_str_default().replace('/', "-");
     let filename = format!("req-{}-{}.txt", timestamp, model_name);
-    let file_path = logs_dir.join(filename);
+    let file_path = logs_dir.join(filename.clone());
 
     // Build the log content
     let mut log_content = String::new();
@@ -106,6 +106,9 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelType, 
     fs::write(&file_path, log_content)
         .with_context(|| format!("Failed to write request log to {}", file_path.display()))?;
 
+    // Print the filename to console
+    println!("{}", format!("📝 Request logged to: {}", filename).bright_blue());
+
     Ok(())
 }
 
@@ -123,7 +126,7 @@ pub fn log_response_to_file(
     // Create filename with timestamp and model name to match request file
     let model_name = model.as_str_default().replace('/', "-");
     let filename = format!("resp-{}-{}.txt", request_timestamp, model_name);
-    let file_path = logs_dir.join(filename);
+    let file_path = logs_dir.join(filename.clone());
 
     // Build the log content
     let mut log_content = String::new();
@@ -178,6 +181,9 @@ pub fn log_response_to_file(
     fs::write(&file_path, log_content)
         .with_context(|| format!("Failed to write response log to {}", file_path.display()))?;
 
+    // Print the filename to console
+    println!("{}", format!("📄 Response logged to: {}", filename).bright_blue());
+
     Ok(())
 }
 
@@ -193,11 +199,14 @@ pub fn log_raw_response_to_file(
     // Create filename for raw response with timestamp and model name
     let model_name = model.as_str_default().replace('/', "-");
     let filename = format!("resp-raw-{}-{}.txt", request_timestamp, model_name);
-    let file_path = logs_dir.join(filename);
+    let file_path = logs_dir.join(filename.clone());
 
     // Write the pure raw response without any modification
     fs::write(&file_path, raw_response)
         .with_context(|| format!("Failed to write raw response log to {}", file_path.display()))?;
+
+    // Print the filename to console
+    println!("{}", format!("📄 Raw response logged to: {}", filename).bright_blue());
 
     Ok(())
 }
