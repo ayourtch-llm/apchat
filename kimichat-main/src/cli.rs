@@ -77,8 +77,9 @@ pub struct Cli {
     #[arg(long, value_name = "MODEL")]
     pub model_red_model: Option<String>,
 
-    /// Override all models with the same custom model name
-    /// This is a convenience flag that sets --model-blu-model, --model-grn-model, and --model-red-model
+    /// Set base/default model for all models (can be overridden by specific model flags)
+    /// This is a convenience flag that sets the default model for --model-blu-model, --model-grn-model, and --model-red-model
+    /// Use specific --model-*-model flags to override this base setting for individual models
     #[arg(long, value_name = "MODEL")]
     pub model: Option<String>,
 

@@ -82,10 +82,18 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     let is_anthropic_red = backend_red_model.as_ref() == Some(&BackendType::Anthropic)
         || api_url_red_model.as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
 
-    // Model name configuration with precedence
+    // Model name configuration with corrected precedence
+    // Priority: specific colored flags > environment variables > global --model flag > defaults
     let model_blu_override = cli.model_blu_model.clone()
-        .or(blu_model_env)
-        .or_else(|| cli.model.clone())
+        .or(blu_model_env.clone())
+        .or_else(|| {
+            // Only use global --model flag if no specific flag or environment variable is set
+            if cli.model_blu_model.is_none() && blu_model_env.is_none() {
+                cli.model.clone()
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             if is_anthropic_blu {
                 env::var("ANTHROPIC_MODEL_BLU").ok()
@@ -97,8 +105,15 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         });
 
     let model_grn_override = cli.model_grn_model.clone()
-        .or(grn_model_env)
-        .or_else(|| cli.model.clone())
+        .or(grn_model_env.clone())
+        .or_else(|| {
+            // Only use global --model flag if no specific flag or environment variable is set
+            if cli.model_grn_model.is_none() && grn_model_env.is_none() {
+                cli.model.clone()
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             if is_anthropic_grn {
                 env::var("ANTHROPIC_MODEL_GRN").ok()
@@ -110,8 +125,15 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         });
 
     let model_red_override = cli.model_red_model.clone()
-        .or(red_model_env)
-        .or_else(|| cli.model.clone())
+        .or(red_model_env.clone())
+        .or_else(|| {
+            // Only use global --model flag if no specific flag or environment variable is set
+            if cli.model_red_model.is_none() && red_model_env.is_none() {
+                cli.model.clone()
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             if is_anthropic_red {
                 env::var("ANTHROPIC_MODEL_RED").ok()
@@ -123,7 +145,7 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         });
 
     // Parse model@backend(url) format if present - this has the highest precedence
-    // and should override all other model configuration
+    // but should only apply to models that don't have specific configurations
     let (mut model_blu_override_final, mut model_grn_override_final, mut model_red_override_final) = 
         (model_blu_override, model_grn_override, model_red_override);
     let (mut backend_blu_model_final, mut backend_grn_model_final, mut backend_red_model_final) = 
@@ -139,30 +161,57 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
             eprintln!("{} Parsed model configuration: model='{}', backend={:?}, url={:?}", 
                      "🔧".cyan(), parsed_model, parsed_backend, parsed_url);
             
-            // Apply the parsed configuration to all models since this was a global --model flag
-            model_blu_override_final = Some(parsed_model.clone());
-            model_grn_override_final = Some(parsed_model.clone());
-            model_red_override_final = Some(parsed_model);
-            
-            if let Some(ref backend) = parsed_backend {
-                backend_blu_model_final = Some(backend.clone());
-                backend_grn_model_final = Some(backend.clone());
-                backend_red_model_final = Some(backend.clone());
+            // Apply the parsed configuration only to models that don't have specific configurations
+            // This respects the precedence: specific flags > global --model > defaults
+            if cli.model_blu_model.is_none() && blu_model_env.is_none() {
+                model_blu_override_final = Some(parsed_model.clone());
+                if let Some(ref backend) = parsed_backend {
+                    backend_blu_model_final = Some(backend.clone());
+                }
+                let final_url = parsed_url.clone().or_else(|| {
+                    if let Some(ref backend) = parsed_backend {
+                        get_default_url_for_backend(backend)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(ref url) = final_url {
+                    api_url_blu_model_final = Some(url.clone());
+                }
             }
             
-            // Use the parsed URL, or if no URL was provided but we have a backend, use the default URL for that backend
-            let final_url = parsed_url.or_else(|| {
+            if cli.model_grn_model.is_none() && grn_model_env.is_none() {
+                model_grn_override_final = Some(parsed_model.clone());
                 if let Some(ref backend) = parsed_backend {
-                    get_default_url_for_backend(backend)
-                } else {
-                    None
+                    backend_grn_model_final = Some(backend.clone());
                 }
-            });
+                let final_url = parsed_url.clone().or_else(|| {
+                    if let Some(ref backend) = parsed_backend {
+                        get_default_url_for_backend(backend)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(ref url) = final_url {
+                    api_url_grn_model_final = Some(url.clone());
+                }
+            }
             
-            if let Some(ref url) = final_url {
-                api_url_blu_model_final = Some(url.clone());
-                api_url_grn_model_final = Some(url.clone());
-                api_url_red_model_final = Some(url.clone());
+            if cli.model_red_model.is_none() && red_model_env.is_none() {
+                model_red_override_final = Some(parsed_model.clone());
+                if let Some(ref backend) = parsed_backend {
+                    backend_red_model_final = Some(backend.clone());
+                }
+                let final_url = parsed_url.or_else(|| {
+                    if let Some(ref backend) = parsed_backend {
+                        get_default_url_for_backend(backend)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(ref url) = final_url {
+                    api_url_red_model_final = Some(url.clone());
+                }
             }
         }
     }
