@@ -81,7 +81,13 @@ mod tool_context_tests {
 
     #[tokio::test]
     async fn test_check_permission_allow() {
-        let (context, _) = create_test_context();
+        let temp_dir = TempDir::new().unwrap();
+        let work_dir = temp_dir.path().to_path_buf();
+        let policy_manager = PolicyManager::new();
+        
+        // Create context in non-interactive mode to avoid user prompts
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager)
+            .with_non_interactive(true);
         
         // Test with a typically allowed action
         let action = kimichat_policy::ActionType::FileRead;
@@ -99,7 +105,13 @@ mod tool_context_tests {
 
     #[tokio::test]
     async fn test_check_permission_deny() {
-        let (context, _) = create_test_context();
+        let temp_dir = TempDir::new().unwrap();
+        let work_dir = temp_dir.path().to_path_buf();
+        let policy_manager = PolicyManager::new();
+        
+        // Create context in non-interactive mode to avoid user prompts
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager)
+            .with_non_interactive(true);
         
         // Test with a typically sensitive action
         let action = kimichat_policy::ActionType::CommandExecution;
@@ -141,7 +153,7 @@ mod tool_context_tests {
         let temp_dir = TempDir::new().unwrap();
         let expected_path = temp_dir.path().canonicalize().unwrap();
         let context = ToolContext::new(
-            temp_dir.path().to_path_buf(),
+            temp_dir.path().to_path_buf().canonicalize().unwrap(),
             "test_session".to_string(),
             PolicyManager::new(),
         );
@@ -183,7 +195,13 @@ mod tool_context_tests {
 
     #[tokio::test]
     async fn test_check_permission_error_handling() {
-        let (context, _) = create_test_context();
+        let temp_dir = TempDir::new().unwrap();
+        let work_dir = temp_dir.path().to_path_buf();
+        let policy_manager = PolicyManager::new();
+        
+        // Create context in non-interactive mode to avoid user prompts
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager)
+            .with_non_interactive(true);
         
         // Test with empty target
         let action = kimichat_policy::ActionType::FileRead;
@@ -201,7 +219,8 @@ mod tool_context_tests {
         
         // Create a policy manager with learning enabled if possible
         let policy_manager = PolicyManager::new();
-        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager);
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager)
+            .with_non_interactive(true);
         
         let action = kimichat_policy::ActionType::FileRead;
         let target = "/tmp/test.txt";
@@ -263,7 +282,13 @@ mod tool_context_tests {
 
     #[tokio::test]
     async fn test_multiple_permission_checks() {
-        let (context, _) = create_test_context();
+        let temp_dir = TempDir::new().unwrap();
+        let work_dir = temp_dir.path().to_path_buf();
+        let policy_manager = PolicyManager::new();
+        
+        // Create context in non-interactive mode to avoid user prompts
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager)
+            .with_non_interactive(true);
         
         let actions = vec![
             kimichat_policy::ActionType::FileRead,
@@ -278,7 +303,7 @@ mod tool_context_tests {
             let result = context.check_permission(action, &target, &prompt);
             assert!(result.is_ok(), "Permission check {} failed", i);
             
-            let (approved, reason) = result.unwrap();
+            let (_approved, reason) = result.unwrap();
             // Should always return a valid response
             assert!(reason.is_none() || reason.as_ref().unwrap().len() > 0);
         }
@@ -289,7 +314,11 @@ mod tool_context_tests {
         use std::sync::Arc;
         use std::thread;
         
-        let (context, _) = create_test_context();
+        // Create temp_dir in the test scope so it lives for the entire test
+        let temp_dir = TempDir::new().unwrap();
+        let work_dir = temp_dir.path().to_path_buf();
+        let policy_manager = PolicyManager::new();
+        let context = ToolContext::new(work_dir, "test_session".to_string(), policy_manager);
         let context = Arc::new(context);
         
         let mut handles = Vec::new();
