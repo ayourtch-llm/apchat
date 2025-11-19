@@ -19,8 +19,6 @@ pub fn get_max_session_size(model: &ModelType) -> usize {
         ModelType::GrnModel => 150_000,  // Conservative for Groq (~8K tokens)
         ModelType::BluModel => 400_000,  // Moderate for Claude (~100K tokens)
         ModelType::RedModel => 600_000,  // Larger for local models
-        ModelType::AnthropicModel => 400_000,
-        ModelType::Custom(_) => 300_000, // Safe default for custom models
     }
 }
 
@@ -120,8 +118,6 @@ pub async fn intelligent_compaction(chat: &mut KimiChat, current_tool_iteration:
         ModelType::BluModel => ModelType::GrnModel,
         ModelType::GrnModel => ModelType::BluModel,
         ModelType::RedModel => ModelType::BluModel,
-        ModelType::AnthropicModel => ModelType::GrnModel,
-        ModelType::Custom(_) => ModelType::BluModel,
     };
     
     // Build summary request
@@ -285,8 +281,6 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut KimiChat) -> Result<()
         ModelType::BluModel => ModelType::GrnModel,
         ModelType::GrnModel => ModelType::BluModel,
         ModelType::RedModel => ModelType::BluModel, // Use BluModel for summarization when using RedModel
-        ModelType::AnthropicModel => ModelType::GrnModel, // Prefer GrnModel for summarization when using Anthropic
-        ModelType::Custom(_) => ModelType::BluModel, // Default to BluModel for custom models
     };
 
     println!(

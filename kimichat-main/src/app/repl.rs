@@ -47,8 +47,6 @@ pub async fn run_repl_mode(
         ModelType::BluModel => format!("BluModel/{} (auto-switched from default)", chat.current_model.display_name()),
         ModelType::GrnModel => format!("GrnModel/{} (default)", chat.current_model.display_name()),
         ModelType::RedModel => format!("RedModel/{}", chat.current_model.display_name()),
-        ModelType::AnthropicModel => format!("Anthropic/{}", chat.current_model.display_name()),
-        ModelType::Custom(ref name) => format!("Custom/{}", name),
     };
 
     // Show what backends are being used

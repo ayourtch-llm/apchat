@@ -48,24 +48,6 @@ pub fn get_api_url(client_config: &ClientConfig, model: &ModelType) -> String {
                 .map(|s| s.clone())
                 .unwrap_or_else(|| GROQ_API_URL.to_string())
         }
-        ModelType::AnthropicModel => {
-            // For Anthropic, default to the official API or look for Anthropic-specific URLs
-            env::var("ANTHROPIC_BASE_URL")
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_BLU"))
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_GRN"))
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_RED"))
-                .unwrap_or_else(|_| "https://api.anthropic.com".to_string())
-        }
-        ModelType::Custom(_) => {
-            // For custom models, default to the first available override or Groq
-            client_config
-                .api_url_blu_model
-                .as_ref()
-                .or(client_config.api_url_grn_model.as_ref())
-                .or(client_config.api_url_red_model.as_ref())
-                .map(|s| s.clone())
-                .unwrap_or_else(|| GROQ_API_URL.to_string())
-        }
     };
 
     // Normalize the URL to ensure it has the correct path
@@ -95,43 +77,6 @@ pub fn get_api_key(client_config: &ClientConfig, api_key: &str, model: &ModelTyp
                 .as_ref()
                 .map(|s| s.clone())
                 .unwrap_or_else(|| api_key.to_string())
-        }
-        ModelType::AnthropicModel => {
-            // For Anthropic, look for Anthropic-specific keys first
-            env::var("ANTHROPIC_API_KEY")
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
-                .unwrap_or_else(|_| api_key.to_string())
-        }
-        ModelType::Custom(ref name) => {
-            // For custom models, check if it's an OpenAI model or Anthropic model, otherwise use per-model keys
-            if name.contains("claude") || name.contains("anthropic") {
-                // For Anthropic custom models, look for Anthropic-specific keys
-                env::var("ANTHROPIC_API_KEY")
-                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
-                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
-                    .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
-                    .unwrap_or_else(|_| api_key.to_string())
-            } else if name.contains("openai") || name.contains("gpt") {
-                // For OpenAI custom models, look for OpenAI-specific keys with per-model precedence
-                env::var("OPENAI_API_KEY")
-                    .or_else(|_| env::var("OPENAI_API_KEY_BLU"))
-                    .or_else(|_| env::var("OPENAI_API_KEY_GRN"))
-                    .or_else(|_| env::var("OPENAI_API_KEY_RED"))
-                    .unwrap_or_else(|_| api_key.to_string())
-            } else {
-                // For other custom models, default to the first available override or default key
-                client_config
-                    .api_key_blu_model
-                    .as_ref()
-                    .or(client_config.api_key_grn_model.as_ref())
-                    .or(client_config.api_key_red_model.as_ref())
-                    .map(|s| s.clone())
-                    .unwrap_or_else(|| api_key.to_string())
-            }
         }
     }
 }
@@ -187,48 +132,6 @@ pub fn create_client_for_model_type(
                 client_config.api_url_red_model.clone(),
                 client_config.api_key_red_model.clone(),
                 client_config.model_red_model_override.clone(),
-                default_api_key,
-            )
-        }
-        ModelType::AnthropicModel => {
-            // For AnthropicModel, use default Anthropic configuration
-            let api_url = env::var("ANTHROPIC_BASE_URL")
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_BLU"))
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_GRN"))
-                .or_else(|_| env::var("ANTHROPIC_BASE_URL_RED"))
-                .ok();
-            let api_key = env::var("ANTHROPIC_API_KEY")
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_BLU"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_GRN"))
-                .or_else(|_| env::var("ANTHROPIC_AUTH_TOKEN_RED"))
-                .ok();
-            create_model_client(
-                "anthropic",
-                Some(BackendType::Anthropic),
-                api_url,
-                api_key,
-                Some(model.as_str(
-                    client_config.model_blu_model_override.as_deref(),
-                    client_config.model_grn_model_override.as_deref(),
-                    client_config.model_red_model_override.as_deref()
-                ).to_string()),
-                default_api_key,
-            )
-        }
-        ModelType::Custom(ref name) => {
-            // For custom models, try to infer backend from model name
-            let backend = if name.contains("claude") || name.contains("anthropic") {
-                Some(BackendType::Anthropic)
-            } else {
-                None
-            };
-            create_model_client(
-                "custom",
-                backend,
-                None,
-                None,
-                Some(name.clone()),
                 default_api_key,
             )
         }

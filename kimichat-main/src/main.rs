@@ -195,8 +195,8 @@ impl KimiChat {
         // Determine initial model based on overrides or defaults
         // Default to GPT-OSS for cost efficiency - it's significantly cheaper than Kimi
         // while still providing good performance for most tasks
-        let initial_model = if let Some(ref override_model) = client_config.model_grn_model_override {
-            ModelType::Custom(override_model.clone())
+        let initial_model = if let Some(ref _override_model) = client_config.model_grn_model_override {
+            ModelType::GrnModel
         } else {
             ModelType::GrnModel
         };
@@ -361,10 +361,12 @@ impl KimiChat {
 
     fn switch_model(&mut self, model_str: &str, reason: &str) -> Result<String> {
         let new_model = match model_str.to_lowercase().as_str() {
-            "blu_model" | "blu-model" => ModelType::BluModel,
-            "grn_model" | "grn-model" => ModelType::GrnModel,
-            "anthropic" | "claude" | "anthropic_model" | "anthropic-model" => ModelType::AnthropicModel,
-            _ => anyhow::bail!("Unknown model: {}. Available: 'blu_model', 'grn_model', 'anthropic'", model_str),
+            "blu_model" | "blu-model" | "blumodel" => ModelType::BluModel,
+            "grn_model" | "grn-model" | "grnmodel" => ModelType::GrnModel,
+            "red_model" | "red-model" | "redmodel" => ModelType::RedModel,
+            // For backward compatibility, map Anthropic references to BluModel
+            "anthropic" | "claude" | "anthropic_model" | "anthropic-model" => ModelType::BluModel,
+            _ => anyhow::bail!("Unknown model: {}. Available: 'blu_model', 'grn_model', 'red_model'", model_str),
         };
 
         if new_model == self.current_model {

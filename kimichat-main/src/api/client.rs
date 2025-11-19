@@ -24,15 +24,8 @@ pub(crate) async fn call_api(
         msg
     }).collect();
 
-    // Check if we need to use the new LlmClient system for Anthropic
-    let is_custom_claude = if let ModelType::Custom(ref name) = current_model {
-        name.contains("claude")
-    } else {
-        false
-    };
-
-    let should_use_anthropic = matches!(current_model, ModelType::AnthropicModel) ||
-        is_custom_claude ||
+    // Check if we need to use the new LlmClient system for Anthropic-compatible APIs
+    let should_use_anthropic =
         (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
         (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
         (chat.client_config.api_url_red_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));

@@ -73,22 +73,16 @@ pub(crate) async fn chat(
                 tokio::select! {
                     result = async {
                         if chat.stream_responses {
-                            // Check if this is an Anthropic model that should use the new system
-                            let is_custom_claude = if let ModelType::Custom(ref name) = chat.current_model {
-                                name.contains("claude")
-                            } else {
-                                false
-                            };
-
-                            let should_use_anthropic = matches!(chat.current_model, ModelType::AnthropicModel) ||
-                                is_custom_claude ||
+                            // Check if this should use the new streaming system
+                            // The new system works with all model types now
+                            let should_use_anthropic =
                                 (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
                                 (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
                             if should_use_anthropic {
-                                // Use the new streaming implementation for Anthropic
+                                // Use the new streaming implementation for Anthropic-compatible APIs
                                 if chat.should_show_debug(1) {
-                                    println!("🔧 DEBUG: Using Anthropic streaming with format translation");
+                                    println!("🔧 DEBUG: Using Anthropic-compatible streaming with format translation");
                                 }
                                 crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await
                             } else {
@@ -106,22 +100,16 @@ pub(crate) async fn chat(
             } else {
                 // No cancellation token, call normally
                 if chat.stream_responses {
-                    // Check if this is an Anthropic model that should use the new system
-                    let is_custom_claude = if let ModelType::Custom(ref name) = chat.current_model {
-                        name.contains("claude")
-                    } else {
-                        false
-                    };
-
-                    let should_use_anthropic = matches!(chat.current_model, ModelType::AnthropicModel) ||
-                        is_custom_claude ||
+                    // Check if this should use the new streaming system
+                    // The new system works with all model types now
+                    let should_use_anthropic =
                         (chat.client_config.api_url_blu_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
                         (chat.client_config.api_url_grn_model.as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
                     if should_use_anthropic {
-                        // Use the new streaming implementation for Anthropic
+                        // Use the new streaming implementation for Anthropic-compatible APIs
                         if chat.should_show_debug(1) {
-                            println!("🔧 DEBUG: Using Anthropic streaming with format translation");
+                            println!("🔧 DEBUG: Using Anthropic-compatible streaming with format translation");
                         }
                         crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
                     } else {

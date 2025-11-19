@@ -6,8 +6,6 @@ pub enum ModelType {
     BluModel,
     GrnModel,
     RedModel,
-    AnthropicModel,
-    Custom(String),
 }
 
 impl ModelType {
@@ -16,8 +14,6 @@ impl ModelType {
             ModelType::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelType::GrnModel => "openai/gpt-oss-120b".to_string(),
             ModelType::RedModel => "meta-llama/llama-3.1-70b-versatile".to_string(),
-            ModelType::AnthropicModel => "claude-3-5-sonnet-20241022".to_string(),
-            ModelType::Custom(name) => name.clone(),
         }
     }
 
@@ -38,8 +34,6 @@ impl ModelType {
             ModelType::RedModel => red_model_override
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| self.as_str_default()),
-            ModelType::AnthropicModel => self.as_str_default(), // No override available
-            ModelType::Custom(name) => name.clone(),
         }
     }
 
@@ -48,8 +42,6 @@ impl ModelType {
             ModelType::BluModel => "Kimi-K2-Instruct-0905".to_string(),
             ModelType::GrnModel => "GPT-OSS-120B".to_string(),
             ModelType::RedModel => "Llama-3.1-70B-Versatile".to_string(),
-            ModelType::AnthropicModel => "Claude-3.5-Sonnet".to_string(),
-            ModelType::Custom(name) => name.clone(),
         }
     }
 
@@ -58,10 +50,18 @@ impl ModelType {
             "blu_model" | "blu-model" | "blumodel" => ModelType::BluModel,
             "grn_model" | "grn-model" | "grnmodel" => ModelType::GrnModel,
             "red_model" | "red-model" | "redmodel" => ModelType::RedModel,
-            "anthropic" | "claude" | "anthropic_model" | "anthropic-model" => {
-                ModelType::AnthropicModel
+            _ => {
+                // For backward compatibility:
+                // - Anthropic models default to BluModel
+                // - Custom models default to GrnModel
+                if s.to_lowercase().contains("anthropic") || s.to_lowercase().contains("claude") {
+                    ModelType::BluModel // Anthropic models map to BluModel
+                } else if s.to_lowercase().contains("openai") || s.to_lowercase().contains("gpt") {
+                    ModelType::GrnModel // OpenAI models map to GrnModel
+                } else {
+                    ModelType::GrnModel // Default to GrnModel for other custom models
+                }
             }
-            _ => ModelType::Custom(s.to_string()),
         }
     }
 }
