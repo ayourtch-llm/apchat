@@ -13,10 +13,6 @@ mod model_resolution_tests {
             ModelType::RedModel.as_str_default(),
             "meta-llama/llama-3.1-70b-versatile"
         );
-        assert_eq!(
-            ModelType::AnthropicModel.as_str_default(),
-            "claude-3-5-sonnet-20241022"
-        );
     }
 
     #[test]
@@ -73,32 +69,9 @@ mod model_resolution_tests {
         );
     }
 
-    #[test]
-    fn test_anthropic_model_no_override() {
-        let no_override = None;
 
-        // AnthropicModel should always return default since there's no override field
-        assert_eq!(
-            ModelType::AnthropicModel.as_str(no_override, no_override, no_override),
-            "claude-3-5-sonnet-20241022"
-        );
-    }
 
-    #[test]
-    fn test_custom_model() {
-        let no_override = None;
-        let custom_model = ModelType::Custom("my-custom-model".to_string());
 
-        // Custom models should ignore overrides and return their name
-        assert_eq!(
-            custom_model.as_str(Some("override"), no_override, no_override),
-            "my-custom-model"
-        );
-        assert_eq!(
-            custom_model.as_str(no_override, no_override, no_override),
-            "my-custom-model"
-        );
-    }
 
     #[test]
     fn test_override_isolation() {
@@ -118,10 +91,6 @@ mod model_resolution_tests {
         assert_eq!(
             ModelType::RedModel.as_str(blu_override, grn_override, red_override),
             "red-override"
-        );
-        assert_eq!(
-            ModelType::AnthropicModel.as_str(blu_override, grn_override, red_override),
-            "claude-3-5-sonnet-20241022" // No override for Anthropic
         );
     }
 

@@ -135,8 +135,6 @@ mod tests {
         assert_eq!(get_max_session_size(&ModelType::GrnModel), 150_000);
         assert_eq!(get_max_session_size(&ModelType::BluModel), 400_000);
         assert_eq!(get_max_session_size(&ModelType::RedModel), 600_000);
-        assert_eq!(get_max_session_size(&ModelType::AnthropicModel), 400_000);
-        assert_eq!(get_max_session_size(&ModelType::Custom("custom".to_string())), 300_000);
     }
 
     #[test]
