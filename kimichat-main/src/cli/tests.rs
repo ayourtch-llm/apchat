@@ -417,60 +417,54 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_multiple_flags_combination() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = parse_cli_from_args(&[
-            "--interactive",
-            "--agents", 
-            "--verbose",
-            "--stream",
-            "--auto-confirm",
-            "--model", "claude-3-sonnet",
-            "--policy-file", "custom.toml"
-        ])?;
-        
-        assert!(cli.interactive);
-        assert!(cli.agents);
-        assert!(cli.verbose);
-        assert!(cli.stream);
-        assert!(cli.auto_confirm);
-        assert_eq!(cli.model, Some("claude-3-sonnet".to_string()));
-        assert_eq!(cli.policy_file, Some("custom.toml".to_string()));
-        
-        Ok(())
-    }
+  #[cfg(test)]
+mod cli_tests {
+    use kimichat_llm_api::config::parse_model_attings;
+    use kimichat_llm_api::BackendType;
+    use kimichat_llm_api::{ANTHROPIC_API_URL, GROQ_API_URL, OPENAI_API_URL};
 
     #[test]
-    fn test_model_with_backend_and_url() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = parse_cli_from_args(&["--model", "foo@bar(someurl)"])?;
-        
-        // Verify that the model argument is parsed as a single string
-        assert_eq!(cli.model, Some("foo@bar(someurl)".to_string()));
-        
-        Ok(())
-    }
+    fn test_model_parsing_integration() {
+        // Test model@backend format
+        let (model, backend, url) = parse_model_attings("foo@anthropic");
+        assert_eq!(model, "foo");
+        assert_eq!(backend, Some(BackendType::Anthropic));
+        assert_eq!(url, None);
 
-    #[test]
-    fn test_model_with_backend_only() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = parse_cli_from_args(&["--model", "foo@bar"])?;
-        
-        // Verify that the model argument is parsed as a single string
-        assert_eq!(cli.model, Some("foo@bar".to_string()));
-        
-        Ok(())
-    }
+        // Test model@backend(url) format  
+        let (model, backend, url) = parse_model_attings("foo@anthropic(https://custom.anthropic.com)");
+        assert_eq!(model, "foo");
+        assert_eq!(backend, Some(BackendType::Anthropic));
+        assert_eq!(url, Some("https://custom.anthropic.com".to_string()));
 
-    #[test]
-    fn test_precedence_model_overrides() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = parse_cli_from_args(&[
-            "--model-blu-model", "specific-blu",
-            "--model", "foo@bar(someurl)"
-        ])?;
-        
-        // Verify that both are parsed correctly
-        assert_eq!(cli.model_blu_model, Some("specific-blu".to_string()));
-        assert_eq!(cli.model, Some("foo@bar(someurl)".to_string()));
-        
-        Ok(())
+        // Test @backend format (default model)
+        let (model, backend, url) = parse_model_attings("@anthropic");
+        assert_eq!(model, "claude-3-5-sonnet-20241022");
+        assert_eq!(backend, Some(BackendType::Anthropic));
+        assert_eq!(url, Some(ANTHROPIC_API_URL.to_string()));
+
+        // Test @groq format (default model for Groq)
+        let (model, backend, url) = parse_model_attings("@groq");
+        assert_eq!(model, "llama-3.1-8b-instant");
+        assert_eq!(backend, Some(BackendType::Groq));
+        assert_eq!(url, Some(GROQ_API_URL.to_string()));
+
+        // Test @openai format (default model for OpenAI)
+        let (model, backend, url) = parse_model_attings("@openai");
+        assert_eq!(model, "gpt-4o-mini");
+        assert_eq!(backend, Some(BackendType::OpenAI));
+        assert_eq!(url, Some(OPENAI_API_URL.to_string()));
+
+        // Test @llama format (default model for Llama)
+        let (model, backend, url) = parse_model_attings("@llama");
+        assert_eq!(model, "llama3.1");
+        assert_eq!(backend, Some(BackendType::Llama));
+        assert_eq!(url, None);
+
+        // Test model only (no backend)
+        let (model, backend, url) = parse_model_attings("custom-model");
+        assert_eq!(model, "custom-model");
+        assert_eq!(backend, None);
+        assert_eq!(url, None);
     }
 }

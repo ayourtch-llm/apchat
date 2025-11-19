@@ -57,6 +57,16 @@ pub fn get_default_url_for_backend(backend: &BackendType) -> Option<String> {
     }
 }
 
+/// Get the default model for a given backend type
+pub fn get_default_model_for_backend(backend: &BackendType) -> &'static str {
+    match backend {
+        BackendType::Anthropic => "claude-3-5-sonnet-20241022",
+        BackendType::OpenAI => "gpt-4o-mini",
+        BackendType::Groq => "llama-3.1-8b-instant",
+        BackendType::Llama => "llama3.1", // Common default for self-hosted Llama
+    }
+}
+
 /// Default model names for each color
 pub const DEFAULT_BLU_MODEL: &str = "moonshotai/kimi-k2-instruct-0905";
 pub const DEFAULT_GRN_MODEL: &str = "openai/gpt-oss-120b";
@@ -72,35 +82,78 @@ pub const DEFAULT_BLU_API_URL: &str = GROQ_API_URL;
 pub const DEFAULT_GRN_API_URL: &str = GROQ_API_URL;
 pub const DEFAULT_RED_API_URL: &str = GROQ_API_URL;
 
-/// Parse model configuration string in format "model@backend(api_url)" or "model@backend" or "model"
+/// Parse model configuration string in format "@backend(url)", "@backend", "model@backend(url)", "model@backend", or "model"
 /// Returns (model_name, backend, api_url)
 pub fn parse_model_attings(atts: &str) -> (String, Option<BackendType>, Option<String>) {
-    // Split by @ to get model and backend part
+    // Handle @backend syntax (no model name specified)
+    if atts.starts_with('@') {
+        let backend_part = &atts[1..]; // Remove @
+        
+        // Check if backend part contains parentheses for URL
+        if let Some(pos) = backend_part.find('(') {
+            // Format: @backend(url)
+            let backend_name = &backend_part[..pos];
+            let url_part = &backend_part[pos + 1..];
+            
+            // Validate that URL is properly enclosed in parentheses
+            if let Some(close_paren) = url_part.find(')') {
+                if close_paren == url_part.len() - 1 {
+                    // Properly formatted: @backend(url)
+                    let url = &url_part[..close_paren];
+                    
+                    if let Some(backend) = BackendType::from_str(backend_name) {
+                        let default_model = get_default_model_for_backend(&backend);
+                        return (default_model.to_string(), Some(backend), Some(url.to_string()));
+                    }
+                }
+            }
+            
+            // If we reach here, parentheses are malformed - fallback to treating as model name
+            return (atts.to_string(), None, None);
+        } else {
+            // Format: @backend
+            if let Some(backend) = BackendType::from_str(backend_part) {
+                let default_model = get_default_model_for_backend(&backend);
+                let default_url = get_default_url_for_backend(&backend);
+                return (default_model.to_string(), Some(backend), default_url);
+            }
+        }
+        
+        // If we reach here, @ syntax was invalid, fall back to treating as model name
+        return (atts.to_string(), None, None);
+    }
+    
+    // Handle model@backend syntax
     let parts: Vec<&str> = atts.split('@').collect();
     let model = parts.first().copied().unwrap_or("");
     let mut backend = None;
     let mut api_url = None;
+    
     if parts.len() > 1 {
         let backend_part = parts[1];
         // Check if backend part contains parentheses for URL
         if let Some(pos) = backend_part.find('(') {
-            // Format: backend(url)
+            // Format: model@backend(url)
             let backend_name = &backend_part[..pos];
-            let url = &backend_part[pos + 1..backend_part.len() - 1]; // Remove parentheses
-            backend = BackendType::from_str(backend_name);
-            api_url = Some(url.to_string());
+            let url_part = &backend_part[pos + 1..];
+            
+            // Validate that URL is properly enclosed in parentheses
+            if let Some(close_paren) = url_part.find(')') {
+                if close_paren == url_part.len() - 1 {
+                    // Properly formatted: model@backend(url)
+                    let url = &url_part[..close_paren];
+                    backend = BackendType::from_str(backend_name);
+                    api_url = Some(url.to_string());
+                }
+            }
+            // If parentheses are malformed, don't parse backend and leave as None
         } else {
-            // Format: backend
+            // Format: model@backend
             backend = BackendType::from_str(backend_part);
             // For default URLs, we'll determine them based on backend type
         }
     }
-    // If no backend specified, use default backend for the color
-    if backend.is_none() {
-        // In this case, we just return the model and leave backend and URL as None
-        // This allows us to handle "model" format where only model name is specified
-        // We'll need to determine backend and URL based on context in calling function
-    }
+    
     (model.to_string(), backend, api_url)
 }
 

@@ -76,4 +76,5 @@ pub use config::{
     OPENAI_API_URL,
     normalize_api_url,
     get_default_url_for_backend,
+    get_default_model_for_backend,
 };
