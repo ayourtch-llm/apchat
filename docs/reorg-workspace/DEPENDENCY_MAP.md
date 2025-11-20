@@ -149,7 +149,7 @@ pub struct PlanningCoordinator;
 pub trait LlmClient;
 pub struct Agent;
 pub struct TaskExecutor;
-pub enum ModelType;
+pub enum ModelColor;
 ```
 
 ### 5. kimichat-web (Web Interface)

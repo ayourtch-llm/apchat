@@ -7,7 +7,7 @@ I have successfully implemented the refactoring to separate logical LLM "colors"
 ## Changes Made
 
 1. **Updated `crates/kimichat-models/src/types.rs`**:
-   - Simplified `ModelType` enum to only include `BluModel`, `GrnModel`, and `RedModel`
+   - Simplified `ModelColor` enum to only include `BluModel`, `GrnModel`, and `RedModel`
    - Maintained all existing helper methods (`as_str_default`, `as_str`, `display_name`, `from_string`)
    - Kept backward compatibility for `AnthropicModel` and `Custom(String)` handling in `from_string`
 
@@ -23,7 +23,7 @@ I have successfully implemented the refactoring to separate logical LLM "colors"
 3. **Enhanced `kimichat-main/src/config/helpers.rs`**:
    - Updated imports to include new constants from the config module
    - Modified `create_model_client` to use the new default constants
-   - Updated `create_client_for_model_type` to use the new defaults
+   - Updated `create_client_for_model_color` to use the new defaults
 
 ## Implementation Details
 
@@ -32,7 +32,7 @@ The refactoring successfully:
 - Each color now maps to a tuple: (model, backend, api_url, api_key)
 - The key remains configurable as requested
 - Other elements can be parsed from attings like `model@backend(api_url)`
-- ModelType enum now has only three "colors" as specified
+- ModelColor enum now has only three "colors" as specified
 - Maintained backward compatibility with existing configuration
 
 ## New Features

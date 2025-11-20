@@ -23,7 +23,7 @@ Based on `recommend.md`, the primary goal was to improve code maintainability by
 
 #### 1. **Models Module** (`src/models/`)
 Centralized all data structures and type definitions:
-- **`types.rs`** (250 lines) - Core types: `ModelType`, `Message`, `ToolCall`, `FunctionCall`, and tool argument structures
+- **`types.rs`** (250 lines) - Core types: `ModelColor`, `Message`, `ToolCall`, `FunctionCall`, and tool argument structures
 - **`requests.rs`** (50 lines) - API request structures: `ChatRequest`, `Tool`, `FunctionDef`
 - **`responses.rs`** (150 lines) - API response structures: `ChatResponse`, `Choice`, `Usage`, and streaming types
 - **`mod.rs`** - Module exports

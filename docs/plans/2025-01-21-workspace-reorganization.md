@@ -257,7 +257,7 @@ pub mod utils;
 pub use core::{ToolRegistry, ToolParameters, ToolContext, Tool};
 pub use config::{ClientConfig, ConfigError, ConfigLoader};
 pub use policy::{PolicyManager, Policy, PolicyError};
-pub use models::{Message, ToolCall, FunctionCall, ModelType};
+pub use models::{Message, ToolCall, FunctionCall, ModelColor};
 pub use validation::{validate_tool_calls, repair_tool_call, ValidationError};
 pub use errors::{CoreError, Result};
 pub use utils::{JsonSchema, json_schema};

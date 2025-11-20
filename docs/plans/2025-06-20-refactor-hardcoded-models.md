@@ -17,10 +17,10 @@
 ## Analysis Phase
 
 ### Current Hardcoded Models Found:
-- `ModelType::BluModel.as_str()` → "moonshotai/kimi-k2-instruct-0905"
-- `ModelType::GrnModel.as_str()` → "openai/gpt-oss-120b"  
-- `ModelType::RedModel.as_str()` → "meta-llama/llama-3.1-70b-versatile"
-- `ModelType::AnthropicModel.as_str()` → "claude-3-5-sonnet-20241022"
+- `ModelColor::BluModel.as_str()` → "moonshotai/kimi-k2-instruct-0905"
+- `ModelColor::GrnModel.as_str()` → "openai/gpt-oss-120b"  
+- `ModelColor::RedModel.as_str()` → "meta-llama/llama-3.1-70b-versatile"
+- `ModelColor::AnthropicModel.as_str()` → "claude-3-5-sonnet-20241022"
 
 ### Key Files Using `as_str()`:
 - `kimichat-main/src/api/client.rs` - API requests
@@ -83,19 +83,19 @@ use crate::config::ClientConfig;  // Add this at top
 pub fn as_str(&self, client_config: Option<&crate::config::ClientConfig>) -> String {
     if let Some(config) = client_config {
         match self {
-            ModelType::BluModel => config.model_blu_model_override
+            ModelColor::BluModel => config.model_blu_model_override
                 .clone()
                 .unwrap_or_else(|| self.as_str_default()),
-            ModelType::GrnModel => config.model_grn_model_override
+            ModelColor::GrnModel => config.model_grn_model_override
                 .clone()
                 .unwrap_or_else(|| self.as_str_default()),
-            ModelType::RedModel => config.model_red_model_override
+            ModelColor::RedModel => config.model_red_model_override
                 .clone()
                 .unwrap_or_else(|| self.as_str_default()),
-            ModelType::AnthropicModel => config.model_anthropic_model_override
+            ModelColor::AnthropicModel => config.model_anthropic_model_override
                 .clone()
                 .unwrap_or_else(|| self.as_str_default()),
-            ModelType::Custom(name) => name.clone(),
+            ModelColor::Custom(name) => name.clone(),
         }
     } else {
         self.as_str_default()
@@ -179,32 +179,32 @@ git commit -m "fix: use config-aware model resolution in chat requests"
 ```rust
 // Change from:
 let blu_model = client_config.model_blu_model_override.clone()
-    .unwrap_or_else(|| ModelType::BluModel.as_str());
+    .unwrap_or_else(|| ModelColor::BluModel.as_str());
 let grn_model = client_config.model_grn_model_override.clone()
-    .unwrap_or_else(|| ModelType::GrnModel.as_str());
+    .unwrap_or_else(|| ModelColor::GrnModel.as_str());
 let red_model = client_config.model_red_model_override.clone()
-    .unwrap_or_else(|| ModelType::RedModel.as_str());
+    .unwrap_or_else(|| ModelColor::RedModel.as_str());
 
 // To:
-let blu_model = ModelType::BluModel.as_str(Some(client_config));
-let grn_model = ModelType::GrnModel.as_str(Some(client_config));
-let red_model = ModelType::RedModel.as_str(Some(client_config));
+let blu_model = ModelColor::BluModel.as_str(Some(client_config));
+let grn_model = ModelColor::GrnModel.as_str(Some(client_config));
+let red_model = ModelColor::RedModel.as_str(Some(client_config));
 ```
 
 **Step 2: Fix helper function model selection**
 
 ```rust
 // Change from:
-"blu" => ModelType::BluModel.as_str(),
-"grn" => ModelType::GrnModel.as_str(),
-"red" => ModelType::RedModel.as_str(),
-_ => ModelType::GrnModel.as_str(),
+"blu" => ModelColor::BluModel.as_str(),
+"grn" => ModelColor::GrnModel.as_str(),
+"red" => ModelColor::RedModel.as_str(),
+_ => ModelColor::GrnModel.as_str(),
 
 // To:
-"blu" => ModelType::BluModel.as_str(client_config),
-"grn" => ModelType::GrnModel.as_str(client_config),
-"red" => ModelType::RedModel.as_str(client_config),
-_ => ModelType::GrnModel.as_str(client_config),
+"blu" => ModelColor::BluModel.as_str(client_config),
+"grn" => ModelColor::GrnModel.as_str(client_config),
+"red" => ModelColor::RedModel.as_str(client_config),
+_ => ModelColor::GrnModel.as_str(client_config),
 ```
 
 **Step 3: Run compilation**
@@ -273,8 +273,8 @@ mod model_resolution_tests {
 
     #[test]
     fn test_default_model_resolution() {
-        assert_eq!(ModelType::BluModel.as_str_default(), "moonshotai/kimi-k2-instruct-0905");
-        assert_eq!(ModelType::GrnModel.as_str_default(), "openai/gpt-oss-120b");
+        assert_eq!(ModelColor::BluModel.as_str_default(), "moonshotai/kimi-k2-instruct-0905");
+        assert_eq!(ModelColor::GrnModel.as_str_default(), "openai/gpt-oss-120b");
     }
 
     #[test]
@@ -283,11 +283,11 @@ mod model_resolution_tests {
         config.model_blu_model_override = Some("custom/blu-model".to_string());
 
         assert_eq!(
-            ModelType::BluModel.as_str(Some(&config)),
+            ModelColor::BluModel.as_str(Some(&config)),
             "custom/blu-model"
         );
         assert_eq!(
-            ModelType::GrnModel.as_str(Some(&config)),
+            ModelColor::GrnModel.as_str(Some(&config)),
             "openai/gpt-oss-120b"  // falls back to default
         );
     }
@@ -295,14 +295,14 @@ mod model_resolution_tests {
     #[test]
     fn test_no_config_fallback() {
         assert_eq!(
-            ModelType::BluModel.as_str(None),
+            ModelColor::BluModel.as_str(None),
             "moonshotai/kimi-k2-instruct-0905"
         );
     }
 
     #[test]
     fn test_custom_model() {
-        let custom_model = ModelType::Custom("my-custom-model".to_string());
+        let custom_model = ModelColor::Custom("my-custom-model".to_string());
         assert_eq!(custom_model.as_str(None), "my-custom-model");
         assert_eq!(custom_model.as_str(Some(&ClientConfig::default())), "my-custom-model");
     }

@@ -18,9 +18,9 @@
 - **Destination**: `src/cli.rs`
 - **Content**: `impl Commands { fn execute() }` with all command implementations
 
-### Lines 345-379: ModelType Enum & impl
+### Lines 345-379: ModelColor Enum & impl
 - **Destination**: `src/models/types.rs`
-- **Content**: `ModelType` enum + impl (as_str, display_name, from_str)
+- **Content**: `ModelColor` enum + impl (as_str, display_name, from_str)
 
 ### Lines 383-392: Deserializer helper
 - **Destination**: `src/models/types.rs`
@@ -199,7 +199,7 @@ src/
 ├── config.rs            (~250 lines) - ClientConfig + initialization
 ├── models/
 │   ├── mod.rs          (~30 lines)
-│   ├── types.rs        (~250 lines) - Core types, ModelType, Message, ToolCall, args
+│   ├── types.rs        (~250 lines) - Core types, ModelColor, Message, ToolCall, args
 │   ├── requests.rs     (~50 lines) - Request types
 │   └── responses.rs    (~150 lines) - Response types
 ├── api/

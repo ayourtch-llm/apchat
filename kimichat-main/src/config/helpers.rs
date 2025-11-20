@@ -62,7 +62,7 @@ pub fn get_model_config_from_env(model_name: &str) -> (Option<BackendType>, Opti
 
 /// Create an LLM client based on a ModelColor enum value
 /// This is the highest-level helper that maps ModelColor to the appropriate client
-pub fn create_client_for_model_type(
+pub fn create_client_for_model_color(
     model: &ModelColor,
     client_config: &ClientConfig,
     default_api_key: &str,

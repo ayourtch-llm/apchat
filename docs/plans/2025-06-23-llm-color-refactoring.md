@@ -12,14 +12,14 @@ This document outlines the implementation plan for refactoring the logical LLM "
 2. Each color should map to a tuple: (model, backend, api_url, api_key)
 3. The API key should remain configurable as before
 4. The other three elements should be parseable from attings: model@backend(api_url) or similar patterns
-5. ModelType enum should have only three "colors" and not mention providers
+5. ModelColor enum should have only three "colors" and not mention providers
 
 ## Current Architecture
 
-### ModelType Enum
+### ModelColor Enum
 Located in `crates/kimichat-models/src/types.rs`
 
-Current ModelType enum has:
+Current ModelColor enum has:
 - `BluModel` (mapped to "moonshotai/kimi-k2-instruct-0905")
 - `GrnModel` (mapped to "openai/gpt-oss-120b")
 - `RedModel` (mapped to "meta-llama/llama-3.1-70b-versatile")
@@ -36,10 +36,10 @@ Configuration is handled through `ClientConfig` in `kimichat-main/src/config/mod
 
 ## Implementation Steps
 
-### Step 1: Simplify ModelType Enum
+### Step 1: Simplify ModelColor Enum
 
 Update `crates/kimichat-models/src/types.rs`:
-- Remove AnthropicModel and Custom variants from core ModelType
+- Remove AnthropicModel and Custom variants from core ModelColor
 - Keep only BluModel, GrnModel, RedModel
 - Preserve as_str_default, display_name, from_string functions
 
@@ -56,7 +56,7 @@ Update `crates/kimichat-llm-api/src/config/mod.rs`:
 Update `kimichat-main/src/config/helpers.rs`:
 - Update get_model_config_from_env() to work with new parsing approach
 - Update create_model_client() to use mapping system
-- Update create_client_for_model_type() to use mapping system
+- Update create_client_for_model_color() to use mapping system
 
 ### Step 4: Update CLI Interface (if needed)
 
@@ -72,13 +72,13 @@ Update `kimichat-main/src/main.rs`:
 
 ## Detailed Changes
 
-### ModelType Simplification (crates/kimichat-models/src/types.rs)
+### ModelColor Simplification (crates/kimichat-models/src/types.rs)
 
-The ModelType enum will be simplified to:
+The ModelColor enum will be simplified to:
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ModelType {
+pub enum ModelColor {
     BluModel,
     GrnModel,
     RedModel,

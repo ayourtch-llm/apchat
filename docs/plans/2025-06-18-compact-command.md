@@ -92,7 +92,7 @@ git commit -m "feat: implement /compact command handler"
 mod compact_tests {
     use super::*;
     use crate::KimiChat;
-    use kimichat_models::{Message, ModelType};
+    use kimichat_models::{Message, ModelColor};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -126,7 +126,7 @@ mod compact_tests {
 
     async fn create_test_chat() -> KimiChat {
         KimiChat::new_with_client_config(
-            ModelType::GrnModel,
+            ModelColor::GrnModel,
             Default::default(),
             None,
             None,

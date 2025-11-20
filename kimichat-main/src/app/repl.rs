@@ -56,8 +56,8 @@ pub async fn run_repl_mode(
     println!("{} {}", "📍 Current:".bright_green().bold(), current_model_display.bright_white());
 
     // Function to get backend info
-    let get_backend_info = |model_type: ModelColor| {
-        let (backend_name, url, model_name) = match model_type {
+    let get_backend_info = |model_color: ModelColor| {
+        let (backend_name, url, model_name) = match model_color {
             ModelColor::BluModel => {
                 let backend = if chat.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false) ||
                                env::var("ANTHROPIC_AUTH_TOKEN_BLU").is_ok() {
@@ -120,8 +120,8 @@ pub async fn run_repl_mode(
     };
 
     // Function to get API key preview for a model based on its resolved configuration
-    let get_api_key_preview = |model_type: ModelColor, _backend: &str| {
-        let key_preview = match model_type {
+    let get_api_key_preview = |model_color: ModelColor, _backend: &str| {
+        let key_preview = match model_color {
             ModelColor::BluModel => {
                 if let Some(key) = chat.client_config.get_api_key(ModelColor::BluModel) {
                     Some(format!("{}***", &key[..key.len().min(3)]))

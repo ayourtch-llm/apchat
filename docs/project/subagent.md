@@ -66,7 +66,7 @@ User Input (optional --task) ──► CLI parses flags ──► Build full pro
 Add a field to the existing run‑configuration:
 ```rust
 pub struct RunCfg {
-    pub model: ModelType,
+    pub model: ModelColor,
     // … other existing fields …
     pub summary_mode: bool,   // true when --task is used
 }
@@ -101,7 +101,7 @@ pub enum Verbosity { Terse, Normal, Verbose }
 pub fn heuristic_summary(output: &str, verbosity: Verbosity) -> String;
 
 /// Optional model‑based summarisation (re‑uses the existing API call).
-pub async fn model_summarize(output: &str, model: ModelType) -> anyhow::Result<String>;
+pub async fn model_summarize(output: &str, model: ModelColor) -> anyhow::Result<String>;
 
 #[derive(Serialize)]
 pub struct SummaryMeta {
@@ -127,7 +127,7 @@ pub fn heuristic_summary(output: &str, verbosity: Verbosity) -> String {
     }
 }
 
-pub async fn model_summarize(output: &str, model: ModelType) -> anyhow::Result<String> {
+pub async fn model_summarize(output: &str, model: ModelColor) -> anyhow::Result<String> {
     let system = "You are a concise summariser. Summarise the following assistant response in three short sentences, preserving any file paths or command results.";
     let resp = crate::api::call_api(system, output, model).await?; // reuse existing helper
     Ok(resp.assistant_message)
