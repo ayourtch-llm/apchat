@@ -9,19 +9,34 @@ use kimichat_llm_api::{
 };
 use colored::Colorize;
 
-/// Generate system prompt based on current model
-pub fn get_system_prompt() -> String {
-    "You are an AI assistant with access to file operations and model switching capabilities. \
+/// Generate system prompt based on current model and configured providers
+pub fn get_system_prompt(client_config: &crate::config::ClientConfig) -> String {
+    // Helper function to get model name for a color
+    fn get_model_name_for_color(color: ModelColor, config: &crate::config::ClientConfig) -> String {
+        if let Some(override_model) = config.get_model_override(color) {
+            override_model.to_string()
+        } else {
+            let provider = config.get_provider(color);
+            provider.model_name.clone()
+        }
+    }
+
+    let grn_model_name = get_model_name_for_color(ModelColor::GrnModel, client_config);
+    let blu_model_name = get_model_name_for_color(ModelColor::BluModel, client_config);
+    let red_model_name = get_model_name_for_color(ModelColor::RedModel, client_config);
+
+    format!("You are an AI assistant with access to file operations and model switching capabilities. \
     The system supports multiple models that can be switched during the conversation:\n\
-    - grn_model (GrnModel): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
-    - blu_model (BluModel): Use when GrnModel struggles or when you need faster responses\n\
-    - red_model (RedModel): Use for specialized tasks requiring different capabilities\n\n\
+    - GrnModel ({}): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
+    - BluModel ({}): Use when GrnModel struggles or when you need faster responses\n\
+    - RedModel ({}): Use for specialized tasks requiring different capabilities\n\n\
     IMPORTANT: You have been provided with a set of tools (functions) that you can use. \
     Only use the tools that are provided to you - do not make up tool names or attempt to use tools that are not available. \
     When making multiple file edits, use plan_edits to create a complete plan, then apply_edit_plan to execute all changes atomically. \
     This prevents issues where you lose track of file state between sequential edits.\n\n\
     Model switches may happen automatically during the conversation based on tool usage and errors. \
-    The currently active model will be indicated in system messages as the conversation progresses.".to_string()
+    The currently active model will be indicated in system messages as the conversation progresses.",
+    grn_model_name, blu_model_name, red_model_name)
 }
 
 /// Get the API URL to use based on the current model and client configuration

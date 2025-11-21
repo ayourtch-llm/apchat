@@ -115,12 +115,12 @@ impl ModelColor {
             .iter().copied()
     }
 
-    /// Get the display name for the model
+    /// Get the display name for the model (just the color)
     pub fn display_name(&self) -> &'static str {
         match self {
-            ModelColor::BluModel => "Kimi-K2 (BluModel)",
-            ModelColor::GrnModel => "GPT-OSS (GrnModel)",
-            ModelColor::RedModel => "Llama-3.1-70B (RedModel)",
+            ModelColor::BluModel => "BluModel",
+            ModelColor::GrnModel => "GrnModel", 
+            ModelColor::RedModel => "RedModel",
         }
     }
 

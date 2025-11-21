@@ -187,6 +187,9 @@ impl KimiChat {
             ModelColor::GrnModel
         };
 
+        // Generate system message to inform the model about capabilities (before moving client_config)
+        let system_content = config::get_system_prompt(&client_config);
+
         let mut chat = Self {
             api_key: client_config.api_key.clone(),
             work_dir,
@@ -208,9 +211,6 @@ impl KimiChat {
             debug_level: 0, // Default debug level is 0 (off)
             non_interactive: false, // Default to interactive mode
         };
-
-        // Add system message to inform the model about capabilities
-        let system_content = config::get_system_prompt();
 
         chat.messages.push(Message {
             role: "system".to_string(),

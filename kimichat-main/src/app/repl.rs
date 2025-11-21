@@ -234,8 +234,19 @@ pub async fn run_repl_mode(
         }
     });
 
+    // Helper function to get model name for a color from client config
+    fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
+        if let Some(override_model) = client_config.get_model_override(*color) {
+            override_model.to_string()
+        } else {
+            let provider = client_config.get_provider(*color);
+            provider.model_name.clone()
+        }
+    }
+
     loop {
-        let model_indicator = format!("[{}]", chat.current_model.display_name()).bright_magenta();
+        let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
+        let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
         let readline = rl.readline(&format!("{} {} ", model_indicator, "You:".bright_green().bold()));
 
         match readline {
@@ -585,7 +596,8 @@ pub async fn run_repl_mode(
 
                 // Display response if not streaming (streaming already displayed it)
                 if !chat.stream_responses {
-                    let model_label = format!("[{}]", chat.current_model.display_name()).bright_magenta();
+                    let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
+                    let model_label = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
                     let assistant_label = "Assistant:".bright_blue().bold();
                     println!("\n{} {} {}\n", model_label, assistant_label, response);
                 } else {
