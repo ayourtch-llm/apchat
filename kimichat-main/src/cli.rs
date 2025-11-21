@@ -12,6 +12,8 @@ use kimichat_tools::{
     RunCommandTool, SearchFilesTool,
     PtyLaunchTool, PtySendKeysTool, PtyGetScreenTool, PtyListTool, PtyKillTool,
 };
+use kimichat_models::{ModelConfig, ModelColor};
+use kimichat_llm_api::config::parse_model_attings;
 
 // Note: KimiChat is needed for the Switch command
 // It will be imported from the parent module when needed
@@ -267,6 +269,76 @@ pub enum TerminalCommands {
         /// Keys to send (supports ^C, [UP], [F1], etc.)
         keys: String,
     },
+}
+
+impl Cli {
+    /// Extract model configurations as an array indexed by ModelColor
+    pub fn get_model_configs(&self) -> [ModelConfig; ModelColor::COUNT] {
+        [
+            ModelConfig {
+                backend: self.blu_backend.clone(),
+                api_url: self.api_url_blu_model.clone(),
+                api_key: self.blu_key.clone(),
+                model: self.model_blu_model.clone(),
+            },
+            ModelConfig {
+                backend: self.grn_backend.clone(),
+                api_url: self.api_url_grn_model.clone(),
+                api_key: self.grn_key.clone(),
+                model: self.model_grn_model.clone(),
+            },
+            ModelConfig {
+                backend: self.red_backend.clone(),
+                api_url: self.api_url_red_model.clone(),
+                api_key: self.red_key.clone(),
+                model: self.model_red_model.clone(),
+            },
+        ]
+    }
+    
+    /// Apply the global llama_cpp_url to all model configurations if they don't have specific URLs
+    pub fn apply_llama_cpp_url_to_configs(&self, mut configs: [ModelConfig; ModelColor::COUNT]) -> [ModelConfig; ModelColor::COUNT] {
+        if let Some(ref llama_url) = self.llama_cpp_url {
+            for config in &mut configs {
+                if config.api_url.is_none() {
+                    config.api_url = Some(llama_url.clone());
+                }
+            }
+        }
+        configs
+    }
+    
+    /// Apply the global model to all model configurations if they don't have specific models
+    /// Note: If the global model contains @backend(url) format, we extract and apply the model name, backend, and URL
+    pub fn apply_global_model_to_configs(&self, mut configs: [ModelConfig; ModelColor::COUNT]) -> [ModelConfig; ModelColor::COUNT] {
+        if let Some(ref global_model) = self.model {
+            // Parse the global model to extract model name, backend, and URL
+            let (model_name_only, parsed_backend, parsed_url) = if global_model.contains('@') {
+                // Use the same parsing logic as in setup.rs
+                kimichat_llm_api::config::parse_model_attings(global_model)
+            } else {
+                (global_model.clone(), None, None)
+            };
+            
+            for config in &mut configs {
+                if config.model.is_none() {
+                    config.model = Some(model_name_only.clone());
+                }
+                // Apply parsed backend and URL if they're not already set and if they were parsed from global model
+                if let Some(ref backend) = parsed_backend {
+                    if config.backend.is_none() {
+                        config.backend = Some(backend.as_str().to_string());
+                    }
+                }
+                if let Some(ref url) = parsed_url {
+                    if config.api_url.is_none() {
+                        config.api_url = Some(url.clone());
+                    }
+                }
+            }
+        }
+        configs
+    }
 }
 
 impl Commands {

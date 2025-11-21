@@ -75,6 +75,19 @@ impl ModelProvider {
     }
 }
 
+/// CLI configuration for a specific model
+#[derive(Debug, Clone, Default)]
+pub struct ModelConfig {
+    /// Backend type for this model
+    pub backend: Option<String>,
+    /// API URL for this model
+    pub api_url: Option<String>,
+    /// API key for this model
+    pub api_key: Option<String>,
+    /// Model name override for this model
+    pub model: Option<String>,
+}
+
 impl ModelColor {
     /// Total number of model colors
     pub const COUNT: usize = 3;
@@ -108,6 +121,15 @@ impl ModelColor {
             ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
             ModelColor::RedModel => "meta-llama/llama-3.1-70b-versatile".to_string(),
+        }
+    }
+
+    /// Get the lowercase string representation of the model color
+    pub fn as_str_lowercase(&self) -> &'static str {
+        match self {
+            ModelColor::BluModel => "blu",
+            ModelColor::GrnModel => "grn",
+            ModelColor::RedModel => "red",
         }
     }
 
