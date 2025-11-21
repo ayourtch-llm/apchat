@@ -32,7 +32,7 @@ use config::{ClientConfig, GROQ_API_URL, initialize_tool_registry, initialize_ag
 use chat::{save_state, load_state};
 use app::{setup_from_cli, run_task_mode, run_subagent_mode, run_repl_mode};
 use kimichat_models::{
-    ModelColor, Message, ToolCall, FunctionCall,
+    ModelColor, Message, ToolCall, FunctionCall, ModelProvider,
     SwitchModelArgs,
     Tool, FunctionDef,
     ChatResponse,
@@ -78,10 +78,11 @@ impl KimiChat {
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            backends: [None, None, None],
-            api_urls: [None, None, None],
-            api_keys: [None, None, None],
-            model_overrides: [None, None, None],
+            model_providers: [
+                ModelProvider::new(ModelColor::BluModel.default_model()),
+                ModelProvider::new(ModelColor::GrnModel.default_model()),
+                ModelProvider::new(ModelColor::RedModel.default_model()),
+            ],
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(
@@ -98,10 +99,11 @@ impl KimiChat {
     fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
-            backends: [None, None, None],
-            api_urls: [None, None, None],
-            api_keys: [None, None, None],
-            model_overrides: [None, None, None],
+            model_providers: [
+                ModelProvider::new(ModelColor::BluModel.default_model()),
+                ModelProvider::new(ModelColor::GrnModel.default_model()),
+                ModelProvider::new(ModelColor::RedModel.default_model()),
+            ],
         };
         let policy_manager = PolicyManager::new();
         Self::new_with_config(

@@ -8,7 +8,7 @@ use kimichat_agents::{
 use kimichat_toolcore::ToolRegistry;
 use kimichat_policy::PolicyManager;
 use kimichat_tools::*;
-use kimichat_models::ModelColor;
+use kimichat_models::{ModelColor, ModelProvider};
 
 pub mod helpers;
 pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_client, create_client_for_model_color};
@@ -22,69 +22,89 @@ pub struct ClientConfig {
     /// API key for authentication (Groq default)
     pub api_key: String,
 
-    /// Backend types for each model color [blu, grn, red]
-    pub backends: [Option<BackendType>; ModelColor::COUNT],
-    
-    /// API URLs for each model color [blu, grn, red] - if Some, uses custom backend; if None, uses Groq
-    pub api_urls: [Option<String>; ModelColor::COUNT],
-    
-    /// API keys for each model color [blu, grn, red] - if Some, uses this instead of default api_key
-    pub api_keys: [Option<String>; ModelColor::COUNT],
-    
-    /// Model name overrides for each model color [blu, grn, red]
-    pub model_overrides: [Option<String>; ModelColor::COUNT],
+    /// Model providers indexed by color [blu, grn, red]
+    pub model_providers: [ModelProvider; ModelColor::COUNT],
 }
 
 impl ClientConfig {
-    /// Create a new ClientConfig with all fields set to None
+    /// Create a new ClientConfig with default model providers
     pub fn new() -> Self {
         Self {
             api_key: String::new(),
-            backends: [const { None }; ModelColor::COUNT],
-            api_urls: [const { None }; ModelColor::COUNT],
-            api_keys: [const { None }; ModelColor::COUNT],
-            model_overrides: [const { None }; ModelColor::COUNT],
+            model_providers: [
+                ModelProvider::new(ModelColor::BluModel.default_model()),
+                ModelProvider::new(ModelColor::GrnModel.default_model()),
+                ModelProvider::new(ModelColor::RedModel.default_model()),
+            ],
         }
     }
     
+    /// Get model provider for a specific model color
+    pub fn get_provider(&self, color: ModelColor) -> &ModelProvider {
+        &self.model_providers[color as usize]
+    }
+    
+    /// Get mutable model provider for a specific model color
+    pub fn get_provider_mut(&mut self, color: ModelColor) -> &mut ModelProvider {
+        &mut self.model_providers[color as usize]
+    }
+    
+    /// Set model provider for a specific model color
+    pub fn set_provider(&mut self, color: ModelColor, provider: ModelProvider) {
+        self.model_providers[color as usize] = provider;
+    }
+    
+    // Legacy convenience methods for backward compatibility
     /// Get backend for a specific model color
     pub fn get_backend(&self, color: ModelColor) -> Option<&BackendType> {
-        self.backends[color as usize].as_ref()
+        self.get_provider(color).backend.as_ref()
     }
     
     /// Set backend for a specific model color
     pub fn set_backend(&mut self, color: ModelColor, backend: Option<BackendType>) {
-        self.backends[color as usize] = backend;
+        self.get_provider_mut(color).backend = backend;
     }
     
     /// Get API URL for a specific model color
     pub fn get_api_url(&self, color: ModelColor) -> Option<&String> {
-        self.api_urls[color as usize].as_ref()
+        self.get_provider(color).api_url.as_ref()
     }
     
     /// Set API URL for a specific model color
     pub fn set_api_url(&mut self, color: ModelColor, url: Option<String>) {
-        self.api_urls[color as usize] = url;
+        self.get_provider_mut(color).api_url = url;
     }
     
     /// Get API key for a specific model color
     pub fn get_api_key(&self, color: ModelColor) -> Option<&String> {
-        self.api_keys[color as usize].as_ref()
+        self.get_provider(color).api_key.as_ref()
     }
     
     /// Set API key for a specific model color
     pub fn set_api_key(&mut self, color: ModelColor, key: Option<String>) {
-        self.api_keys[color as usize] = key;
+        self.get_provider_mut(color).api_key = key;
     }
     
-    /// Get model override for a specific model color
+    /// Get model name for a specific model color
+    pub fn get_model_name(&self, color: ModelColor) -> &str {
+        &self.get_provider(color).model_name
+    }
+    
+    /// Set model name for a specific model color
+    pub fn set_model_name(&mut self, color: ModelColor, model: String) {
+        self.get_provider_mut(color).model_name = model;
+    }
+    
+    /// Legacy method: Get model override for a specific model color
     pub fn get_model_override(&self, color: ModelColor) -> Option<&String> {
-        self.model_overrides[color as usize].as_ref()
+        Some(&self.get_provider(color).model_name)
     }
     
-    /// Set model override for a specific model color
+    /// Legacy method: Set model override for a specific model color
     pub fn set_model_override(&mut self, color: ModelColor, model: Option<String>) {
-        self.model_overrides[color as usize] = model;
+        if let Some(model) = model {
+            self.get_provider_mut(color).model_name = model;
+        }
     }
 }
 
@@ -150,22 +170,10 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
     let tool_registry_arc = Arc::new((*tool_registry).clone());
     let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
 
-    // Determine model names with overrides
-    let blu_model = ModelColor::BluModel.as_str(
-        client_config.get_model_override(ModelColor::BluModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::GrnModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::RedModel).map(|s| s.as_str())
-    );
-    let grn_model = ModelColor::GrnModel.as_str(
-        client_config.get_model_override(ModelColor::BluModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::GrnModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::RedModel).map(|s| s.as_str())
-    );
-    let red_model = ModelColor::RedModel.as_str(
-        client_config.get_model_override(ModelColor::BluModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::GrnModel).map(|s| s.as_str()),
-        client_config.get_model_override(ModelColor::RedModel).map(|s| s.as_str())
-    );
+    // Determine model names from providers
+    let blu_model = client_config.get_model_name(ModelColor::BluModel).to_string();
+    let grn_model = client_config.get_model_name(ModelColor::GrnModel).to_string();
+    let red_model = client_config.get_model_name(ModelColor::RedModel).to_string();
 
     // Register LLM clients based on per-model configuration
     // Use the centralized helper function to create clients for all three models

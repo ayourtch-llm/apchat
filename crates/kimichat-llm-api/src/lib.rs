@@ -69,7 +69,6 @@ pub use client::{
 };
 
 pub use config::{
-    BackendType,
     ClientFactory,
     GROQ_API_URL,
     ANTHROPIC_API_URL,
@@ -78,3 +77,6 @@ pub use config::{
     get_default_url_for_backend,
     get_default_model_for_backend,
 };
+
+// Re-export BackendType from kimichat-models to maintain API compatibility
+pub use kimichat_models::BackendType;

@@ -1,42 +1,7 @@
-use std::env;
-use std::sync::Arc;
-
-use crate::client::{LlmClient, anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient};
+use kimichat_models::BackendType;
 
 pub mod factory;
 pub use factory::ClientFactory;
-
-/// Backend type for LLM models
-#[derive(Debug, Clone, PartialEq)]
-pub enum BackendType {
-    Groq,
-    Anthropic,
-    Llama,
-    OpenAI,
-}
-
-impl BackendType {
-    /// Parse backend type from string
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s.to_lowercase().as_str() {
-            "groq" => Some(Self::Groq),
-            "anthropic" | "claude" => Some(Self::Anthropic),
-            "llama" | "llamacpp" | "llama.cpp" | "llama-cpp" => Some(Self::Llama),
-            "openai" => Some(Self::OpenAI),
-            _ => None,
-        }
-    }
-
-    /// Get string representation
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::Groq => "groq",
-            Self::Anthropic => "anthropic",
-            Self::Llama => "llama",
-            Self::OpenAI => "openai",
-        }
-    }
-}
 
 /// Default Groq API URL
 pub const GROQ_API_URL: &str = "https://api.groq.com/openai/v1/chat/completions";

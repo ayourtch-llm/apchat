@@ -1,11 +1,78 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
+/// Backend type for LLM models
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum BackendType {
+    Groq,
+    Anthropic,
+    Llama,
+    OpenAI,
+}
+
+impl BackendType {
+    /// Parse backend type from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "groq" => Some(Self::Groq),
+            "anthropic" | "claude" => Some(Self::Anthropic),
+            "llama" | "llamacpp" | "llama.cpp" | "llama-cpp" => Some(Self::Llama),
+            "openai" => Some(Self::OpenAI),
+            _ => None,
+        }
+    }
+
+    /// Get string representation
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Groq => "groq",
+            Self::Anthropic => "anthropic",
+            Self::Llama => "llama",
+            Self::OpenAI => "openai",
+        }
+    }
+}
+
 /// Model colors supported by the system
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelColor {
     BluModel = 0,
     GrnModel = 1,
     RedModel = 2,
+}
+
+/// Model provider configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelProvider {
+    /// Model name (e.g., "moonshotai/kimi-k2-instruct-0905")
+    pub model_name: String,
+    /// Backend type (Groq, Anthropic, Llama, etc.)
+    pub backend: Option<BackendType>,
+    /// API URL for the provider
+    pub api_url: Option<String>,
+    /// API key for the provider
+    pub api_key: Option<String>,
+}
+
+impl ModelProvider {
+    /// Create a new ModelProvider with minimal configuration
+    pub fn new(model_name: String) -> Self {
+        Self {
+            model_name,
+            backend: None,
+            api_url: None,
+            api_key: None,
+        }
+    }
+    
+    /// Create a new ModelProvider with all fields
+    pub fn with_config(model_name: String, backend: Option<BackendType>, api_url: Option<String>, api_key: Option<String>) -> Self {
+        Self {
+            model_name,
+            backend,
+            api_url,
+            api_key,
+        }
+    }
 }
 
 impl ModelColor {

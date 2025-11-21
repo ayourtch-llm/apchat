@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use crate::cli::Cli;
 use crate::config::{ClientConfig, BackendType};
+use kimichat_models::{ModelColor, ModelProvider};
 use crate::config::helpers::get_model_config_from_env;
 use kimichat_policy::PolicyManager;
 use kimichat_llm_api::config::{parse_model_attings, GROQ_API_URL, ANTHROPIC_API_URL, OPENAI_API_URL, get_default_url_for_backend};
@@ -287,25 +288,25 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     // Priority: specific flags override general --model flag, but model@backend(url) format has highest precedence
     let client_config = ClientConfig {
         api_key: api_key.clone(),
-        backends: [
-            backend_blu_model_final,
-            backend_grn_model_final,
-            backend_red_model_final,
-        ],
-        api_urls: [
-            api_url_blu_model_final.clone(),
-            api_url_grn_model_final.clone(),
-            api_url_red_model_final.clone(),
-        ],
-        api_keys: [
-            api_key_blu_model,
-            api_key_grn_model,
-            api_key_red_model,
-        ],
-        model_overrides: [
-            model_blu_override_final.clone(),
-            model_grn_override_final.clone(),
-            model_red_override_final.clone(),
+        model_providers: [
+            ModelProvider::with_config(
+                model_blu_override_final.clone().unwrap_or_else(|| ModelColor::BluModel.default_model()),
+                backend_blu_model_final,
+                api_url_blu_model_final,
+                api_key_blu_model,
+            ),
+            ModelProvider::with_config(
+                model_grn_override_final.clone().unwrap_or_else(|| ModelColor::GrnModel.default_model()),
+                backend_grn_model_final,
+                api_url_grn_model_final,
+                api_key_grn_model,
+            ),
+            ModelProvider::with_config(
+                model_red_override_final.clone().unwrap_or_else(|| ModelColor::RedModel.default_model()),
+                backend_red_model_final,
+                api_url_red_model_final,
+                api_key_red_model,
+            ),
         ],
     };
 
