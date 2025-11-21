@@ -16,6 +16,7 @@ pub struct AppConfig {
     pub policy_manager: PolicyManager,
     pub work_dir: PathBuf,
     pub api_key: String,
+    pub early_superpowers: bool,
 }
 
 /// Resolve API key based on the final backend and precedence rules
@@ -324,5 +325,6 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         policy_manager,
         work_dir,
         api_key,
+        early_superpowers: cli.early_superpowers,
     })
 }

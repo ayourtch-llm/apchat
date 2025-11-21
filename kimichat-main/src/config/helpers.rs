@@ -10,7 +10,11 @@ use kimichat_llm_api::{
 use colored::Colorize;
 
 /// Generate system prompt based on current model and configured providers
-pub fn get_system_prompt(client_config: &crate::config::ClientConfig) -> String {
+pub fn get_system_prompt(
+    client_config: &crate::config::ClientConfig,
+    skill_registry: Option<&std::sync::Arc<kimichat_skills::SkillRegistry>>,
+    early_superpowers: bool,
+) -> String {
     // Helper function to get model name for a color
     fn get_model_name_for_color(color: ModelColor, config: &crate::config::ClientConfig) -> String {
         if let Some(override_model) = config.get_model_override(color) {
@@ -25,7 +29,7 @@ pub fn get_system_prompt(client_config: &crate::config::ClientConfig) -> String 
     let blu_model_name = get_model_name_for_color(ModelColor::BluModel, client_config);
     let red_model_name = get_model_name_for_color(ModelColor::RedModel, client_config);
 
-    format!("You are an AI assistant with access to file operations and model switching capabilities. \
+    let mut base_prompt = format!("You are an AI assistant with access to file operations and model switching capabilities. \
     The system supports multiple models that can be switched during the conversation:\n\
     - GrnModel ({}): **Preferred for cost efficiency** - significantly cheaper than BluModel while providing good performance for most tasks\n\
     - BluModel ({}): Use when GrnModel struggles or when you need faster responses\n\
@@ -36,7 +40,47 @@ pub fn get_system_prompt(client_config: &crate::config::ClientConfig) -> String 
     This prevents issues where you lose track of file state between sequential edits.\n\n\
     Model switches may happen automatically during the conversation based on tool usage and errors. \
     The currently active model will be indicated in system messages as the conversation progresses.",
-    grn_model_name, blu_model_name, red_model_name)
+    grn_model_name, blu_model_name, red_model_name);
+
+    // Add early superpowers section if enabled
+    if early_superpowers {
+        if let Some(registry) = skill_registry {
+            let all_skills = registry.get_all_skills();
+            if !all_skills.is_empty() {
+                base_prompt.push_str("\n\n\
+# 🚀 Early Superpowers Loaded\n\n\
+**All available skills have been pre-loaded and are immediately available:**\n\n");
+                
+                for (skill_name, skill) in all_skills {
+                    // Extract the description from the skill content
+                    let description = if !skill.description.is_empty() {
+                        skill.description.clone()
+                    } else {
+                        // Fallback to extracting from content if description field is empty
+                        skill.content.lines()
+                            .find(|line| line.starts_with("description:"))
+                            .and_then(|line| line.split(':').nth(1))
+                            .map(|desc| desc.trim())
+                            .unwrap_or("No description available")
+                            .to_string()
+                    };
+                    
+                    base_prompt.push_str(&format!("- **{}**: {}\n", skill_name, description));
+                }
+                
+                base_prompt.push_str("\n\
+**How to use these skills:**\n\
+- Skills are proven workflows and techniques that enhance your capabilities\n\
+- When a skill applies to your current task, follow its instructions exactly\n\
+- Many skills contain specific rules, checklists, or processes that must be followed\n\
+- Skills with checklists should use TodoWrite tracking for systematic execution\n\
+- The `using-superpowers` skill establishes mandatory workflows for finding and using skills\n\n\
+**Important:** If any skill applies to what you're doing, you MUST use it. Skills exist because they document proven techniques that save time and prevent mistakes.\n");
+            }
+        }
+    }
+
+    base_prompt
 }
 
 /// Get the API URL to use based on the current model and client configuration

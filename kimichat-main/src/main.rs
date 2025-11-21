@@ -93,6 +93,7 @@ impl KimiChat {
             false,
             false,
             TerminalBackendType::Pty,
+            false, // Default early_superpowers to false
         )
     }
 
@@ -114,6 +115,7 @@ impl KimiChat {
             false,
             false,
             TerminalBackendType::Pty,
+            false, // Default early_superpowers to false
         )
     }
 
@@ -140,6 +142,7 @@ impl KimiChat {
         stream_responses: bool,
         verbose: bool,
         backend_type: TerminalBackendType,
+        early_superpowers: bool,
     ) -> Self {
         let tool_registry = initialize_tool_registry();
 
@@ -188,7 +191,7 @@ impl KimiChat {
         };
 
         // Generate system message to inform the model about capabilities (before moving client_config)
-        let system_content = config::get_system_prompt(&client_config);
+        let system_content = config::get_system_prompt(&client_config, skill_registry.as_ref(), early_superpowers);
 
         let mut chat = Self {
             api_key: client_config.api_key.clone(),

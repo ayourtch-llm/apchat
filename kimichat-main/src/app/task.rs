@@ -37,6 +37,7 @@ pub async fn run_task_mode(
         cli.stream,
         cli.verbose,
         backend_type,
+        cli.early_superpowers,
     );
 
     // Initialize logger for task mode

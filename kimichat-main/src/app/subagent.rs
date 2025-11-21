@@ -52,6 +52,7 @@ pub async fn run_subagent_mode(
         false, // No streaming in subagent mode
         cli.verbose,
         backend_type,
+        cli.early_superpowers,
     );
 
     // Mark as non-interactive to prevent prompts

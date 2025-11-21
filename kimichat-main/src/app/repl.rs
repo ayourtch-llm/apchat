@@ -40,6 +40,7 @@ pub async fn run_repl_mode(
         cli.stream,
         cli.verbose,
         backend_type,
+        cli.early_superpowers,
     );
 
     // Comprehensive model configuration display

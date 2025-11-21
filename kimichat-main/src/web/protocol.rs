@@ -16,6 +16,8 @@ pub struct SessionConfig {
     pub agents_enabled: bool,
     #[serde(default = "default_stream")]
     pub stream_responses: bool,
+    #[serde(default)]
+    pub early_superpowers: bool,
 }
 
 fn default_stream() -> bool {

@@ -114,6 +114,11 @@ pub struct Cli {
     #[arg(long)]
     pub auto_confirm: bool,
 
+    /// Load all superpowers at conversation start instead of before each task
+    /// This includes all available skills in the initial system prompt for immediate availability
+    #[arg(long)]
+    pub early_superpowers: bool,
+
     /// Path to policy file (default: policies.toml in project root)
     #[arg(long, value_name = "PATH")]
     pub policy_file: Option<String>,

@@ -254,6 +254,7 @@ impl SessionManager {
             config.stream_responses,
             false, // verbose
             crate::terminal::TerminalBackendType::Pty,
+            config.early_superpowers,
         );
 
         kimichat.current_model = model;
@@ -338,6 +339,7 @@ impl SessionManager {
                             false, // stream_responses - default to false
                             false, // verbose
                             crate::terminal::TerminalBackendType::Pty,
+                            false, // early_superpowers - default to false for loaded sessions
                         );
 
                         // Restore state
