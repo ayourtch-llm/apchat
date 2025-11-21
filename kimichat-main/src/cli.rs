@@ -67,19 +67,20 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub api_url_red_model: Option<String>,
 
-    /// Override the 'blu_model' model with a custom model name
+    /// Override the 'blu_model' model with a custom model name (supports model@backend[url] syntax)
     #[arg(long, value_name = "MODEL")]
     pub model_blu_model: Option<String>,
 
-    /// Override the 'grn_model' model with a custom model name
+    /// Override the 'grn_model' model with a custom model name (supports model@backend[url] syntax)
     #[arg(long, value_name = "MODEL")]
     pub model_grn_model: Option<String>,
 
-    /// Override the 'red_model' model with a custom model name
+    /// Override the 'red_model' model with a custom model name (supports model@backend[url] syntax)
     #[arg(long, value_name = "MODEL")]
     pub model_red_model: Option<String>,
 
     /// Set base/default model for all models (can be overridden by specific model flags)
+    /// Supports model@backend[url] syntax to set model, backend, and URL simultaneously
     /// This is a convenience flag that sets the default model for --model-blu-model, --model-grn-model, and --model-red-model
     /// Use specific --model-*-model flags to override this base setting for individual models
     #[arg(long, value_name = "MODEL")]

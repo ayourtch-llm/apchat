@@ -58,29 +58,60 @@ fn process_model_config(
         || api_url.as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
     
     // Resolve model name with precedence: CLI > env > global > defaults > Anthropic defaults
-    let model_name = cli_config.model.clone()
-        .or(model_env.clone())
-        .or_else(|| {
-            // Only use global model if no CLI or env model is set
-            if cli_config.model.is_none() && model_env.is_none() {
-                global_model.clone()
-            } else {
-                None
-            }
-        })
-        .or_else(|| {
-            if is_anthropic {
-                env::var(format!("ANTHROPIC_MODEL_{}", color_name.to_uppercase()))
-                    .ok()
-                    .or_else(|| env::var("ANTHROPIC_MODEL").ok())
-                    .or(Some("claude-3-5-sonnet-20241022".to_string()))
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| color.default_model());
+    // IMPORTANT: Parse CLI model for @backend(url) syntax to extract backend and URL info
+    let (mut final_model_name, mut parsed_backend, mut parsed_url) = (None, None, None);
     
-    (model_name, backend, api_url, api_key)
+    // Check CLI model first and parse for @backend(url) syntax
+    if let Some(ref cli_model) = cli_config.model {
+        if cli_model.contains('@') {
+            let (model_name, backend, url) = parse_model_attings(cli_model);
+            final_model_name = Some(model_name);
+            parsed_backend = backend;
+            parsed_url = url;
+        } else {
+            final_model_name = Some(cli_model.clone());
+        }
+    } else if let Some(ref env_model) = model_env {
+        // Check environment model for @backend(url) syntax
+        if env_model.contains('@') {
+            let (model_name, backend, url) = parse_model_attings(env_model);
+            final_model_name = Some(model_name);
+            parsed_backend = backend;
+            parsed_url = url;
+        } else {
+            final_model_name = Some(env_model.clone());
+        }
+    } else if let Some(ref global_model) = global_model {
+        // Only use global model if no CLI or env model is set
+        if global_model.contains('@') {
+            let (model_name, backend, url) = parse_model_attings(global_model);
+            final_model_name = Some(model_name);
+            parsed_backend = backend;
+            parsed_url = url;
+        } else {
+            final_model_name = Some(global_model.clone());
+        }
+    }
+    
+    // Final fallback to Anthropic defaults or color default
+    let model_name = final_model_name.or_else(|| {
+        if is_anthropic {
+            env::var(format!("ANTHROPIC_MODEL_{}", color_name.to_uppercase()))
+                .ok()
+                .or_else(|| env::var("ANTHROPIC_MODEL").ok())
+                .or(Some("claude-3-5-sonnet-20241022".to_string()))
+        } else {
+            None
+        }
+    }).unwrap_or_else(|| color.default_model());
+    
+    // Backend resolution: parsed from model > explicit CLI backend > env backend
+    let final_backend = parsed_backend.or(backend);
+    
+    // URL resolution: parsed from model > explicit CLI URL > env URL > global llama > legacy env
+    let final_api_url = parsed_url.or(api_url);
+    
+    (model_name, final_backend, final_api_url, api_key)
 }
 
 /// Set up application configuration from CLI arguments
@@ -142,91 +173,21 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         api_keys[ModelColor::RedModel as usize].clone(),
     );
 
-    // Parse model@backend(url) format if present - this has the highest precedence
-    // but should only apply to models that don't have specific configurations
-    let mut final_model_names = model_names;
-    let mut final_backends = backends;
-    let mut final_api_urls = api_urls;
-    let mut final_api_keys = api_keys;
-
-    if let Some(model_config) = &cli.model {
-        // Check if this is the model@backend(url) format
-        if model_config.contains('@') {
-            let (parsed_model, parsed_backend, parsed_url) = parse_model_attings(model_config);
-            
-            eprintln!("{} Parsed model configuration: model='{}', backend={:?}, url={:?}", 
-                     "🔧".cyan(), parsed_model, parsed_backend, parsed_url);
-            
-            // When backend changes via model@backend syntax, we need to re-resolve API keys
-            // to ensure backend-appropriate keys are used instead of the original per-model keys
-            let resolve_api_key_for_backend = |color_name: &str, backend: Option<BackendType>, original_key: Option<String>| -> Option<String> {
-                // If we have an explicit backend, prefer backend-specific keys
-                // IMPORTANT: Don't fall back to original_key when backend changes, because it's likely for the wrong backend
-                if let Some(BackendType::Anthropic) = backend {
-                    // For Anthropic backend, only use Anthropic keys
-                    env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", color_name.to_uppercase()))
-                        .ok()
-                        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
-                        // Note: Removed .or(original_key) to prevent using wrong backend keys
-                } else if let Some(BackendType::OpenAI) = backend {
-                    // For OpenAI backend, only use OpenAI keys
-                    env::var(format!("OPENAI_API_KEY_{}", color_name.to_uppercase()))
-                        .ok()
-                        .or_else(|| env::var("OPENAI_API_KEY").ok())
-                        // Note: Removed .or(original_key) to prevent using wrong backend keys
-                } else {
-                    // For Groq/Llama backends, only use Groq keys or original per-model key if no backend change
-                    // If no explicit backend was specified, use the original key
-                    if backend.is_none() {
-                        original_key.or_else(|| env::var(format!("GROQ_API_KEY_{}", color_name.to_uppercase())).ok())
-                             .or_else(|| env::var("GROQ_API_KEY").ok())
-                    } else {
-                        // Backend changed to Groq/Llama, only use Groq keys
-                        env::var(format!("GROQ_API_KEY_{}", color_name.to_uppercase())).ok()
-                             .or_else(|| env::var("GROQ_API_KEY").ok())
-                    }
-                }
-            };
-            
-            // Apply the parsed configuration only to models that don't have specific configurations
-            // This respects the precedence: specific flags > global --model > defaults
-            let env_configs_names = ["blu", "grn", "red"];
-            for (i, color) in ModelColor::iter().enumerate() {
-                let has_cli_config = model_configs[i].model.is_some();
-                let has_env_config = env_configs[i].3.is_some(); // model_env is at index 3
-                
-                if !has_cli_config && !has_env_config {
-                    final_model_names[i] = parsed_model.clone();
-                    if let Some(ref backend) = parsed_backend {
-                        final_backends[i] = Some(backend.clone());
-                    }
-                    let final_url = parsed_url.clone().or_else(|| {
-                        if let Some(ref backend) = parsed_backend {
-                            get_default_url_for_backend(backend)
-                        } else {
-                            None
-                        }
-                    });
-                    if let Some(ref url) = final_url {
-                        final_api_urls[i] = Some(url.clone());
-                    }
-                    
-                    // Fix: Re-resolve API key based on the new backend
-                    final_api_keys[i] = resolve_api_key_for_backend(env_configs_names[i], parsed_backend.clone(), final_api_keys[i].clone());
-                }
-            }
-        }
-    }
-
     // Debug output to understand what's happening with model overrides
     eprintln!("{} DEBUG: Final model overrides before client config:", "🔍".yellow());
     for (i, color) in ModelColor::iter().enumerate() {
-        eprintln!("  {}_model_override_final: {:?}", color.as_str_lowercase(), final_model_names[i]);
+        eprintln!("  {}_model_override_final: {:?}", color.as_str_lowercase(), model_names[i]);
+        if let Some(ref backend) = backends[i] {
+            eprintln!("  {}_backend_override_final: {:?}", color.as_str_lowercase(), backend);
+        }
+        if let Some(ref url) = api_urls[i] {
+            eprintln!("  {}_url_override_final: {:?}", color.as_str_lowercase(), url);
+        }
     }
     eprintln!("  CLI global model: {:?}", cli.model);
 
     // API key is only required if at least one model uses Groq (no API URL specified and no per-model key)
-    let needs_groq_key = final_api_urls.iter().zip(final_api_keys.iter())
+    let needs_groq_key = api_urls.iter().zip(api_keys.iter())
         .any(|(url, key)| url.is_none() && key.is_none());
 
     let api_key = if needs_groq_key {
@@ -245,10 +206,10 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     // Priority: specific flags override general --model flag, but model@backend(url) format has highest precedence
     let model_providers: [ModelProvider; ModelColor::COUNT] = ModelColor::iter().enumerate().map(|(i, color)| {
         ModelProvider::with_config(
-            final_model_names[i].clone(),
-            final_backends[i].clone(),
-            final_api_urls[i].clone(),
-            final_api_keys[i].clone(),
+            model_names[i].clone(),
+            backends[i].clone(),
+            api_urls[i].clone(),
+            api_keys[i].clone(),
         )
     }).collect::<Vec<_>>().try_into().unwrap_or_else(|_| {
         // This should never happen since we know the array size matches ModelColor::COUNT
@@ -262,11 +223,11 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
 
     // Inform user about auto-detected Anthropic configuration
     for (i, color) in ModelColor::iter().enumerate() {
-        let is_anthropic = final_backends[i].as_ref() == Some(&BackendType::Anthropic)
-            || final_api_urls[i].as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
+        let is_anthropic = backends[i].as_ref() == Some(&BackendType::Anthropic)
+            || api_urls[i].as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
         
         if is_anthropic {
-            eprintln!("{} Anthropic detected for {}_model: using model '{}'", "🤖".cyan(), color.as_str_lowercase(), final_model_names[i]);
+            eprintln!("{} Anthropic detected for {}_model: using model '{}'", "🤖".cyan(), color.as_str_lowercase(), model_names[i]);
         }
     }
 
