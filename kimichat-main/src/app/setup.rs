@@ -18,6 +18,56 @@ pub struct AppConfig {
     pub api_key: String,
 }
 
+/// Resolve API key based on the final backend and precedence rules
+/// This ensures that when a backend is overridden, we pick up the correct API key
+fn resolve_api_key_for_backend(
+    final_backend: &Option<BackendType>,
+    cli_key: &Option<String>,
+    env_key: &Option<String>,
+    color_name: &str,
+) -> Option<String> {
+    // If we have a final backend, try backend-specific keys first
+    if let Some(backend) = final_backend {
+        match backend {
+            BackendType::Anthropic => {
+                // For Anthropic: CLI > env > legacy env
+                cli_key.clone()
+                    .or(env_key.clone())
+                    .or_else(|| env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", color_name.to_uppercase())).ok())
+                    .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
+            }
+            BackendType::OpenAI => {
+                // For OpenAI: CLI > env > legacy env
+                cli_key.clone()
+                    .or(env_key.clone())
+                    .or_else(|| env::var(format!("OPENAI_API_KEY_{}", color_name.to_uppercase())).ok())
+                    .or_else(|| env::var("OPENAI_API_KEY").ok())
+            }
+            BackendType::Groq => {
+                // For Groq: CLI > env > legacy env
+                cli_key.clone()
+                    .or(env_key.clone())
+                    .or_else(|| env::var(format!("GROQ_API_KEY_{}", color_name.to_uppercase())).ok())
+                    .or_else(|| env::var("GROQ_API_KEY").ok())
+            }
+            BackendType::Llama => {
+                // For Llama: CLI > env (no standard env var for llama)
+                cli_key.clone().or(env_key.clone())
+            }
+        }
+    } else {
+        // No specific backend, use general precedence: CLI > env > legacy env
+        cli_key.clone()
+            .or(env_key.clone())
+            .or_else(|| env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", color_name.to_uppercase())).ok())
+            .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
+            .or_else(|| env::var(format!("OPENAI_API_KEY_{}", color_name.to_uppercase())).ok())
+            .or_else(|| env::var("OPENAI_API_KEY").ok())
+            .or_else(|| env::var(format!("GROQ_API_KEY_{}", color_name.to_uppercase())).ok())
+            .or_else(|| env::var("GROQ_API_KEY").ok())
+    }
+}
+
 /// Process a single model's configuration
 /// This function generalizes the configuration logic for a single model color
 fn process_model_config(
@@ -47,13 +97,7 @@ fn process_model_config(
         .or_else(|| env::var(format!("ANTHROPIC_BASE_URL_{}", color_name.to_uppercase())).ok())
         .or_else(|| env::var("ANTHROPIC_BASE_URL").ok());
     
-    // Resolve API key with precedence: CLI > env > legacy env
-    let api_key = cli_config.api_key.clone()
-        .or(key_env)
-        .or_else(|| env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", color_name.to_uppercase())).ok())
-        .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok());
-    
-    // Detect if this is an Anthropic configuration
+    // Detect if this is an Anthropic configuration for fallback model selection
     let is_anthropic = backend.as_ref() == Some(&BackendType::Anthropic)
         || api_url.as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
     
@@ -111,7 +155,15 @@ fn process_model_config(
     // URL resolution: parsed from model > explicit CLI URL > env URL > global llama > legacy env
     let final_api_url = parsed_url.or(api_url);
     
-    (model_name, final_backend, final_api_url, api_key)
+    // API KEY resolution: moved to AFTER backend parsing to ensure we pick up the correct key for the final backend
+    let final_api_key = resolve_api_key_for_backend(
+        &final_backend,
+        &cli_config.api_key,
+        &key_env,
+        color_name,
+    );
+    
+    (model_name, final_backend, final_api_url, final_api_key)
 }
 
 /// Set up application configuration from CLI arguments
@@ -182,6 +234,17 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
         }
         if let Some(ref url) = api_urls[i] {
             eprintln!("  {}_url_override_final: {:?}", color.as_str_lowercase(), url);
+        }
+        if let Some(ref key) = api_keys[i] {
+            // Show only first 4 chars of API key for security
+            let key_preview = if key.len() > 4 {
+                format!("{}****", &key[..4])
+            } else {
+                "****".to_string()
+            };
+            eprintln!("  {}_api_key_override_final: {:?}", color.as_str_lowercase(), key_preview);
+        } else {
+            eprintln!("  {}_api_key_override_final: None", color.as_str_lowercase());
         }
     }
     eprintln!("  CLI global model: {:?}", cli.model);
