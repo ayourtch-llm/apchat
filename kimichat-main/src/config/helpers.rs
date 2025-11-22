@@ -230,11 +230,16 @@ pub fn create_model_client(
             ))
         }
         BackendType::Groq => {
-            println!("{} Using Groq API for '{}_model'", "🚀".cyan(), model_name);
+            let url = api_url.unwrap_or_else(|| GROQ_API_URL.to_string());
+            let key = api_key
+                .or_else(|| env::var(format!("GROQ_API_KEY_{}", model_name_upper)).ok())
+                .or_else(|| env::var("GROQ_API_KEY").ok())
+                .unwrap_or_else(|| default_api_key.to_string());
+            println!("{} Using Groq API for '{}_model' at: {}", "🚀".cyan(), model_name, url);
             Arc::new(GroqLlmClient::new(
-                default_api_key.to_string(),
+                key,
                 model_str,
-                GROQ_API_URL.to_string(),
+                url,
                 format!("{}_model", model_name)
             ))
         }

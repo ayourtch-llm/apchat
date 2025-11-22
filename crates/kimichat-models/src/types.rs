@@ -129,7 +129,7 @@ impl ModelColor {
         match self {
             ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
-            ModelColor::RedModel => "meta-llama/llama-3.1-70b-versatile".to_string(),
+            ModelColor::RedModel => "moonshotai/kimi-k2-instruct".to_string(),
         }
     }
 
@@ -137,7 +137,7 @@ impl ModelColor {
         match self {
             ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
-            ModelColor::RedModel => "meta-llama/llama-3.1-70b-versatile".to_string(),
+            ModelColor::RedModel => "moonshotai/kimi-k2-instruct".to_string(),
         }
     }
 

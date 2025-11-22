@@ -108,6 +108,9 @@ impl ClientConfig {
     }
 }
 
+#[cfg(test)]
+mod api_key_tests;
+
 /// Initialize the tool registry with all available tools
 pub fn initialize_tool_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
