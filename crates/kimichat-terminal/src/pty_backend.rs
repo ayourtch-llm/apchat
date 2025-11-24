@@ -92,8 +92,8 @@ impl TerminalBackend for PtyBackend {
     async fn send_keys(&mut self, session_id: &str, keys: &str) -> Result<()> {
         let session = self.get_session(session_id)?;
         let mut session = session.lock().unwrap();
-        // Send keys without special key handling (caller handles \n explicitly)
-        session.send_keys(keys, false)
+        // Send keys WITH special key handling to process control characters like \n, ^C, etc.
+        session.send_keys(keys, true)
     }
 
     async fn get_screen(&self, session_id: &str, include_colors: bool, include_cursor: bool) -> Result<String> {

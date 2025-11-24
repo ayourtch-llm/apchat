@@ -1,7 +1,7 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use anyhow::{Result, Context};
-use portable_pty::{CommandBuilder, PtySize, PtySystem, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 /// Handles PTY process management
 pub struct PtyHandler {
@@ -162,6 +162,55 @@ impl PtyHandler {
 
         while let Some(ch) = chars.next() {
             match ch {
+                '\\' => {
+                    // Escape sequence
+                    if let Some(&next_ch) = chars.peek() {
+                        chars.next();
+                        let escape_char = match next_ch {
+                            'n' => '\n',    // Newline
+                            'r' => '\r',    // Carriage return
+                            't' => '\t',    // Tab
+                            '\\' => '\\',   // Backslash
+                            'x' => {
+                                // Hex escape sequence like \x1B
+                                let mut hex_str = String::new();
+                                // Collect up to 2 hex digits
+                                for _ in 0..2 {
+                                    if let Some(&c) = chars.peek() {
+                                        if c.is_ascii_hexdigit() {
+                                            hex_str.push(chars.next().unwrap());
+                                        } else {
+                                            break;
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                if hex_str.len() == 2 {
+                                    match u8::from_str_radix(&hex_str, 16) {
+                                        Ok(b) => b as char,
+                                        Err(_) => '?',
+                                    }
+                                } else {
+                                    // Invalid hex sequence, output as-is
+                                    result.push('\\');
+                                    result.push('x');
+                                    result.push_str(&hex_str);
+                                    continue;
+                                }
+                            }
+                            _ => {
+                                // Not a valid escape sequence, output as-is
+                                result.push('\\');
+                                result.push(next_ch);
+                                continue;
+                            }
+                        };
+                        result.push(escape_char);
+                    } else {
+                        result.push(ch);
+                    }
+                }
                 '^' => {
                     // Control key sequence
                     if let Some(&next_ch) = chars.peek() {
