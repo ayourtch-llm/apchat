@@ -18,6 +18,7 @@ use kimichat_todo::TodoManager;
 /// - Skill registry for accessing skills
 /// - Todo manager for task tracking
 /// - Non-interactive flag for web/API mode
+/// - Current model string for subagent spawning (formatted as "modname@backend(url)")
 #[derive(Debug, Clone)]
 pub struct ToolContext {
     pub work_dir: PathBuf,
@@ -28,6 +29,7 @@ pub struct ToolContext {
     pub skill_registry: Option<Arc<SkillRegistry>>,
     pub todo_manager: Option<Arc<TodoManager>>,
     pub non_interactive: bool,
+    pub current_model_string: Option<String>,
 }
 
 impl ToolContext {
@@ -41,6 +43,7 @@ impl ToolContext {
             skill_registry: None,
             todo_manager: None,
             non_interactive: false,
+            current_model_string: None,
         }
     }
 
@@ -66,6 +69,11 @@ impl ToolContext {
 
     pub fn with_todo_manager(mut self, todo_manager: Arc<TodoManager>) -> Self {
         self.todo_manager = Some(todo_manager);
+        self
+    }
+
+    pub fn with_current_model_string(mut self, model_string: String) -> Self {
+        self.current_model_string = Some(model_string);
         self
     }
 

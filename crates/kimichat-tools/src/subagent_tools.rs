@@ -50,6 +50,11 @@ impl Tool for LaunchSubagentTool {
            .arg(&task)
            .arg("--auto-confirm"); // Always use auto-confirm for subagent calls
 
+        // Add model parameter if current model string is available
+        if let Some(model_string) = &context.current_model_string {
+            cmd.arg("--model").arg(model_string);
+        }
+
         if working_directory != context.work_dir.to_string_lossy() {
             cmd.current_dir(&working_directory);
         }
@@ -154,6 +159,11 @@ impl Tool for LaunchSubagentPrettyTool {
            .arg(&task)
            .arg("--pretty")
            .arg("--auto-confirm");
+
+        // Add model parameter if current model string is available
+        if let Some(model_string) = &context.current_model_string {
+            cmd.arg("--model").arg(model_string);
+        }
 
         if working_directory != context.work_dir.to_string_lossy() {
             cmd.current_dir(&working_directory);

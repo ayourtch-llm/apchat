@@ -386,6 +386,27 @@ impl KimiChat {
         ))
     }
 
+    /// Format the current model as a string in format "modname@backend(url)"
+    fn format_current_model_string(&self) -> String {
+        let provider = self.client_config.get_provider(self.current_model);
+        let model_name = &provider.model_name;
+        
+        // Get backend name
+        let backend_name = match provider.backend {
+            Some(kimichat_models::BackendType::Groq) => "groq",
+            Some(kimichat_models::BackendType::OpenAI) => "openai", 
+            Some(kimichat_models::BackendType::Anthropic) => "anthropic",
+            Some(kimichat_models::BackendType::Llama) => "llama",
+            None => "unknown",
+        };
+        
+        let api_url = provider.api_url.as_ref()
+            .map(|url| url.as_str())
+            .unwrap_or("https://api.example.com");
+            
+        format!("{}@{}({})", model_name, backend_name, api_url)
+    }
+
     fn save_state(&self, file_path: &str) -> Result<String> {
         save_state(&self.messages, &self.current_model, self.total_tokens_used, file_path)
     }
@@ -419,6 +440,9 @@ impl KimiChat {
                 let params = ToolParameters::from_json(arguments)
                     .with_context(|| format!("Failed to parse tool arguments for '{}': {}", name, arguments))?;
 
+                // Format current model string for subagent tools
+                let current_model_string = self.format_current_model_string();
+
                 let mut context = ToolContext::new(
                     self.work_dir.clone(),
                     format!("session_{}", chrono::Utc::now().timestamp()),
@@ -426,7 +450,8 @@ impl KimiChat {
                 )
                 .with_terminal_manager(self.terminal_manager.clone())
                 .with_todo_manager(self.todo_manager.clone())
-                .with_non_interactive(self.non_interactive);
+                .with_non_interactive(self.non_interactive)
+                .with_current_model_string(current_model_string);
 
                 // Add skill registry if available
                 if let Some(ref registry) = self.skill_registry {
