@@ -91,7 +91,7 @@ impl TerminalBackend for TmuxBackend {
     async fn launch_session(
         &mut self,
         id: String,
-        command: String,
+        command: Option<String>,
         rows: u16,
         cols: u16,
         working_dir: Option<String>,
@@ -119,8 +119,10 @@ impl TerminalBackend for TmuxBackend {
         }
 
         // Set the command to run (or default shell)
-        if !command.is_empty() && command != "default shell" {
-            cmd.arg(command);
+        if let Some(command_str) = command {
+            if !command_str.is_empty() {
+                cmd.arg(command_str);
+            }
         }
 
         let output = cmd.output()?;

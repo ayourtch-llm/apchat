@@ -31,7 +31,7 @@ pub trait TerminalBackend: Send + Sync {
     async fn launch_session(
         &mut self,
         id: String,
-        command: String,
+        command: Option<String>,
         rows: u16,
         cols: u16,
         working_dir: Option<String>,

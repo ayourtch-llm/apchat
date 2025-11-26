@@ -16,7 +16,7 @@ impl Tool for PtyLaunchTool {
     }
 
     fn description(&self) -> &str {
-        "Launch a new PTY terminal session with optional command, working directory, and size"
+        "Launch a new PTY terminal session with optional command, working directory, and size. Since this creates an interactive session, commands sent to it must end with \\n (newline) to be executed - this is equivalent to pressing Enter."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
@@ -54,11 +54,13 @@ impl Tool for PtyLaunchTool {
         };
 
         // Create session
-        let command_or_shell = command.clone().unwrap_or_else(|| "default shell".to_string());
+        let command_for_display = command.clone().unwrap_or_else(|| "default shell (user's SHELL or /bin/bash)".to_string());
         let mut manager = terminal_manager.lock().await;
+        
+        // Pass the command as Option to let terminal session use its default shell logic
         match manager.create_session(
             session_id.clone(),
-            command_or_shell.clone(),
+            command,
             working_dir.clone(),
             cols,
             rows
@@ -66,7 +68,7 @@ impl Tool for PtyLaunchTool {
             Ok(returned_id) => {
                 let result = json!({
                     "session_id": returned_id,
-                    "command": command_or_shell,
+                    "command": command_for_display,
                     "working_dir": working_dir.unwrap_or_else(|| context.work_dir.display().to_string()),
                     "size": [cols, rows],
                 });

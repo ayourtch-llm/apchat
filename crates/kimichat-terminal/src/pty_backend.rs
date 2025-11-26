@@ -51,7 +51,7 @@ impl TerminalBackend for PtyBackend {
     async fn launch_session(
         &mut self,
         id: String,
-        command: String,
+        command: Option<String>,
         rows: u16,
         cols: u16,
         working_dir: Option<String>,
@@ -70,7 +70,7 @@ impl TerminalBackend for PtyBackend {
         // Create the session using existing TerminalSession logic
         let session = TerminalSession::new(
             numeric_id,
-            Some(command),
+            command,
             working_dir_path,
             Some(cols),
             Some(rows),

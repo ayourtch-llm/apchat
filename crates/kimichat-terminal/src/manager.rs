@@ -67,7 +67,7 @@ impl TerminalManager {
     pub async fn create_session(
         &mut self,
         id: String,
-        command: String,
+        command: Option<String>,
         working_dir: Option<String>,
         cols: u16,
         rows: u16,
