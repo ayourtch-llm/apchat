@@ -89,13 +89,14 @@ impl Tool for PtySendKeysTool {
     }
 
     fn description(&self) -> &str {
-        "Send keystrokes to a PTY terminal session. IMPORTANT: To execute a command, you MUST end it with \\n (newline) - this is equivalent to pressing Enter. Without \\n, the text just appears on screen but doesn't execute. Examples: 'ls\\n' to run ls, 'cd /tmp\\n' to change directory. Also supports special keys: ^C (Ctrl+C to interrupt), ^D (Ctrl+D for EOF), [UP]/[DOWN] (arrow keys), [TAB] (tab completion), etc."
+        "Send keystrokes to a PTY terminal session. IMPORTANT: The <enter> key is added automatically at the end of the command. If you do not want to do it (like, when sending specil characters, add 'raw'=true parameter; Also supports special keys: ^C (Ctrl+C to interrupt), ^D (Ctrl+D for EOF), [UP]/[DOWN] (arrow keys), [TAB] (tab completion), etc."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("session_id", "string", "Session ID to send keys to", required),
-            param!("keys", "string", "Keys to send to the terminal. MUST end with \\n to execute commands (press Enter). Example: 'echo hello\\n'", required),
+            param!("keys", "string", "Keys to send to the terminal. Will be auto-terminated with 'Enter' key unless raw=true is supplied.", required),
+            param!("raw", "boolean", "Do not add 'Enter' key at the end of the series of keystrokes", required),
         ])
     }
 
@@ -105,10 +106,13 @@ impl Tool for PtySendKeysTool {
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
-        let keys = match params.get_required::<String>("keys") {
+        let mut keys = match params.get_required::<String>("keys") {
             Ok(k) => k,
             Err(e) => return ToolResult::error(e.to_string()),
         };
+        let raw = params.get_optional::<bool>("raw")
+            .unwrap_or_else(|_| Some(false))
+            .unwrap_or(false);
 
         // Get terminal manager from context
         let terminal_manager = match &context.terminal_manager {
@@ -118,6 +122,9 @@ impl Tool for PtySendKeysTool {
 
         // Send keys
         let mut manager = terminal_manager.lock().await;
+        if ! raw {
+            keys = format!("{}\n", keys);
+        }
         match manager.send_input(&session_id, &keys).await {
             Ok(_) => ToolResult::success(format!("Keys sent to session {}", session_id)),
             Err(e) => ToolResult::error(format!("Failed to send keys: {}", e)),
