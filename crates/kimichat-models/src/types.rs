@@ -125,15 +125,13 @@ impl ModelColor {
     }
 
     /// Get the default model for this color
+    /// 
+    /// Note: The color-to-model mapping shown here is not fixed and can be changed
+    /// independently of the color scheme. These are just default fallback values.
+    /// The actual model assignments can be configured at runtime through CLI arguments,
+    /// configuration files, or API parameters, allowing any model to be associated
+    /// with any color regardless of the default mapping shown below.
     pub fn default_model(&self) -> String {
-        match self {
-            ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
-            ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
-            ModelColor::RedModel => "moonshotai/kimi-k2-instruct".to_string(),
-        }
-    }
-
-    pub fn as_str_default(&self) -> String {
         match self {
             ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
             ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
