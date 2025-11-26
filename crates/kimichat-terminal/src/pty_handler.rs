@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
-use anyhow::{Result, Context};
+use anyhow::{Result, Context, bail};
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
 /// Handles PTY process management
@@ -29,8 +29,17 @@ impl PtyHandler {
         let pty = pty_pair.master;
         let slave = pty_pair.slave;
 
-        // Build command
-        let mut cmd = CommandBuilder::new(command);
+        // Parse command into executable and arguments
+        let parts: Vec<&str> = command.split_whitespace().collect();
+        if parts.is_empty() {
+            bail!("Command cannot be empty");
+        }
+
+        // Build command with executable and arguments
+        let mut cmd = CommandBuilder::new(parts[0]);
+        for arg in &parts[1..] {
+            cmd.arg(arg);
+        }
         cmd.cwd(working_dir);
 
         // Spawn child process
