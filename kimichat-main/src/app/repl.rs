@@ -27,7 +27,7 @@ pub async fn run_repl_mode(
         println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
     }
 
-    println!("{}", "Type 'exit' or 'quit' to exit, or '/skills' to see available skill commands\n".bright_black());
+    println!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, or '/skills' to see available commands\n".bright_black());
 
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
@@ -282,6 +282,55 @@ pub async fn run_repl_mode(
                     continue;
                 }
 
+                // Handle /model command
+                if line == "/model" || line.starts_with("/model ") {
+                    if line == "/model" {
+                        // Just display current model
+                        println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                    } else {
+                        // Parse model argument
+                        let model_arg = line[7..].trim(); // Remove "/model " prefix
+                        
+                        if model_arg.is_empty() {
+                            println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                            continue;
+                        }
+                        
+                        if model_arg == "help" || model_arg == "--help" || model_arg == "-h" {
+                            println!("{} Model switching commands:", "🤖".bright_cyan());
+                            println!("  /model              - Show current model");
+                            println!("  /model <color>      - Switch to model by color");
+                            println!("  Available colors: blu, grn, red");
+                            println!("  Example: /model blu");
+                            continue;
+                        }
+                        
+                        // Map color arguments to actual model names
+                        let model_str = match model_arg.to_lowercase().as_str() {
+                            "blu" | "blue" => "blu_model",
+                            "grn" | "green" => "grn_model", 
+                            "red" => "red_model",
+                            _ => {
+                                eprintln!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), model_arg);
+                                continue;
+                            }
+                        };
+                        
+                        // Switch model with appropriate reason
+                        let reason = format!("User requested switch to {} model", model_arg);
+                        match chat.switch_model(model_str, &reason) {
+                            Ok(msg) => {
+                                println!("{} {}", "✓".bright_green(), msg);
+                                println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                            }
+                            Err(e) => {
+                                eprintln!("{} Failed to switch model: {}", "❌".bright_red(), e);
+                            }
+                        }
+                    }
+                    continue;
+                }
+
                 // Handle /debug command
                 if line == "/debug" {
                     println!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level());
@@ -380,7 +429,8 @@ pub async fn run_repl_mode(
 
                 // Handle /skills command to show available skill commands
                 if line == "/skills" || line == "/skills help" {
-                    println!("{} Skill Commands:", "🎯".bright_cyan());
+                    println!("{} Available Commands:", "🎯".bright_cyan());
+                    println!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)");
                     println!("  /brainstorm             - Use brainstorming skill for interactive design refinement");
                     println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
                     println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
