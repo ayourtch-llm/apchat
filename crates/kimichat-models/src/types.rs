@@ -148,6 +148,11 @@ impl ModelColor {
         }
     }
 
+    /// Get the default model string for this color (alias for default_model)
+    pub fn as_str_default(&self) -> String {
+        self.default_model()
+    }
+
     /// Get model identifier with optional overrides
     pub fn as_str(
         &self,
