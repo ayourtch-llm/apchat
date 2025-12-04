@@ -23,6 +23,7 @@ mod tests {
             None,                               // api_key (not set, should check env)
             model_override,                     // model_override (Groq model)
             default_api_key,                    // default_api_key (wrong OpenAI key)
+            false,                              // verbose
         );
         
         // After the fix, the client should use the RED model's Groq key, not the default OpenAI key
@@ -58,6 +59,7 @@ mod tests {
             None,                               // api_key (not set, should check env)
             model_override,                     // model_override (Groq model)
             default_api_key,                    // default_api_key (wrong OpenAI key)
+            false,                              // verbose
         );
         
         // After the fix, the client should use the global GROQ_API_KEY, not the default_api_key

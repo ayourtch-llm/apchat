@@ -126,6 +126,16 @@ pub fn create_client_for_model_color(
     client_config: &ClientConfig,
     default_api_key: &str,
 ) -> Arc<dyn LlmClient> {
+    create_client_for_model_color_with_verbose(model, client_config, default_api_key, false)
+}
+
+/// Create an LLM client based on a ModelColor enum value with verbose flag
+pub fn create_client_for_model_color_with_verbose(
+    model: &ModelColor,
+    client_config: &ClientConfig,
+    default_api_key: &str,
+    verbose: bool,
+) -> Arc<dyn LlmClient> {
     match model {
         ModelColor::BluModel => {
             create_model_client(
@@ -135,6 +145,7 @@ pub fn create_client_for_model_color(
                 client_config.get_api_key(ModelColor::BluModel).cloned(),
                 client_config.get_model_override(ModelColor::BluModel).cloned(),
                 default_api_key,
+                verbose,
             )
         }
         ModelColor::GrnModel => {
@@ -145,6 +156,7 @@ pub fn create_client_for_model_color(
                 client_config.get_api_key(ModelColor::GrnModel).cloned(),
                 client_config.get_model_override(ModelColor::GrnModel).cloned(),
                 default_api_key,
+                verbose,
             )
         }
         ModelColor::RedModel => {
@@ -155,6 +167,7 @@ pub fn create_client_for_model_color(
                 client_config.get_api_key(ModelColor::RedModel).cloned(),
                 client_config.get_model_override(ModelColor::RedModel).cloned(),
                 default_api_key,
+                verbose,
             )
         }
     }
@@ -169,6 +182,7 @@ pub fn create_model_client(
     api_key: Option<String>,
     model_override: Option<String>,
     default_api_key: &str,
+    verbose: bool,
 ) -> Arc<dyn LlmClient> {
     let model_name_upper = model_name.to_uppercase();
 
@@ -214,11 +228,12 @@ pub fn create_model_client(
                 .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
                 .unwrap_or_default();
             println!("{} Using Anthropic API for '{}_model' at: {}", "🧠".cyan(), model_name, url);
-            Arc::new(AnthropicLlmClient::new(
+            Arc::new(AnthropicLlmClient::new_with_verbose(
                 key,
                 model_str,
                 url,
-                format!("{}_model", model_name)
+                format!("{}_model", model_name),
+                verbose,
             ))
         }
         BackendType::Llama => {

@@ -35,12 +35,29 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
+/// Tool call event in streaming
+#[derive(Debug, Clone)]
+pub enum ToolCallEvent {
+    /// Start of a new tool call
+    Start {
+        index: usize,
+        id: String,
+        name: String,
+    },
+    /// Delta of tool call arguments (JSON fragment)
+    Delta {
+        index: usize,
+        arguments_delta: String,
+    },
+}
+
 /// Streaming chunk for LLM responses
 #[derive(Debug, Clone)]
 pub struct StreamingChunk {
     pub content: String,
     pub delta: String,
     pub finish_reason: Option<String>,
+    pub tool_call_event: Option<ToolCallEvent>,
 }
 
 /// LLM client trait - unified interface for all LLM providers

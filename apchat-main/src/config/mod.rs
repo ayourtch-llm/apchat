@@ -11,7 +11,7 @@ use apchat_tools::*;
 use apchat_models::{ModelColor, ModelProvider};
 
 pub mod helpers;
-pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_client, create_client_for_model_color};
+pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_client, create_client_for_model_color, create_client_for_model_color_with_verbose};
 
 // Re-export types from apchat-llm-api
 pub use apchat_llm_api::{BackendType, GROQ_API_URL, normalize_api_url};
@@ -188,6 +188,7 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         client_config.get_api_key(ModelColor::BluModel).cloned(),
         Some(blu_model.clone()),
         &client_config.api_key,
+        false,  // verbose
     );
 
     let grn_model_client = create_model_client(
@@ -197,6 +198,7 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         client_config.get_api_key(ModelColor::GrnModel).cloned(),
         Some(grn_model.clone()),
         &client_config.api_key,
+        false,  // verbose
     );
 
     let red_model_client = create_model_client(
@@ -206,6 +208,7 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         client_config.get_api_key(ModelColor::RedModel).cloned(),
         Some(red_model.clone()),
         &client_config.api_key,
+        false,  // verbose
     );
 
     agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);

@@ -1,4 +1,4 @@
-use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, StreamingChunk, ToolCall, FunctionCall, TokenUsage};
+use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, StreamingChunk, ToolCall, FunctionCall, TokenUsage, ToolCallEvent};
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -17,18 +17,34 @@ pub struct AnthropicLlmClient {
     base_url: String,
     agent_name: String,
     client: reqwest::Client,
+    verbose: bool,
 }
 
 impl AnthropicLlmClient {
     pub fn new(api_key: String, model: String, base_url: String, agent_name: String) -> Self {
+        Self::new_with_verbose(api_key, model, base_url, agent_name, false)
+    }
+
+    pub fn new_with_verbose(api_key: String, model: String, base_url: String, agent_name: String, verbose: bool) -> Self {
         // Ensure base_url doesn't end with a slash
         let base_url = base_url.trim_end_matches('/').to_string();
+
+        // Configure client for minimal buffering and immediate streaming
+        let client = reqwest::Client::builder()
+            .http1_only()  // Force HTTP/1.1 to avoid HTTP/2 buffering
+            .tcp_nodelay(true)  // Disable Nagle's algorithm for immediate transmission
+            .pool_max_idle_per_host(0)  // Disable connection pooling to avoid stale connections
+            .timeout(std::time::Duration::from_secs(300))  // 5 minute timeout for long streams
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
             api_key,
             model,
             base_url,
             agent_name,
-            client: reqwest::Client::new(),
+            client,
+            verbose,
         }
     }
 
@@ -271,45 +287,134 @@ impl LlmClient for AnthropicLlmClient {
         }
 
         let byte_stream = response.bytes_stream();
+        let verbose = self.verbose;
 
         let stream = stream! {
             let mut buffer = String::new();
             let mut byte_stream = byte_stream;
-            let mut event_buffer = String::new();
+            let mut chunk_counter = 0;
+            let start_time = std::time::Instant::now();
+            let mut last_chunk_time = start_time;
+
+            if verbose {
+                eprintln!("🔍 [Anthropic Streaming] Starting stream at {:?}", start_time);
+            }
 
             while let Some(chunk_result) = byte_stream.next().await {
                 match chunk_result {
                     Ok(chunk) => {
-                        let chunk_str = String::from_utf8_lossy(&chunk);
+                        chunk_counter += 1;
+                        let now = std::time::Instant::now();
+                        let elapsed_total = now.duration_since(start_time);
+                        let elapsed_since_last = now.duration_since(last_chunk_time);
+                        last_chunk_time = now;
 
-                        // Process character by character for minimal latency
-                        for ch in chunk_str.chars() {
-                            buffer.push(ch);
-                            event_buffer.push(ch);
+                        // Print raw bytes received (before any conversion)
+                        if verbose {
+                            eprintln!("🔍 [Anthropic Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
+                                chunk_counter, chunk.len(), elapsed_total, elapsed_since_last);
+                            eprintln!("🔍 [Anthropic Streaming] Raw bytes (hex): {}",
+                                chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                            eprintln!("🔍 [Anthropic Streaming] Raw bytes (debug): {:?}",
+                                &chunk[..chunk.len().min(200)]);
+                        }
 
-                            // When we hit a newline, process the complete SSE line
-                            if ch == '\n' {
-                                let line = std::mem::take(&mut event_buffer);
+                        // Convert bytes to string, handling UTF-8 errors gracefully
+                        let chunk_str = match String::from_utf8(chunk.to_vec()) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                if verbose {
+                                    eprintln!("❌ [Anthropic Streaming] Invalid UTF-8 in stream: {}", e);
+                                    eprintln!("❌ [Anthropic Streaming] Failed bytes (hex): {}",
+                                        chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                                }
+                                yield Err(anyhow::anyhow!("Invalid UTF-8 in stream: {}", e));
+                                break;
+                            }
+                        };
 
-                                // Parse SSE line immediately and yield if we get content
-                                if let Some(streaming_chunk) = Self::parse_sse_line(&line) {
+                        // Print raw chunk content after UTF-8 decoding
+                        if verbose {
+                            eprintln!("🔍 [Anthropic Streaming] Decoded UTF-8 string ({} chars):\n[START]{}[END]", chunk_str.len(), chunk_str);
+                        }
+
+                        buffer.push_str(&chunk_str);
+
+                        // Process complete SSE lines (lines ending with \n)
+                        let mut line_num = 0;
+                        while let Some(newline_pos) = buffer.find('\n') {
+                            line_num += 1;
+                            let line = buffer[..newline_pos].to_string();
+                            buffer = buffer[newline_pos + 1..].to_string();
+
+                            // Print each line being processed
+                            if verbose {
+                                eprintln!("🔍 [Anthropic Streaming] Processing line #{}: {:?}", line_num, line);
+                            }
+
+                            // Parse SSE line and yield result (including errors)
+                            match Self::parse_sse_line(&line) {
+                                Ok(Some(streaming_chunk)) => {
+                                    if verbose {
+                                        eprintln!("✅ [Anthropic Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
+                                            streaming_chunk.delta.len(), streaming_chunk.finish_reason);
+                                    }
                                     yield Ok(streaming_chunk);
+                                }
+                                Ok(None) => {
+                                    if verbose {
+                                        eprintln!("⏭️  [Anthropic Streaming] No content in line (ping/metadata)");
+                                    }
+                                }
+                                Err(e) => {
+                                    if verbose {
+                                        eprintln!("❌ [Anthropic Streaming] Parse error: {}", e);
+                                    }
+                                    yield Err(e);
+                                    // Continue processing other lines instead of breaking
                                 }
                             }
                         }
                     }
                     Err(e) => {
+                        if verbose {
+                            eprintln!("❌ [Anthropic Streaming] Stream error: {}", e);
+                        }
                         yield Err(anyhow::anyhow!("Stream error: {}", e));
                         break;
                     }
                 }
             }
 
-            // Process any remaining data in the buffer
-            if !event_buffer.is_empty() {
-                if let Some(streaming_chunk) = Self::parse_sse_line(&event_buffer) {
-                    yield Ok(streaming_chunk);
+            // Process any remaining complete line in the buffer
+            if !buffer.is_empty() && !buffer.trim().is_empty() {
+                if verbose {
+                    eprintln!("🔍 [Anthropic Streaming] Processing remaining buffer: {:?}", buffer);
                 }
+                match Self::parse_sse_line(&buffer) {
+                    Ok(Some(streaming_chunk)) => {
+                        if verbose {
+                            eprintln!("✅ [Anthropic Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len());
+                        }
+                        yield Ok(streaming_chunk);
+                    }
+                    Ok(None) => {
+                        if verbose {
+                            eprintln!("⏭️  [Anthropic Streaming] No content in remaining buffer");
+                        }
+                    }
+                    Err(e) => {
+                        if verbose {
+                            eprintln!("❌ [Anthropic Streaming] Final parse error: {}", e);
+                        }
+                        yield Err(e);
+                    }
+                }
+            }
+
+            if verbose {
+                let total_duration = std::time::Instant::now().duration_since(start_time);
+                eprintln!("🏁 [Anthropic Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration);
             }
         };
 
@@ -368,73 +473,139 @@ impl LlmClient for AnthropicLlmClient {
 
 impl AnthropicLlmClient {
     /// Parse a single SSE line and return a streaming chunk if it contains text
-    fn parse_sse_line(line: &str) -> Option<StreamingChunk> {
-        // Only process data lines
-        if !line.starts_with("data: ") {
-            return None;
+    /// Returns:
+    /// - Ok(Some(chunk)) if the line contains streamable content
+    /// - Ok(None) if the line is valid but doesn't contain content (e.g., ping)
+    /// - Err if the line contains an error event or malformed data
+    fn parse_sse_line(line: &str) -> Result<Option<StreamingChunk>> {
+        // Skip empty lines
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
         }
 
-        let data = &line[6..];
+        // Only process data lines (SSE format)
+        if !trimmed.starts_with("data: ") {
+            // Non-data lines (like "event:", ":comment", etc.) are valid SSE but not data
+            return Ok(None);
+        }
 
-        // Check for stream end
-        if data.trim() == "[DONE]" {
-            return Some(StreamingChunk {
+        let data = trimmed[6..].trim();
+
+        // Check for stream end marker
+        if data == "[DONE]" {
+            return Ok(Some(StreamingChunk {
                 content: String::new(),
                 delta: String::new(),
                 finish_reason: Some("stop".to_string()),
-            });
+                tool_call_event: None,
+            }));
         }
 
         // Parse JSON event
-        if let Ok(json) = serde_json::from_str::<Value>(data) {
-            if let Some(content_type) = json["type"].as_str() {
-                match content_type {
-                    "content_block_delta" => {
-                        // This is the main event type for streaming text content
-                        if let Some(delta) = json.get("delta").and_then(|v| v.as_object()) {
-                            if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
-                                // Return immediately for minimal latency
-                                return Some(StreamingChunk {
+        let json = serde_json::from_str::<Value>(data)
+            .with_context(|| format!("Failed to parse SSE JSON data: {}", data))?;
+
+        // Check for error events first
+        if let Some(content_type) = json["type"].as_str() {
+            if content_type == "error" {
+                let error_msg = json.get("error")
+                    .and_then(|e| e.get("message"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error from API");
+                let error_type = json.get("error")
+                    .and_then(|e| e.get("type"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown_error");
+                return Err(anyhow::anyhow!("API error ({}): {}", error_type, error_msg));
+            }
+
+            match content_type {
+                "content_block_delta" => {
+                    // Get the index for this content block
+                    let index = json.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+
+                    if let Some(delta) = json.get("delta").and_then(|v| v.as_object()) {
+                        // Check if this is text content
+                        if let Some(text) = delta.get("text").and_then(|v| v.as_str()) {
+                            return Ok(Some(StreamingChunk {
+                                content: String::new(),
+                                delta: text.to_string(),
+                                finish_reason: None,
+                                tool_call_event: None,
+                            }));
+                        }
+
+                        // Check if this is tool input JSON delta
+                        if delta.get("type").and_then(|v| v.as_str()) == Some("input_json_delta") {
+                            if let Some(partial_json) = delta.get("partial_json").and_then(|v| v.as_str()) {
+                                return Ok(Some(StreamingChunk {
                                     content: String::new(),
-                                    delta: text.to_string(),
+                                    delta: String::new(),
                                     finish_reason: None,
-                                });
+                                    tool_call_event: Some(ToolCallEvent::Delta {
+                                        index,
+                                        arguments_delta: partial_json.to_string(),
+                                    }),
+                                }));
                             }
                         }
                     }
-                    "content_block_start" => {
-                        // Handle initial content block (less common for text)
-                        if let Some(content_block) = json.get("content_block").and_then(|v| v.as_object()) {
+                }
+                "content_block_start" => {
+                    // Get the index for this content block
+                    let index = json.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+
+                    if let Some(content_block) = json.get("content_block").and_then(|v| v.as_object()) {
+                        let block_type = content_block.get("type").and_then(|v| v.as_str());
+
+                        // Handle text content block
+                        if block_type == Some("text") {
                             if let Some(text) = content_block.get("text").and_then(|v| v.as_str()) {
-                                return Some(StreamingChunk {
+                                return Ok(Some(StreamingChunk {
                                     content: text.to_string(),
                                     delta: text.to_string(),
                                     finish_reason: None,
-                                });
+                                    tool_call_event: None,
+                                }));
+                            }
+                        }
+
+                        // Handle tool_use content block
+                        if block_type == Some("tool_use") {
+                            if let (Some(id), Some(name)) = (
+                                content_block.get("id").and_then(|v| v.as_str()),
+                                content_block.get("name").and_then(|v| v.as_str())
+                            ) {
+                                return Ok(Some(StreamingChunk {
+                                    content: String::new(),
+                                    delta: String::new(),
+                                    finish_reason: None,
+                                    tool_call_event: Some(ToolCallEvent::Start {
+                                        index,
+                                        id: id.to_string(),
+                                        name: name.to_string(),
+                                    }),
+                                }));
                             }
                         }
                     }
-                    "message_stop" => {
-                        return Some(StreamingChunk {
-                            content: String::new(),
-                            delta: String::new(),
-                            finish_reason: Some("stop".to_string()),
-                        });
-                    }
-                    "error" => {
-                        // Handle errors - these will be propagated as Err results
-                        if let Some(error) = json.get("error").and_then(|v| v.as_object()) {
-                            let error_msg = error.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error");
-                            // Don't return a chunk for errors - let the stream consumer handle them
-                        }
-                    }
-                    // Other event types (ping, message_start, content_block_stop, etc.) are ignored
-                    _ => {}
                 }
+                "message_stop" => {
+                    return Ok(Some(StreamingChunk {
+                        content: String::new(),
+                        delta: String::new(),
+                        finish_reason: Some("stop".to_string()),
+                        tool_call_event: None,
+                    }));
+                }
+                // Other event types (ping, message_start, content_block_stop, etc.) are valid but don't contain content
+                _ => {}
             }
         }
 
-        None
+        // Valid SSE event but no content to stream
+        Ok(None)
     }
 
     fn log_request_to_file(&self, url: &str, request: &serde_json::Value) -> Result<()> {

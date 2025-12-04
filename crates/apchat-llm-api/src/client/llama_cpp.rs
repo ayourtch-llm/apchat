@@ -1,6 +1,10 @@
-use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage};
-use anyhow::Result;
+use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage, StreamingChunk};
+use anyhow::{Result, Context};
 use async_trait::async_trait;
+use futures::Stream;
+use futures::StreamExt;
+use async_stream::stream;
+use serde_json::Value;
 
 /// llama.cpp server LLM client implementation with OpenAI-compatible API
 pub struct LlamaCppClient {
@@ -13,10 +17,20 @@ impl LlamaCppClient {
     pub fn new(base_url: String, model: String) -> Self {
         // Ensure base_url doesn't end with a slash
         let base_url = base_url.trim_end_matches('/').to_string();
+
+        // Configure client for minimal buffering and immediate streaming
+        let client = reqwest::Client::builder()
+            .http1_only()  // Force HTTP/1.1 to avoid HTTP/2 buffering
+            .tcp_nodelay(true)  // Disable Nagle's algorithm for immediate transmission
+            .pool_max_idle_per_host(0)  // Disable connection pooling to avoid stale connections
+            .timeout(std::time::Duration::from_secs(300))  // 5 minute timeout for long streams
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
             base_url,
             model,
-            client: reqwest::Client::new(),
+            client,
         }
     }
 
@@ -127,9 +141,228 @@ impl LlmClient for LlamaCppClient {
             Err(anyhow::anyhow!("No content in response"))
         }
     }
+
+    async fn chat_streaming(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<Box<dyn Stream<Item = Result<StreamingChunk>> + Send + Unpin>> {
+        let request = self.build_chat_request(messages, tools).await?;
+
+        // Enable streaming in the request
+        let mut streaming_request = request.as_object().unwrap().clone();
+        streaming_request.insert("stream".to_string(), serde_json::json!(true));
+
+        let response = self.client
+            .post(self.get_chat_completions_url())
+            .header("Content-Type", "application/json")
+            .header("Connection", "keep-alive")
+            .header("Cache-Control", "no-cache")
+            .header("Accept", "text/event-stream")
+            .json(&streaming_request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!("llama.cpp streaming API error: {}", error_text));
+        }
+
+        let byte_stream = response.bytes_stream();
+
+        let stream = stream! {
+            let mut buffer = String::new();
+            let mut byte_stream = byte_stream;
+            let mut chunk_counter = 0;
+            let start_time = std::time::Instant::now();
+            let mut last_chunk_time = start_time;
+
+            eprintln!("🔍 [llama.cpp Streaming] Starting stream at {:?}", start_time);
+
+            while let Some(chunk_result) = byte_stream.next().await {
+                match chunk_result {
+                    Ok(chunk) => {
+                        chunk_counter += 1;
+                        let now = std::time::Instant::now();
+                        let elapsed_total = now.duration_since(start_time);
+                        let elapsed_since_last = now.duration_since(last_chunk_time);
+                        last_chunk_time = now;
+
+                        // Print raw bytes received (before any conversion)
+                        eprintln!("🔍 [llama.cpp Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
+                            chunk_counter, chunk.len(), elapsed_total, elapsed_since_last);
+                        eprintln!("🔍 [llama.cpp Streaming] Raw bytes (hex): {}",
+                            chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                        eprintln!("🔍 [llama.cpp Streaming] Raw bytes (debug): {:?}",
+                            &chunk[..chunk.len().min(200)]);
+
+                        // Convert bytes to string, handling UTF-8 errors gracefully
+                        let chunk_str = match String::from_utf8(chunk.to_vec()) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                eprintln!("❌ [llama.cpp Streaming] Invalid UTF-8 in stream: {}", e);
+                                eprintln!("❌ [llama.cpp Streaming] Failed bytes (hex): {}",
+                                    chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                                yield Err(anyhow::anyhow!("Invalid UTF-8 in stream: {}", e));
+                                break;
+                            }
+                        };
+
+                        // Print raw chunk content after UTF-8 decoding
+                        eprintln!("🔍 [llama.cpp Streaming] Decoded UTF-8 string ({} chars):\n{}", chunk_str.len(), chunk_str);
+
+                        buffer.push_str(&chunk_str);
+
+                        // Process complete SSE lines (lines ending with \n)
+                        let mut line_num = 0;
+                        while let Some(newline_pos) = buffer.find('\n') {
+                            line_num += 1;
+                            let line = buffer[..newline_pos].to_string();
+                            buffer = buffer[newline_pos + 1..].to_string();
+
+                            // Print each line being processed
+                            eprintln!("🔍 [llama.cpp Streaming] Processing line #{}: {:?}", line_num, line);
+
+                            // Parse SSE line and yield result (including errors)
+                            match Self::parse_openai_sse_line(&line) {
+                                Ok(Some(streaming_chunk)) => {
+                                    eprintln!("✅ [llama.cpp Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
+                                        streaming_chunk.delta.len(), streaming_chunk.finish_reason);
+                                    yield Ok(streaming_chunk);
+                                }
+                                Ok(None) => {
+                                    eprintln!("⏭️  [llama.cpp Streaming] No content in line");
+                                }
+                                Err(e) => {
+                                    eprintln!("❌ [llama.cpp Streaming] Parse error: {}", e);
+                                    yield Err(e);
+                                    // Continue processing other lines instead of breaking
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ [llama.cpp Streaming] Stream error: {}", e);
+                        yield Err(anyhow::anyhow!("Stream error: {}", e));
+                        break;
+                    }
+                }
+            }
+
+            // Process any remaining complete line in the buffer
+            if !buffer.is_empty() && !buffer.trim().is_empty() {
+                eprintln!("🔍 [llama.cpp Streaming] Processing remaining buffer: {:?}", buffer);
+                match Self::parse_openai_sse_line(&buffer) {
+                    Ok(Some(streaming_chunk)) => {
+                        eprintln!("✅ [llama.cpp Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len());
+                        yield Ok(streaming_chunk);
+                    }
+                    Ok(None) => {
+                        eprintln!("⏭️  [llama.cpp Streaming] No content in remaining buffer");
+                    }
+                    Err(e) => {
+                        eprintln!("❌ [llama.cpp Streaming] Final parse error: {}", e);
+                        yield Err(e);
+                    }
+                }
+            }
+
+            let total_duration = std::time::Instant::now().duration_since(start_time);
+            eprintln!("🏁 [llama.cpp Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration);
+        };
+
+        Ok(Box::new(Box::pin(stream)))
+    }
 }
 
 impl LlamaCppClient {
+    /// Parse OpenAI-compatible SSE line and return a streaming chunk if it contains text
+    /// Returns:
+    /// - Ok(Some(chunk)) if the line contains streamable content
+    /// - Ok(None) if the line is valid but doesn't contain content
+    /// - Err if the line contains an error or malformed data
+    fn parse_openai_sse_line(line: &str) -> Result<Option<StreamingChunk>> {
+        // Skip empty lines
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            return Ok(None);
+        }
+
+        // Only process data lines (SSE format)
+        if !trimmed.starts_with("data: ") {
+            // Non-data lines are valid SSE but not data
+            return Ok(None);
+        }
+
+        let data = trimmed[6..].trim();
+
+        // Check for stream end marker
+        if data == "[DONE]" {
+            return Ok(Some(StreamingChunk {
+                content: String::new(),
+                delta: String::new(),
+                finish_reason: Some("stop".to_string()),
+                tool_call_event: None,
+            }));
+        }
+
+        // Parse JSON event (OpenAI format)
+        let json = serde_json::from_str::<Value>(data)
+            .with_context(|| format!("Failed to parse OpenAI SSE JSON data: {}", data))?;
+
+        // Check for errors
+        if let Some(error) = json.get("error") {
+            let error_msg = error.get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown error from API");
+            let error_type = error.get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown_error");
+            return Err(anyhow::anyhow!("API error ({}): {}", error_type, error_msg));
+        }
+
+        // Extract content from OpenAI streaming format
+        if let Some(choices) = json.get("choices").and_then(|v| v.as_array()) {
+            if let Some(first_choice) = choices.first() {
+                // Check for finish reason
+                let finish_reason = first_choice.get("finish_reason")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Extract delta content
+                if let Some(delta) = first_choice.get("delta") {
+                    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                        return Ok(Some(StreamingChunk {
+                            content: String::new(),
+                            delta: content.to_string(),
+                            finish_reason,
+                            tool_call_event: None,
+                        }));
+                    }
+
+                    // Handle role changes (first chunk often has role but no content)
+                    if delta.get("role").is_some() {
+                        return Ok(Some(StreamingChunk {
+                            content: String::new(),
+                            delta: String::new(),
+                            finish_reason: None,
+                            tool_call_event: None,
+                        }));
+                    }
+                }
+
+                // If we have a finish_reason but no content, signal completion
+                if finish_reason.is_some() {
+                    return Ok(Some(StreamingChunk {
+                        content: String::new(),
+                        delta: String::new(),
+                        finish_reason,
+                        tool_call_event: None,
+                    }));
+                }
+            }
+        }
+
+        // Valid SSE event but no content to stream
+        Ok(None)
+    }
+
     async fn build_chat_request(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<serde_json::Value> {
         let chat_messages: Vec<apchat_models::Message> = messages.into_iter().map(|msg| {
             // Convert system role to user role for models that don't support it

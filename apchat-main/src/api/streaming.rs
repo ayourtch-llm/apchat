@@ -377,10 +377,11 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     }).collect();
 
     // Create the appropriate LlmClient using the centralized helper
-    let llm_client = crate::config::create_client_for_model_color(
+    let llm_client = crate::config::helpers::create_client_for_model_color_with_verbose(
         model,
         &chat.client_config,
         &chat.api_key,
+        chat.verbose,
     );
 
     // Get the appropriate API URL based on the current model
