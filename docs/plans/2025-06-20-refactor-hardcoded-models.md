@@ -10,7 +10,7 @@
 - Use compilation errors as a guide to find all locations needing updates
 - Maintain backward compatibility for uses that don't have config context
 
-**Tech Stack:** Rust, kimichat project structure, model configuration system
+**Tech Stack:** Rust, apchat project structure, model configuration system
 
 ---
 
@@ -23,18 +23,18 @@
 - `ModelColor::AnthropicModel.as_str()` → "claude-3-5-sonnet-20241022"
 
 ### Key Files Using `as_str()`:
-- `kimichat-main/src/api/client.rs` - API requests
-- `kimichat-main/src/api/streaming.rs` - Streaming requests  
-- `kimichat-main/src/chat/history.rs` - Summarization requests
-- `kimichat-main/src/config/mod.rs` - Model registration
-- `kimichat-main/src/config/helpers.rs` - Helper functions
+- `apchat-main/src/api/client.rs` - API requests
+- `apchat-main/src/api/streaming.rs` - Streaming requests  
+- `apchat-main/src/chat/history.rs` - Summarization requests
+- `apchat-main/src/config/mod.rs` - Model registration
+- `apchat-main/src/config/helpers.rs` - Helper functions
 
 ---
 
 ## Task 1: Rename Current `as_str()` Method
 
 **Files:**
-- Modify: `crates/kimichat-models/src/types.rs:14`
+- Modify: `crates/apchat-models/src/types.rs:14`
 
 **Step 1: Rename the method**
 
@@ -60,7 +60,7 @@ Expected: Multiple compilation errors where `.as_str()` is called
 **Step 4: Commit**
 
 ```bash
-git add crates/kimichat-models/src/types.rs
+git add crates/apchat-models/src/types.rs
 git commit -m "refactor: rename as_str to as_str_default and add config-aware signature"
 ```
 
@@ -69,7 +69,7 @@ git commit -m "refactor: rename as_str to as_str_default and add config-aware si
 ## Task 2: Implement Config-Aware Model Resolution
 
 **Files:**
-- Modify: `crates/kimichat-models/src/types.rs:15-25`
+- Modify: `crates/apchat-models/src/types.rs:15-25`
 
 **Step 1: Add imports for config types**
 
@@ -111,7 +111,7 @@ Expected: Still compilation errors from renamed method calls
 **Step 4: Commit**
 
 ```bash
-git add crates/kimichat-models/src/types.rs
+git add crates/apchat-models/src/types.rs
 git commit -m "feat: implement config-aware model identifier resolution"
 ```
 
@@ -120,9 +120,9 @@ git commit -m "feat: implement config-aware model identifier resolution"
 ## Task 3: Fix Chat Request Creation Points
 
 **Files:**
-- Modify: `kimichat-main/src/api/client.rs:59`
-- Modify: `kimichat-main/src/api/streaming.rs:31`
-- Modify: `kimichat-main/src/chat/history.rs:186, 362, 484`
+- Modify: `apchat-main/src/api/client.rs:59`
+- Modify: `apchat-main/src/api/streaming.rs:31`
+- Modify: `apchat-main/src/chat/history.rs:186, 362, 484`
 
 **Step 1: Fix API client request**
 
@@ -162,7 +162,7 @@ Expected: Fewer compilation errors
 **Step 5: Commit**
 
 ```bash
-git add kimichat-main/src/api/client.rs kimichat-main/src/api/streaming.rs kimichat-main/src/chat/history.rs
+git add apchat-main/src/api/client.rs apchat-main/src/api/streaming.rs apchat-main/src/chat/history.rs
 git commit -m "fix: use config-aware model resolution in chat requests"
 ```
 
@@ -171,8 +171,8 @@ git commit -m "fix: use config-aware model resolution in chat requests"
 ## Task 4: Fix Config Registration
 
 **Files:**
-- Modify: `kimichat-main/src/config/mod.rs:112-116`
-- Modify: `kimichat-main/src/config/helpers.rs:251-254`
+- Modify: `apchat-main/src/config/mod.rs:112-116`
+- Modify: `apchat-main/src/config/helpers.rs:251-254`
 
 **Step 1: Fix model registration in mod.rs**
 
@@ -215,7 +215,7 @@ Expected: Still some compilation errors from logging/tool validation
 **Step 4: Commit**
 
 ```bash
-git add kimichat-main/src/config/mod.rs kimichat-main/src/config/helpers.rs
+git add apchat-main/src/config/mod.rs apchat-main/src/config/helpers.rs
 git commit -m "fix: use config-aware model resolution in config registration"
 ```
 
@@ -224,9 +224,9 @@ git commit -m "fix: use config-aware model resolution in config registration"
 ## Task 5: Fix Logging and Validation
 
 **Files:**
-- Modify: `crates/kimichat-logging/src/request_logger.rs:65, 73`
-- Modify: `crates/kimichat-tools/src/model_management.rs:61`
-- Modify: `crates/kimichat-agents/src/agent_config.rs:64`
+- Modify: `crates/apchat-logging/src/request_logger.rs:65, 73`
+- Modify: `crates/apchat-tools/src/model_management.rs:61`
+- Modify: `crates/apchat-agents/src/agent_config.rs:64`
 
 **Step 1: Fix request logging**
 
@@ -252,7 +252,7 @@ Expected: Should compile successfully now
 **Step 4: Commit**
 
 ```bash
-git add crates/kimichat-logging/src/request_logger.rs crates/kimichat-tools/src/model_management.rs crates/kimichat-agents/src/agent_config.rs
+git add crates/apchat-logging/src/request_logger.rs crates/apchat-tools/src/model_management.rs crates/apchat-agents/src/agent_config.rs
 git commit -m "fix: update logging and validation to work with new model methods"
 ```
 
@@ -261,7 +261,7 @@ git commit -m "fix: update logging and validation to work with new model methods
 ## Task 6: Add Tests
 
 **Files:**
-- Create: `crates/kimichat-models/src/tests/model_resolution_tests.rs`
+- Create: `crates/apchat-models/src/tests/model_resolution_tests.rs`
 
 **Step 1: Create test file**
 
@@ -324,7 +324,7 @@ Expected: All tests pass
 **Step 4: Commit**
 
 ```bash
-git add crates/kimichat-models/src/tests/ crates/kimichat-models/src/lib.rs
+git add crates/apchat-models/src/tests/ crates/apchat-models/src/lib.rs
 git commit -m "test: add model resolution tests"
 ```
 
@@ -339,7 +339,7 @@ git commit -m "test: add model resolution tests"
 
 ```bash
 # Test with custom model override
-KIMICHAT_MODEL_BLU_MODEL_OVERRIDE="custom/test-blu" cargo run --bin kimichat -- --help
+APCHAT_MODEL_BLU_MODEL_OVERRIDE="custom/test-blu" cargo run --bin apchat -- --help
 
 # Should not crash and should use custom model when BluModel is selected
 ```
@@ -368,7 +368,7 @@ git commit -m "test: verify integration and backward compatibility"
 1. **Compilation**: `cargo check` and `cargo build` should pass
 2. **Unit Tests**: All existing tests should continue to pass
 3. **New Tests**: Model resolution tests should pass
-4. **Functional Test**: Start kimichat with model override flags
+4. **Functional Test**: Start apchat with model override flags
 5. **Backward Compatibility**: CLI flags and config should still work
 
 ## Rollback Plan
@@ -377,4 +377,4 @@ If issues arise:
 1. Revert `as_str()` method back to original implementation
 2. Remove new `as_str_default()` method
 3. Restore all call sites to use `.as_str()`
-4. All changes are contained within the kimichat-models crate and call sites
+4. All changes are contained within the apchat-models crate and call sites

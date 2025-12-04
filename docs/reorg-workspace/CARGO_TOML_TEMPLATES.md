@@ -7,22 +7,22 @@ This document provides template configurations for each crate in the new workspa
 ```toml
 [workspace]
 members = [
-    "kimichat-core",
-    "kimichat-terminal", 
-    "kimichat-agents",
-    "kimichat-web",
-    "kimichat-tools",
-    "kimichat-cli",
+    "apchat-core",
+    "apchat-terminal", 
+    "apchat-agents",
+    "apchat-web",
+    "apchat-tools",
+    "apchat-cli",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["KimiChat Team"]
+authors = ["APChat Team"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/kimichat"
-homepage = "https://github.com/your-org/kimichat"
+repository = "https://github.com/your-org/apchat"
+homepage = "https://github.com/your-org/apchat"
 description = "A Rust-based CLI application for AI-powered chat and tool execution"
 
 [workspace.dependencies]
@@ -99,18 +99,18 @@ strip = true
 debug = true
 ```
 
-## kimichat-core/Cargo.toml
+## apchat-core/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat-core"
+name = "apchat-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core functionality for KimiChat including tool system and configuration"
+description = "Core functionality for APChat including tool system and configuration"
 
 [dependencies]
 # Serialization
@@ -147,22 +147,22 @@ pedantic = "warn"
 nursery = "warn"
 ```
 
-## kimichat-terminal/Cargo.toml
+## apchat-terminal/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat-terminal"
+name = "apchat-terminal"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Terminal session management for KimiChat with PTY support"
+description = "Terminal session management for APChat with PTY support"
 
 [dependencies]
 # Core dependencies
-kimichat-core = { path = "../kimichat-core" }
+apchat-core = { path = "../apchat-core" }
 
 # Terminal/PTY support
 portable-pty.workspace = true
@@ -191,7 +191,7 @@ tempfile = "3.0"
 
 [features]
 default = []
-embeddings = ["kimichat-core/embeddings"]
+embeddings = ["apchat-core/embeddings"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -203,23 +203,23 @@ pedantic = "warn"
 nursery = "warn"
 ```
 
-## kimichat-agents/Cargo.toml
+## apchat-agents/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat-agents"
+name = "apchat-agents"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Multi-agent system and LLM clients for KimiChat"
+description = "Multi-agent system and LLM clients for APChat"
 
 [dependencies]
 # Core dependencies
-kimichat-core = { path = "../kimichat-core" }
-kimichat-tools = { path = "../kimichat-tools" }
+apchat-core = { path = "../apchat-core" }
+apchat-tools = { path = "../apchat-tools" }
 
 # HTTP and streaming
 reqwest.workspace = true
@@ -245,7 +245,7 @@ mockito = "1.0"
 
 [features]
 default = []
-embeddings = ["kimichat-core/embeddings", "kimichat-tools/embeddings"]
+embeddings = ["apchat-core/embeddings", "apchat-tools/embeddings"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -257,24 +257,24 @@ pedantic = "warn"
 nursery = "warn"
 ```
 
-## kimichat-web/Cargo.toml
+## apchat-web/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat-web"
+name = "apchat-web"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Web interface and WebSocket server for KimiChat"
+description = "Web interface and WebSocket server for APChat"
 
 [dependencies]
 # Core dependencies
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
-kimichat-agents = { path = "../kimichat-agents" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-agents = { path = "../apchat-agents" }
 
 # Web server
 axum.workspace = true
@@ -299,7 +299,7 @@ axum-test = "15.0"
 
 [features]
 default = []
-embeddings = ["kimichat-core/embeddings", "kimichat-terminal/embeddings", "kimichat-agents/embeddings"]
+embeddings = ["apchat-core/embeddings", "apchat-terminal/embeddings", "apchat-agents/embeddings"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -311,23 +311,23 @@ pedantic = "warn"
 nursery = "warn"
 ```
 
-## kimichat-tools/Cargo.toml
+## apchat-tools/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat-tools"
+name = "apchat-tools"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Tool implementations for KimiChat including file operations and system tools"
+description = "Tool implementations for APChat including file operations and system tools"
 
 [dependencies]
 # Core dependencies
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
 
 # File operations and search
 glob.workspace = true
@@ -354,7 +354,7 @@ tempfile = "3.0"
 
 [features]
 default = []
-embeddings = ["kimichat-core/embeddings", "kimichat-terminal/embeddings"]
+embeddings = ["apchat-core/embeddings", "apchat-terminal/embeddings"]
 
 # Optional embedding support
 fastembed = { workspace = true, optional = true }
@@ -369,11 +369,11 @@ pedantic = "warn"
 nursery = "warn"
 ```
 
-## kimichat-cli/Cargo.toml
+## apchat-cli/Cargo.toml
 
 ```toml
 [package]
-name = "kimichat"
+name = "apchat"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -385,16 +385,16 @@ categories = ["command-line-utilities", "development-tools"]
 keywords = ["cli", "ai", "chat", "tools", "assistant"]
 
 [[bin]]
-name = "kimichat"
+name = "apchat"
 path = "src/main.rs"
 
 [dependencies]
 # Workspace crates
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
-kimichat-agents = { path = "../kimichat-agents" }
-kimichat-web = { path = "../kimichat-web" }
-kimichat-tools = { path = "../kimichat-tools" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-agents = { path = "../apchat-agents" }
+apchat-web = { path = "../apchat-web" }
+apchat-tools = { path = "../apchat-tools" }
 
 # CLI interface
 clap.workspace = true
@@ -419,17 +419,17 @@ assert_cmd = "2.0"
 [features]
 default = ["embeddings"]
 embeddings = [
-    "kimichat-core/embeddings",
-    "kimichat-terminal/embeddings", 
-    "kimichat-agents/embeddings",
-    "kimichat-web/embeddings",
-    "kimichat-tools/embeddings",
+    "apchat-core/embeddings",
+    "apchat-terminal/embeddings", 
+    "apchat-agents/embeddings",
+    "apchat-web/embeddings",
+    "apchat-tools/embeddings",
 ]
 
 # Build binaries for common targets
 [metadata.deb]
-maintainer = "KimiChat Team <team@kimichat.dev>"
-copyright = "2024, KimiChat Team"
+maintainer = "APChat Team <team@apchat.dev>"
+copyright = "2024, APChat Team"
 license-file = ["LICENSE", "4"]
 extended-description = """\
 A Rust-based CLI application that provides Claude Code-like experience 
@@ -438,8 +438,8 @@ depends = "$auto"
 section = "utility"
 priority = "optional"
 assets = [
-    ["target/release/kimichat", "usr/bin/", "755"],
-    ["README.md", "usr/share/doc/kimichat/README", "644"],
+    ["target/release/apchat", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/apchat/README", "644"],
 ]
 
 [lints.rust]

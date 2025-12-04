@@ -1,10 +1,10 @@
 # Workspace Reorganization Documentation
 
-This directory contains the complete documentation for reorganizing the KimiChat CLI application into a multi-crate workspace format.
+This directory contains the complete documentation for reorganizing the APChat CLI application into a multi-crate workspace format.
 
 ## Overview
 
-The KimiChat project is being reorganized from a single-crate structure into a functional workspace to achieve multiple goals:
+The APChat project is being reorganized from a single-crate structure into a functional workspace to achieve multiple goals:
 
 - **Separate concerns** by creating dedicated crates for different functional areas
 - **Prepare for publishing** some components as independent libraries
@@ -16,12 +16,12 @@ The KimiChat project is being reorganized from a single-crate structure into a f
 
 The new workspace will consist of 6 main crates:
 
-1. **`kimichat-core`** - Foundation layer with core types, tool registry, and configuration
-2. **`kimichat-terminal`** - Terminal/PTY session management and backends
-3. **`kimichat-agents`** - Multi-agent system and LLM client implementations
-4. **`kimichat-web`** - Web server and WebSocket communication
-5. **`kimichat-tools`** - Tool implementations (file ops, search, system)
-6. **`kimichat-cli`** - Main CLI application and REPL interface
+1. **`apchat-core`** - Foundation layer with core types, tool registry, and configuration
+2. **`apchat-terminal`** - Terminal/PTY session management and backends
+3. **`apchat-agents`** - Multi-agent system and LLM client implementations
+4. **`apchat-web`** - Web server and WebSocket communication
+5. **`apchat-tools`** - Tool implementations (file ops, search, system)
+6. **`apchat-cli`** - Main CLI application and REPL interface
 
 ## Documents
 

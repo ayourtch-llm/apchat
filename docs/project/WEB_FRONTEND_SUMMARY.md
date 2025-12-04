@@ -2,11 +2,11 @@
 
 ## Overview
 
-This document provides a high-level summary of the web frontend enhancement design for KimiChat. For detailed specifications, see the referenced documents below.
+This document provides a high-level summary of the web frontend enhancement design for APChat. For detailed specifications, see the referenced documents below.
 
 ## What We're Building
 
-A **lightweight, mobile-responsive web frontend** for KimiChat that:
+A **lightweight, mobile-responsive web frontend** for APChat that:
 
 ✅ **Provides the same functionality as the TUI**
 - Full chat interface with streaming responses
@@ -70,7 +70,7 @@ A **lightweight, mobile-responsive web frontend** for KimiChat that:
        │
        ▼
 ┌─────────────┐
-│ KimiChat    │ ← Existing chat engine
+│ APChat    │ ← Existing chat engine
 │ Core        │
 └─────────────┘
 ```
@@ -233,11 +233,11 @@ cargo run -- --web --web-bind 0.0.0.0 --web-port 8080
 ### Environment Variables (To Be Added)
 
 ```bash
-KIMICHAT_WEB_PORT=8080
-KIMICHAT_WEB_BIND=0.0.0.0
-KIMICHAT_WEB_API_KEY=secret123
-KIMICHAT_SESSION_TIMEOUT=3600
-KIMICHAT_MAX_SESSIONS=100
+APCHAT_WEB_PORT=8080
+APCHAT_WEB_BIND=0.0.0.0
+APCHAT_WEB_API_KEY=secret123
+APCHAT_SESSION_TIMEOUT=3600
+APCHAT_MAX_SESSIONS=100
 ```
 
 ## Key Design Decisions
@@ -388,10 +388,10 @@ Before starting implementation, consider:
 
 ## Conclusion
 
-This design provides a **comprehensive, production-ready blueprint** for adding a web frontend to KimiChat. The mobile-first, lightweight approach ensures broad compatibility while the session management strategy enables flexible workflows from standalone web sessions to collaborative multi-client experiences.
+This design provides a **comprehensive, production-ready blueprint** for adding a web frontend to APChat. The mobile-first, lightweight approach ensures broad compatibility while the session management strategy enables flexible workflows from standalone web sessions to collaborative multi-client experiences.
 
 **Key Benefits:**
-- 🌐 **Access from anywhere** - Use KimiChat on any device with a browser
+- 🌐 **Access from anywhere** - Use APChat on any device with a browser
 - 📱 **Full mobile support** - Native-like experience on phones and tablets
 - 🔄 **Flexible workflows** - Switch between TUI and web seamlessly
 - 👥 **Collaboration** - Multiple users can work in the same session
@@ -403,4 +403,4 @@ This design provides a **comprehensive, production-ready blueprint** for adding 
 
 **Document Version:** 1.0
 **Last Updated:** 2025-11-15
-**Author:** Design generated for KimiChat web frontend enhancement
+**Author:** Design generated for APChat web frontend enhancement

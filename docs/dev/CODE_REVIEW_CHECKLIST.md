@@ -1,6 +1,6 @@
 # Code Review Compliance Checklist
 
-This checklist ensures that code reviews are performed systematically for all code changes in the KimiChat project.
+This checklist ensures that code reviews are performed systematically for all code changes in the APChat project.
 
 ## 🚨 MANDATORY Review Triggers
 

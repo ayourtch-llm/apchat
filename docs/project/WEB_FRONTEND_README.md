@@ -1,8 +1,8 @@
-# KimiChat Web Frontend - User Guide
+# APChat Web Frontend - User Guide
 
 ## Overview
 
-KimiChat now includes a fully functional web-based frontend that provides the same capabilities as the TUI (Terminal User Interface). Access KimiChat from any device with a web browser - desktop, laptop, tablet, or smartphone.
+APChat now includes a fully functional web-based frontend that provides the same capabilities as the TUI (Terminal User Interface). Access APChat from any device with a web browser - desktop, laptop, tablet, or smartphone.
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ cargo run --release -- --web
 cargo run --release -- --web --web-port 3000 --web-bind 0.0.0.0
 
 # Or using the compiled binary
-./target/release/kimichat --web --web-port 8080
+./target/release/apchat --web --web-port 8080
 ```
 
 ### Accessing the Web Interface
@@ -24,9 +24,9 @@ cargo run --release -- --web --web-port 3000 --web-bind 0.0.0.0
 Once the server is running, you'll see:
 
 ```
-🌐 Starting KimiChat web server...
+🌐 Starting APChat web server...
    Address: 127.0.0.1:8080
-   Working directory: /home/user/kimichat
+   Working directory: /home/user/apchat
 🌐 Web server starting on http://127.0.0.1:8080
    WebSocket endpoint: ws://127.0.0.1:8080/ws/{session_id}
    API endpoints: http://127.0.0.1:8080/api/sessions
@@ -58,7 +58,7 @@ Open your web browser and navigate to:
   - See active client count
 
 - **Tool Integration**
-  - Full access to all KimiChat tools
+  - Full access to all APChat tools
   - File operations (read, write, edit)
   - Code search
   - Command execution
@@ -102,8 +102,8 @@ Open your web browser and navigate to:
 --web-attachable        # Allow TUI session attachment (future feature)
 
 # Environment variables
-export KIMICHAT_WEB_PORT=3000
-export KIMICHAT_WEB_BIND=0.0.0.0
+export APCHAT_WEB_PORT=3000
+export APCHAT_WEB_BIND=0.0.0.0
 ```
 
 ## API Endpoints
@@ -193,7 +193,7 @@ ws.onmessage = (event) => {
 ```javascript
 ws.send(JSON.stringify({
   type: 'SendMessage',
-  data: { content: 'Hello, KimiChat!' }
+  data: { content: 'Hello, APChat!' }
 }));
 ```
 
@@ -217,7 +217,7 @@ ws.send(JSON.stringify({
 3. Optionally: Add to Home Screen for app-like experience
    - Tap the Share button
    - Select "Add to Home Screen"
-   - KimiChat will now appear as an app icon
+   - APChat will now appear as an app icon
 
 ### Android (Chrome)
 
@@ -248,7 +248,7 @@ ip addr show  # Linux
 ifconfig      # macOS
 
 # Start server on all interfaces
-./target/release/kimichat --web --web-bind 0.0.0.0 --web-port 8080
+./target/release/apchat --web --web-bind 0.0.0.0 --web-port 8080
 
 # Access from phone/tablet
 # http://192.168.1.100:8080
@@ -266,7 +266,7 @@ Example Nginx configuration:
 ```nginx
 server {
     listen 443 ssl;
-    server_name kimichat.example.com;
+    server_name apchat.example.com;
 
     ssl_certificate /path/to/cert.pem;
     ssl_certificate_key /path/to/key.pem;
@@ -289,7 +289,7 @@ server {
 - **Tower** - Middleware layer
 - **WebSocket** - Real-time bidirectional communication
 - **Session Manager** - Manages all active chat sessions
-- **KimiChat Core** - Existing chat engine (tools, agents, models)
+- **APChat Core** - Existing chat engine (tools, agents, models)
 
 ### Frontend (HTML/CSS/JS)
 
@@ -301,7 +301,7 @@ server {
 ### Data Flow
 
 ```
-Browser ←→ WebSocket ←→ Session Manager ←→ KimiChat Core ←→ LLM API
+Browser ←→ WebSocket ←→ Session Manager ←→ APChat Core ←→ LLM API
 ```
 
 ## Security Considerations
@@ -310,7 +310,7 @@ Browser ←→ WebSocket ←→ Session Manager ←→ KimiChat Core ←→ LLM 
 
 - CORS enabled for development (allow all origins)
 - No authentication required (suitable for local use)
-- Sessions are isolated (separate KimiChat instances)
+- Sessions are isolated (separate APChat instances)
 
 ### Production Recommendations
 
@@ -333,7 +333,7 @@ Error: Address already in use
 
 **Solution:** Use a different port
 ```bash
-./target/release/kimichat --web --web-port 8081
+./target/release/apchat --web --web-port 8081
 ```
 
 ### Cannot Connect from Mobile
@@ -433,7 +433,7 @@ Planned features (not yet implemented):
 - **Message Latency:** < 100ms (WebSocket)
 - **Page Load:** < 1 second (embedded HTML)
 - **Concurrent Sessions:** Tested up to 100 sessions
-- **Memory Usage:** ~50MB per session (including KimiChat instance)
+- **Memory Usage:** ~50MB per session (including APChat instance)
 
 ### Optimization Tips
 
@@ -461,7 +461,7 @@ Planned features (not yet implemented):
 ### Reporting Issues
 
 Found a bug? Please report at:
-- GitHub: https://github.com/ayourtch-llm/kimichat/issues
+- GitHub: https://github.com/ayourtch-llm/apchat/issues
 
 Include:
 - Web server version
@@ -477,8 +477,8 @@ Include:
 
 ## License
 
-Same as KimiChat project license.
+Same as APChat project license.
 
 ---
 
-**Enjoy KimiChat from anywhere! 🌐📱💻**
+**Enjoy APChat from anywhere! 🌐📱💻**

@@ -1,6 +1,6 @@
 # Migration Plan
 
-This document provides a step-by-step migration strategy for converting the KimiChat CLI application from a single-crate structure to a multi-crate workspace.
+This document provides a step-by-step migration strategy for converting the APChat CLI application from a single-crate structure to a multi-crate workspace.
 
 ## Migration Strategy Overview
 
@@ -10,34 +10,34 @@ The migration will be executed in 7 phases to minimize disruption and ensure eac
 
 ### Objectives
 - Establish the workspace structure
-- Extract core functionality into `kimichat-core`
+- Extract core functionality into `apchat-core`
 - Set up workspace configuration
 
 ### Steps
 
 #### 1.1 Create Workspace Root Configuration
-1. Move existing `Cargo.toml` to `kimichat-cli/Cargo.toml`
+1. Move existing `Cargo.toml` to `apchat-cli/Cargo.toml`
 2. Create new root `Cargo.toml` with workspace configuration
 3. Add all member crates to workspace
 4. Configure shared dependencies and features
 
-#### 1.2 Create kimichat-core Crate
-1. Create `kimichat-core/` directory structure
+#### 1.2 Create apchat-core Crate
+1. Create `apchat-core/` directory structure
 2. Move core modules:
-   - `src/core/` → `kimichat-core/src/core/`
-   - `src/policy.rs` → `kimichat-core/src/policy.rs`
-   - `src/config/` → `kimichat-core/src/config/`
-   - `src/tools_execution/validation.rs` → `kimichat-core/src/validation/`
-   - `src/models/` → `kimichat-core/src/models/`
+   - `src/core/` → `apchat-core/src/core/`
+   - `src/policy.rs` → `apchat-core/src/policy.rs`
+   - `src/config/` → `apchat-core/src/config/`
+   - `src/tools_execution/validation.rs` → `apchat-core/src/validation/`
+   - `src/models/` → `apchat-core/src/models/`
 
 #### 1.3 Update Core Dependencies
-1. Create `kimichat-core/Cargo.toml` with minimal dependencies
+1. Create `apchat-core/Cargo.toml` with minimal dependencies
 2. Add necessary workspace dependencies
 3. Configure core-specific features
 
 #### 1.4 Update CLI Crate
-1. Modify `kimichat-cli/Cargo.toml` to depend on `kimichat-core`
-2. Update imports in `kimichat-cli/src/main.rs`
+1. Modify `apchat-cli/Cargo.toml` to depend on `apchat-core`
+2. Update imports in `apchat-cli/src/main.rs`
 3. Fix compilation errors
 
 ### Validation Criteria
@@ -50,39 +50,39 @@ The migration will be executed in 7 phases to minimize disruption and ensure eac
 ### Files to Create/Modify
 ```
 Cargo.toml (new workspace root)
-kimichat-core/Cargo.toml (new)
-kimichat-core/src/lib.rs (new)
-kimichat-cli/Cargo.toml (modified)
-kimichat-cli/src/main.rs (modified)
+apchat-core/Cargo.toml (new)
+apchat-core/src/lib.rs (new)
+apchat-cli/Cargo.toml (modified)
+apchat-cli/src/main.rs (modified)
 ```
 
 ## Phase 2: Extract Terminal Functionality
 
 ### Objectives
-- Extract terminal operations into `kimichat-terminal`
+- Extract terminal operations into `apchat-terminal`
 - Ensure terminal functionality remains intact
 - Establish clean API boundaries
 
 ### Steps
 
-#### 2.1 Create kimichat-terminal Crate
-1. Create `kimichat-terminal/` directory structure
+#### 2.1 Create apchat-terminal Crate
+1. Create `apchat-terminal/` directory structure
 2. Move terminal modules:
-   - `src/terminal/` → `kimichat-terminal/src/`
+   - `src/terminal/` → `apchat-terminal/src/`
    - Update all module paths and imports
 
 #### 2.2 Configure Terminal Dependencies
-1. Create `kimichat-terminal/Cargo.toml`
-2. Add dependency on `kimichat-core`
+1. Create `apchat-terminal/Cargo.toml`
+2. Add dependency on `apchat-core`
 3. Add terminal-specific dependencies
 
 #### 2.3 Update CLI Dependencies
-1. Add `kimichat-terminal` dependency to CLI crate
+1. Add `apchat-terminal` dependency to CLI crate
 2. Update imports to use terminal crate
 3. Fix compilation errors
 
 #### 2.4 Extract Terminal Tools
-1. Move terminal-specific tools from `src/tools/` to `kimichat-terminal/src/tools/`
+1. Move terminal-specific tools from `src/tools/` to `apchat-terminal/src/tools/`
 2. Update tool registry to import from terminal crate
 3. Ensure tool functionality is preserved
 
@@ -95,34 +95,34 @@ kimichat-cli/src/main.rs (modified)
 
 ### Files to Create/Modify
 ```
-kimichat-terminal/Cargo.toml (new)
-kimichat-terminal/src/lib.rs (new)
-kimichat-cli/Cargo.toml (modified)
-kimichat-cli/src/main.rs (modified)
+apchat-terminal/Cargo.toml (new)
+apchat-terminal/src/lib.rs (new)
+apchat-cli/Cargo.toml (modified)
+apchat-cli/src/main.rs (modified)
 ```
 
 ## Phase 3: Extract Agent System
 
 ### Objectives
-- Extract agent functionality into `kimichat-agents`
+- Extract agent functionality into `apchat-agents`
 - Ensure multi-agent system works correctly
 - Maintain LLM client functionality
 
 ### Steps
 
-#### 3.1 Create kimichat-agents Crate
-1. Create `kimichat-agents/` directory structure
+#### 3.1 Create apchat-agents Crate
+1. Create `apchat-agents/` directory structure
 2. Move agent modules:
-   - `src/agents/` → `kimichat-agents/src/`
+   - `src/agents/` → `apchat-agents/src/`
    - Update all module paths and imports
 
 #### 3.2 Configure Agent Dependencies
-1. Create `kimichat-agents/Cargo.toml`
-2. Add dependencies on `kimichat-core` and `kimichat-tools`
+1. Create `apchat-agents/Cargo.toml`
+2. Add dependencies on `apchat-core` and `apchat-tools`
 3. Add agent-specific dependencies (reqwest, futures, etc.)
 
 #### 3.3 Update Dependencies
-1. Add `kimichat-agents` dependency to CLI and web crates
+1. Add `apchat-agents` dependency to CLI and web crates
 2. Update imports to use agents crate
 3. Fix compilation errors
 
@@ -142,34 +142,34 @@ kimichat-cli/src/main.rs (modified)
 
 ### Files to Create/Modify
 ```
-kimichat-agents/Cargo.toml (new)
-kimichat-agents/src/lib.rs (new)
-kimichat-cli/Cargo.toml (modified)
-kimichat-cli/src/main.rs (modified)
+apchat-agents/Cargo.toml (new)
+apchat-agents/src/lib.rs (new)
+apchat-cli/Cargo.toml (modified)
+apchat-cli/src/main.rs (modified)
 ```
 
 ## Phase 4: Extract Web Components
 
 ### Objectives
-- Extract web functionality into `kimichat-web`
+- Extract web functionality into `apchat-web`
 - Ensure web interface remains functional
 - Test WebSocket communication
 
 ### Steps
 
-#### 4.1 Create kimichat-web Crate
-1. Create `kimichat-web/` directory structure
+#### 4.1 Create apchat-web Crate
+1. Create `apchat-web/` directory structure
 2. Move web modules:
-   - `src/web/` → `kimichat-web/src/`
+   - `src/web/` → `apchat-web/src/`
    - Update all module paths and imports
 
 #### 4.2 Configure Web Dependencies
-1. Create `kimichat-web/Cargo.toml`
-2. Add dependencies on `kimichat-core`, `kimichat-terminal`, `kimichat-agents`
+1. Create `apchat-web/Cargo.toml`
+2. Add dependencies on `apchat-core`, `apchat-terminal`, `apchat-agents`
 3. Add web-specific dependencies (axum, tower, etc.)
 
 #### 4.3 Update Dependencies
-1. Add `kimichat-web` dependency to CLI crate
+1. Add `apchat-web` dependency to CLI crate
 2. Update imports to use web crate
 3. Fix compilation errors
 
@@ -189,36 +189,36 @@ kimichat-cli/src/main.rs (modified)
 
 ### Files to Create/Modify
 ```
-kimichat-web/Cargo.toml (new)
-kimichat-web/src/lib.rs (new)
-kimichat-cli/Cargo.toml (modified)
-kimichat-cli/src/main.rs (modified)
+apchat-web/Cargo.toml (new)
+apchat-web/src/lib.rs (new)
+apchat-cli/Cargo.toml (modified)
+apchat-cli/src/main.rs (modified)
 ```
 
 ## Phase 5: Extract Tools
 
 ### Objectives
-- Extract tool implementations into `kimichat-tools`
+- Extract tool implementations into `apchat-tools`
 - Ensure all tools work correctly
 - Maintain tool registration and discovery
 
 ### Steps
 
-#### 5.1 Create kimichat-tools Crate
-1. Create `kimichat-tools/` directory structure
+#### 5.1 Create apchat-tools Crate
+1. Create `apchat-tools/` directory structure
 2. Move tool modules:
-   - `src/tools/` → `kimichat-tools/src/`
-   - `src/skills/embedded.rs` → `kimichat-tools/src/skills/`
-   - `src/todo.rs` → `kimichat-tools/src/todo.rs`
+   - `src/tools/` → `apchat-tools/src/`
+   - `src/skills/embedded.rs` → `apchat-tools/src/skills/`
+   - `src/todo.rs` → `apchat-tools/src/todo.rs`
    - Update all module paths and imports
 
 #### 5.2 Configure Tools Dependencies
-1. Create `kimichat-tools/Cargo.toml`
-2. Add dependencies on `kimichat-core` and `kimichat-terminal`
+1. Create `apchat-tools/Cargo.toml`
+2. Add dependencies on `apchat-core` and `apchat-terminal`
 3. Add tool-specific dependencies (glob, ignore, regex, etc.)
 
 #### 5.3 Update Dependencies
-1. Add `kimichat-tools` dependency to CLI and agents crates
+1. Add `apchat-tools` dependency to CLI and agents crates
 2. Update imports to use tools crate
 3. Fix compilation errors
 
@@ -240,11 +240,11 @@ kimichat-cli/src/main.rs (modified)
 
 ### Files to Create/Modify
 ```
-kimichat-tools/Cargo.toml (new)
-kimichat-tools/src/lib.rs (new)
-kimichat-cli/Cargo.toml (modified)
-kimichat-agents/Cargo.toml (modified)
-kimichat-cli/src/main.rs (modified)
+apchat-tools/Cargo.toml (new)
+apchat-tools/src/lib.rs (new)
+apchat-cli/Cargo.toml (modified)
+apchat-agents/Cargo.toml (modified)
+apchat-cli/src/main.rs (modified)
 ```
 
 ## Phase 6: Reorganize CLI Application
@@ -289,9 +289,9 @@ kimichat-cli/src/main.rs (modified)
 
 ### Files to Create/Modify
 ```
-kimichat-cli/Cargo.toml (cleaned up)
-kimichat-cli/src/main.rs (optimized)
-kimichat-cli/src/app/mod.rs (cleaned up)
+apchat-cli/Cargo.toml (cleaned up)
+apchat-cli/src/main.rs (optimized)
+apchat-cli/src/app/mod.rs (cleaned up)
 ```
 
 ## Phase 7: Testing and Validation
@@ -412,4 +412,4 @@ Each phase maintains the ability to rollback:
 
 **Total Estimated Time:** 10-16 days
 
-This migration plan provides a structured approach to transforming the KimiChat codebase into a well-organized workspace while minimizing risks and ensuring functionality is preserved throughout the process.
+This migration plan provides a structured approach to transforming the APChat codebase into a well-organized workspace while minimizing risks and ensuring functionality is preserved throughout the process.

@@ -1,7 +1,7 @@
 # Sub‑Agent Specification (Summary‑Returning Wrapper)
 
 ## 1. Purpose
-The **sub‑agent** is a thin extension of the existing `kimichat` CLI that enables a *summary‑mode* operation. When the user supplies an optional task description (e.g., `--task "refactor utils"`), the application:
+The **sub‑agent** is a thin extension of the existing `apchat` CLI that enables a *summary‑mode* operation. When the user supplies an optional task description (e.g., `--task "refactor utils"`), the application:
 1. Shows a 2‑word preview of the task in the prompt line.
 2. Executes the full conversation pipeline exactly as the main agent does.
 3. Returns **only a concise JSON summary** (with optional metadata) instead of the full transcript.
@@ -187,7 +187,7 @@ Use `assert_cmd` or `std::process::Command` to invoke the compiled binary in a t
 ## 9. Documentation Updates
 - **README.md** – add a new “Summary mode” section with examples:
   ```bash
-  $ kimichat --task "refactor utils" "dummy prompt" --pretty
+  $ apchat --task "refactor utils" "dummy prompt" --pretty
   {
     "summary": "Refactored utils.rs and updated tests; all cargo test pass.",
     "metadata": {
@@ -199,7 +199,7 @@ Use `assert_cmd` or `std::process::Command` to invoke the compiled binary in a t
     }
   }
   ```
-- **kimi.md** – add a design note describing the *summary‑mode* flag and its interaction with the existing conversation pipeline.
+- **apchat.md** – add a design note describing the *summary‑mode* flag and its interaction with the existing conversation pipeline.
 
 ---
 
@@ -210,7 +210,7 @@ Use `assert_cmd` or `std::process::Command` to invoke the compiled binary in a t
 | **History** | Existing history file continues to store the full transcript (unchanged). | Summaries are **not** written back to history, preserving privacy. |
 | **Performance** | Negligible (heuristic) or a single extra model call (optional). | Heuristic is default; model summarisation can be toggled off. |
 | **Testing** | New module adds ~200 lines of test coverage. | CI updated to run `cargo test` and enforce >80 % coverage for `src/summary.rs`. |
-| **User experience** | Adds a concise, machine‑readable output option. | Clear help text (`kimichat --help`) explains the new flags. |
+| **User experience** | Adds a concise, machine‑readable output option. | Clear help text (`apchat --help`) explains the new flags. |
 
 ---
 
@@ -221,7 +221,7 @@ Use `assert_cmd` or `std::process::Command` to invoke the compiled binary in a t
 - [ ] Create `src/summary.rs` with heuristic, optional model summariser, metadata struct, and JSON serializer.
 - [ ] Update post‑conversation handling in `main.rs` to branch on `summary_mode`.
 - [ ] Write unit & integration tests (`tests/sub_agent.rs`).
-- [ ] Update README and `kimi.md` with usage examples.
+- [ ] Update README and `apchat.md` with usage examples.
 - [ ] Run `cargo fmt`, `cargo clippy`, and ensure CI passes.
 
 ---

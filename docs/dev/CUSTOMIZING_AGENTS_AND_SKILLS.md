@@ -1,6 +1,6 @@
 # Customizing Agents and Skills
 
-This guide explains how to add custom agent configurations and skills for repository-specific use in KimiChat.
+This guide explains how to add custom agent configurations and skills for repository-specific use in APChat.
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ This guide explains how to add custom agent configurations and skills for reposi
 
 ## Overview: Embedded + Filesystem Architecture
 
-KimiChat uses a **hybrid loading system** that combines embedded and filesystem configs:
+APChat uses a **hybrid loading system** that combines embedded and filesystem configs:
 
 ```
 ┌─────────────────────────────────────────┐
@@ -130,7 +130,7 @@ Show what NOT to do
 ### Step 3: Test Your Skill
 
 ```bash
-# Run KimiChat with agents
+# Run APChat with agents
 cargo run -- --agents -i
 
 # In the REPL:
@@ -765,7 +765,7 @@ Before requesting review, verify:
 2. Directory structure: `skills/skill-name/SKILL.md`
 3. Skill name in frontmatter matches directory name
 4. No typos in the `name:` field
-5. Restart KimiChat to reload skills
+5. Restart APChat to reload skills
 
 **Debug:**
 ```bash
@@ -800,7 +800,7 @@ cargo run -- --agents -i 2>&1 | grep -i "agent configuration"
 
 ## Reference: Built-in Agents
 
-KimiChat includes 7 embedded agents:
+APChat includes 7 embedded agents:
 
 | Agent | Model | Purpose |
 |-------|-------|---------|
@@ -816,7 +816,7 @@ See `agents/configs/*.json` for full configurations.
 
 ## Reference: Built-in Skills
 
-KimiChat includes 20 embedded skills covering:
+APChat includes 20 embedded skills covering:
 - Development workflows (TDD, subagent-driven development)
 - Debugging (systematic debugging, root cause tracing)
 - Planning (writing plans, executing plans, brainstorming)

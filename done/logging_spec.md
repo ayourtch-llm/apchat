@@ -1,4 +1,4 @@
-# Specification: Conversation Logging for `kimi-chat`
+# Specification: Conversation Logging for `apchat`
 
 ## Overview
 Add a feature that records every exchanged message (user, assistant, system, tool) to a **JSONL** (JSON Lines) file. Each line represents a single message object. The file name must include the timestamp of the chat session start in the format:

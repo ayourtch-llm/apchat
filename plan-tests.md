@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**Current State**: KimiChat is a sophisticated multi-agent AI CLI application with 12 workspace crates and 90+ Rust source files, but has minimal test coverage. Only 2 dedicated test modules exist (`agent_tests.rs` and `cli/tests.rs`), with scattered unit tests in a few modules.
+**Current State**: APChat is a sophisticated multi-agent AI CLI application with 12 workspace crates and 90+ Rust source files, but has minimal test coverage. Only 2 dedicated test modules exist (`agent_tests.rs` and `cli/tests.rs`), with scattered unit tests in a few modules.
 
 **Target State**: Comprehensive test suite covering all major components with >80% line coverage, automated CI/CD testing, and proper test infrastructure setup.
 
@@ -13,15 +13,15 @@
 ## Current Test Coverage Analysis
 
 ### Existing Test Files
-1. `crates/kimichat-agents/src/agent_tests.rs` - Agent, Task, and AgentResult unit tests (comprehensive)
-2. `kimichat-main/src/cli/tests.rs` - CLI argument parsing tests (comprehensive)
+1. `crates/apchat-agents/src/agent_tests.rs` - Agent, Task, and AgentResult unit tests (comprehensive)
+2. `apchat-main/src/cli/tests.rs` - CLI argument parsing tests (comprehensive)
 3. Scattered unit tests in:
-   - `crates/kimichat-wasm/src/markdown.rs`
-   - `crates/kimichat-skills/src/lib.rs`
-   - `crates/kimichat-skills/src/embeddings/mod.rs`
-   - `crates/kimichat-skills/src/embeddings/fastembed_backend.rs`
-   - `crates/kimichat-policy/src/lib.rs`
-   - `crates/kimichat-toolcore/src/tool_registry.rs`
+   - `crates/apchat-wasm/src/markdown.rs`
+   - `crates/apchat-skills/src/lib.rs`
+   - `crates/apchat-skills/src/embeddings/mod.rs`
+   - `crates/apchat-skills/src/embeddings/fastembed_backend.rs`
+   - `crates/apchat-policy/src/lib.rs`
+   - `crates/apchat-toolcore/src/tool_registry.rs`
 
 ### Coverage Gaps Identified
 - **Core Business Logic**: 0% coverage
@@ -64,7 +64,7 @@ proptest = "1.0"  # Property-based testing
 **Create test modules following Rust conventions:**
 ```
 crates/
-├── kimichat-agents/
+├── apchat-agents/
 │   ├── src/
 │   │   ├── agent.rs
 │   │   ├── agent_tests.rs  # ✅ exists
@@ -74,7 +74,7 @@ crates/
 │       │   ├── agent_coordination.rs
 │       │   └── task_execution.rs
 │       └── fixtures/
-├── kimichat-llm-api/
+├── apchat-llm-api/
 │   └── tests/
 │       ├── unit/
 │       │   ├── anthropic_client.rs
@@ -97,11 +97,11 @@ crates/
 
 ## Phase 2: Core Component Testing (Weeks 2-4)
 
-### 2.1 Tool System Testing (`kimichat-toolcore` & `kimichat-tools`)
+### 2.1 Tool System Testing (`apchat-toolcore` & `apchat-tools`)
 
 **Priority: CRITICAL** - Tools are the foundation of the system
 
-#### 2.1.1 Tool Registry (`kimichat-toolcore/src/tool_registry.rs`)
+#### 2.1.1 Tool Registry (`apchat-toolcore/src/tool_registry.rs`)
 **Test Coverage Needed:**
 - Tool registration and retrieval
 - Tool validation and metadata handling
@@ -133,14 +133,14 @@ mod tests {
 }
 ```
 
-#### 2.1.2 Tool Execution Context (`kimichat-toolcore/src/tool_context.rs`)
+#### 2.1.2 Tool Execution Context (`apchat-toolcore/src/tool_context.rs`)
 **Test Coverage Needed:**
 - Context creation and management
 - Tool parameter validation
 - Error propagation and handling
 - Security context and permissions
 
-#### 2.1.3 Tool Implementation (`kimichat-tools/src/`)
+#### 2.1.3 Tool Implementation (`apchat-tools/src/`)
 **Each tool module needs comprehensive testing:**
 
 **File Operations (`file_ops.rs`):**
@@ -169,7 +169,7 @@ mod tests {
 - Keyboard input handling
 - Session lifecycle management
 
-### 2.2 LLM API Integration Testing (`kimichat-llm-api`)
+### 2.2 LLM API Integration Testing (`apchat-llm-api`)
 
 **Priority: CRITICAL** - Communication with external services
 
@@ -203,7 +203,7 @@ mod tests {
 - Test partial response handling
 - Test connection interruption scenarios
 
-### 2.3 Model System Testing (`kimichat-models`)
+### 2.3 Model System Testing (`apchat-models`)
 
 **Priority: HIGH**
 - Request/response serialization
@@ -215,7 +215,7 @@ mod tests {
 
 ## Phase 3: Application Logic Testing (Weeks 5-6)
 
-### 3.1 Multi-Agent System Testing (`kimichat-agents`)
+### 3.1 Multi-Agent System Testing (`apchat-agents`)
 
 **Build on existing `agent_tests.rs`:**
 
@@ -237,7 +237,7 @@ mod tests {
 - Result aggregation
 - Timeout and cancellation handling
 
-### 3.2 Web Server Testing (`kimichat-main/src/web/`)
+### 3.2 Web Server Testing (`apchat-main/src/web/`)
 
 **Priority: MEDIUM**
 - WebSocket connection handling
@@ -246,7 +246,7 @@ mod tests {
 - API endpoint validation
 - Error handling and status codes
 
-### 3.3 Terminal Management Testing (`kimichat-terminal`)
+### 3.3 Terminal Management Testing (`apchat-terminal`)
 
 **Priority: MEDIUM**
 - PTY session lifecycle
@@ -254,7 +254,7 @@ mod tests {
 - Background thread handling
 - Cleanup and resource management
 
-### 3.4 Conversation Management (`kimichat-main/src/chat/`)
+### 3.4 Conversation Management (`apchat-main/src/chat/`)
 
 **Priority: MEDIUM**
 - Session state management
@@ -501,7 +501,7 @@ proptest! {
 
 ## Conclusion
 
-This comprehensive test coverage improvement plan will transform KimiChat from a project with minimal test coverage to a robust, well-tested codebase. The phased approach ensures steady progress while maintaining development velocity.
+This comprehensive test coverage improvement plan will transform APChat from a project with minimal test coverage to a robust, well-tested codebase. The phased approach ensures steady progress while maintaining development velocity.
 
 The 10-week timeline provides sufficient time for thorough implementation while allowing for iteration and refinement. Success will be measured through coverage metrics, test quality, and improved confidence in code changes.
 

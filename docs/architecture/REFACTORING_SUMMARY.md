@@ -1,4 +1,4 @@
-# KimiChat Main.rs Refactoring Summary
+# APChat Main.rs Refactoring Summary
 
 ## Overview
 
@@ -177,8 +177,8 @@ The refactoring was completed in 18 commits across three sessions:
 
 The `src/main.rs` file now contains (420 lines):
 - **Module declarations** - All module imports and exports
-- **KimiChat struct** - Main application state (52 lines)
-- **KimiChat implementation** - Core methods only:
+- **APChat struct** - Main application state (52 lines)
+- **APChat implementation** - Core methods only:
   - `new()`, `new_with_agents()`, `new_with_config()` - Constructors
   - `set_debug_level()`, `get_debug_level()`, `should_show_debug()` - Debug helpers
   - `get_tools()` - Tool registry access
@@ -203,12 +203,12 @@ The key innovation in Session 2 was using **explicit parameter passing** instead
 
 ```rust
 // Extracted function
-pub(crate) async fn function_name(chat: &KimiChat, ...) -> Result<...> {
+pub(crate) async fn function_name(chat: &APChat, ...) -> Result<...> {
     // Uses chat.field, chat.method(), etc.
 }
 
 // Thin wrapper in main.rs
-impl KimiChat {
+impl APChat {
     async fn function_name(&self, ...) -> Result<...> {
         function_name(self, ...).await
     }
@@ -271,7 +271,7 @@ This refactoring successfully reduces the `main.rs` file size by **88.4%** (from
 ### Technical Innovation:
 The refactoring achieved two key breakthroughs:
 
-1. **Session 2**: Using explicit `&KimiChat` parameter passing proved that methods previously considered "too tightly coupled to extract" could be extracted cleanly without sacrificing code quality.
+1. **Session 2**: Using explicit `&APChat` parameter passing proved that methods previously considered "too tightly coupled to extract" could be extracted cleanly without sacrificing code quality.
 
 2. **Session 3**: Eliminating all wrapper methods in favor of direct module calls demonstrated that backward compatibility wrappers, while useful during migration, can be removed once extraction is complete, resulting in cleaner and more explicit code.
 

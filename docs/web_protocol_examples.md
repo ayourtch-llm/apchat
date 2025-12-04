@@ -1,6 +1,6 @@
 # Web Frontend Protocol Examples
 
-This document provides concrete examples of the WebSocket protocol messages and flows for the KimiChat web frontend.
+This document provides concrete examples of the WebSocket protocol messages and flows for the APChat web frontend.
 
 ## Message Flow Examples
 
@@ -114,7 +114,7 @@ This document provides concrete examples of the WebSocket protocol messages and 
   "type": "ToolCallResult",
   "data": {
     "tool_call_id": "call_abc123",
-    "result": "# KimiChat\n\nA multi-agent AI CLI...",
+    "result": "# APChat\n\nA multi-agent AI CLI...",
     "success": true
   }
 }
@@ -124,7 +124,7 @@ This document provides concrete examples of the WebSocket protocol messages and 
 {
   "type": "AssistantMessageChunk",
   "data": {
-    "chunk": "The README.md file contains information about KimiChat..."
+    "chunk": "The README.md file contains information about APChat..."
   }
 }
 ```

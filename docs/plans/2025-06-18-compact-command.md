@@ -13,7 +13,7 @@
 ### Task 1: Add /compact Command Help Text
 
 **Files:**
-- Modify: `kimichat-main/src/app/repl.rs:320-325`
+- Modify: `apchat-main/src/app/repl.rs:320-325`
 
 **Step 1: Add /compact to /skills help display**
 
@@ -30,14 +30,14 @@ Expected: PASS (tests should still pass)
 **Step 3: Commit**
 
 ```bash
-git add kimichat-main/src/app/repl.rs
+git add apchat-main/src/app/repl.rs
 git commit -m "feat: add /compact command to help text"
 ```
 
 ### Task 2: Implement /compact Command Handler
 
 **Files:**
-- Modify: `kimichat-main/src/app/repl.rs:400-450`
+- Modify: `apchat-main/src/app/repl.rs:400-450`
 
 **Step 1: Add /compact command detection**
 
@@ -76,14 +76,14 @@ Expected: PASS (existing tests should still pass)
 **Step 4: Commit**
 
 ```bash
-git add kimichat-main/src/app/repl.rs
+git add apchat-main/src/app/repl.rs
 git commit -m "feat: implement /compact command handler"
 ```
 
 ### Task 3: Add /compact Command Unit Test
 
 **Files:**
-- Create: `kimichat-main/src/app/repl_compact_tests.rs`
+- Create: `apchat-main/src/app/repl_compact_tests.rs`
 
 **Step 1: Write the failing test**
 
@@ -91,8 +91,8 @@ git commit -m "feat: implement /compact command handler"
 #[cfg(test)]
 mod compact_tests {
     use super::*;
-    use crate::KimiChat;
-    use kimichat_models::{Message, ModelColor};
+    use crate::APChat;
+    use apchat_models::{Message, ModelColor};
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -124,8 +124,8 @@ mod compact_tests {
         assert!(chat.messages.len() >= 1, "Should have at least system message after compaction");
     }
 
-    async fn create_test_chat() -> KimiChat {
-        KimiChat::new_with_client_config(
+    async fn create_test_chat() -> APChat {
+        APChat::new_with_client_config(
             ModelColor::GrnModel,
             Default::default(),
             None,
@@ -157,7 +157,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add kimichat-main/src/app/repl.rs kimichat-main/src/app/repl_compact_tests.rs
+git add apchat-main/src/app/repl.rs apchat-main/src/app/repl_compact_tests.rs
 git commit -m "test: add unit test for /compact command functionality"
 ```
 
@@ -168,7 +168,7 @@ git commit -m "test: add unit test for /compact command functionality"
 
 **Step 1: Check if README exists**
 
-Run: `ls kimichat-main/README.md || echo "README not found"`
+Run: `ls apchat-main/README.md || echo "README not found"`
 
 **Step 2: Update documentation if README exists**
 
@@ -180,7 +180,7 @@ If README.md exists and has a commands section, add:
 **Step 3: Commit if documentation updated**
 
 ```bash
-git add kimichat-main/README.md
+git add apchat-main/README.md
 git commit -m "docs: add /compact command to README"
 ```
 

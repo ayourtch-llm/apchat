@@ -1,6 +1,6 @@
 # Web Frontend Implementation Checklist
 
-This checklist tracks the implementation progress for the KimiChat web frontend.
+This checklist tracks the implementation progress for the APChat web frontend.
 
 ## Phase 1: Core Web Server (Week 1-2)
 

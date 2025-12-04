@@ -59,11 +59,11 @@
 - **Destination**: `src/chat/state.rs`
 - **Content**: ChatState struct (serializable state)
 
-### Lines 627-649: KimiChat struct
+### Lines 627-649: APChat struct
 - **Destination**: Split across modules
 - **Strategy**: Keep core struct in `src/chat/session.rs`, but methods distributed
 
-### Lines 651-3177: impl KimiChat (THE BIG ONE - 2,526 lines)
+### Lines 651-3177: impl APChat (THE BIG ONE - 2,526 lines)
 
 #### Lines 654-744: XML Parsing
 - **Destination**: `src/tools_execution/parsing.rs`
@@ -210,7 +210,7 @@ src/
 │   ├── mod.rs          (~30 lines)
 │   ├── state.rs        (~80 lines) - Save/load state
 │   ├── history.rs      (~280 lines) - History management
-│   └── session.rs      (~650 lines) - Main chat loop, KimiChat struct
+│   └── session.rs      (~650 lines) - Main chat loop, APChat struct
 ├── tools_execution/
 │   ├── mod.rs          (~30 lines)
 │   ├── parsing.rs      (~100 lines) - XML parsing

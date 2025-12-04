@@ -5,36 +5,36 @@ This document outlines the dependency relationships between crates in the new wo
 ## Dependency Graph Overview
 
 ```
-kimichat-cli
-    ├── kimichat-web
-    ├── kimichat-agents
-    ├── kimichat-tools
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-cli
+    ├── apchat-web
+    ├── apchat-agents
+    ├── apchat-tools
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-web
-    ├── kimichat-agents
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-web
+    ├── apchat-agents
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-agents
-    ├── kimichat-tools
-    └── kimichat-core
+apchat-agents
+    ├── apchat-tools
+    └── apchat-core
 
-kimichat-tools
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-tools
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-terminal
-    └── kimichat-core
+apchat-terminal
+    └── apchat-core
 
-kimichat-core
+apchat-core
     (no internal dependencies)
 ```
 
 ## Detailed Dependency Analysis
 
-### 1. kimichat-core (Foundation Layer)
+### 1. apchat-core (Foundation Layer)
 
 **Purpose:** Provides core types, tool system, and configuration management
 
@@ -64,12 +64,12 @@ pub trait ToolExecutor;
 pub trait ConfigLoader;
 ```
 
-### 2. kimichat-terminal (Terminal Operations)
+### 2. apchat-terminal (Terminal Operations)
 
 **Purpose:** Terminal session management with PTY support
 
 **Internal Dependencies:**
-- `kimichat-core` - For tool system integration and core types
+- `apchat-core` - For tool system integration and core types
 
 **External Dependencies:**
 - `portable-pty` - PTY implementation
@@ -92,13 +92,13 @@ pub struct ScreenBuffer;
 pub enum TerminalBackendType;
 ```
 
-### 3. kimichat-tools (Tool Implementations)
+### 3. apchat-tools (Tool Implementations)
 
 **Purpose:** Concrete implementations of tools for various operations
 
 **Internal Dependencies:**
-- `kimichat-core` - Tool system integration and core types
-- `kimichat-terminal` - Terminal-related tools
+- `apchat-core` - Tool system integration and core types
+- `apchat-terminal` - Terminal-related tools
 
 **External Dependencies:**
 - `glob`, `ignore` - File system operations
@@ -124,13 +124,13 @@ pub struct ModelManagementTool;
 pub fn register_all_tools(registry: &mut ToolRegistry);
 ```
 
-### 4. kimichat-agents (Multi-Agent System)
+### 4. apchat-agents (Multi-Agent System)
 
 **Purpose:** Agent framework and LLM client implementations
 
 **Internal Dependencies:**
-- `kimichat-core` - Core types and configuration
-- `kimichat-tools` - Tool execution capabilities
+- `apchat-core` - Core types and configuration
+- `apchat-tools` - Tool execution capabilities
 
 **External Dependencies:**
 - `reqwest` - HTTP client for LLM APIs
@@ -152,14 +152,14 @@ pub struct TaskExecutor;
 pub enum ModelColor;
 ```
 
-### 5. kimichat-web (Web Interface)
+### 5. apchat-web (Web Interface)
 
 **Purpose:** Web server and real-time communication
 
 **Internal Dependencies:**
-- `kimichat-core` - Core types and configuration
-- `kimichat-terminal` - Terminal session integration
-- `kimichat-agents` - Agent coordination
+- `apchat-core` - Core types and configuration
+- `apchat-terminal` - Terminal session integration
+- `apchat-agents` - Agent coordination
 
 **External Dependencies:**
 - `axum` - Web framework
@@ -181,16 +181,16 @@ pub enum ClientMessage;
 pub enum ServerMessage;
 ```
 
-### 6. kimichat-cli (Main Application)
+### 6. apchat-cli (Main Application)
 
 **Purpose:** CLI interface and application coordination
 
 **Internal Dependencies:**
-- `kimichat-core` - Core functionality
-- `kimichat-terminal` - Terminal operations
-- `kimichat-agents` - Agent system
-- `kimichat-web` - Web interface
-- `kimichat-tools` - Tool implementations
+- `apchat-core` - Core functionality
+- `apchat-terminal` - Terminal operations
+- `apchat-agents` - Agent system
+- `apchat-web` - Web interface
+- `apchat-tools` - Tool implementations
 
 **External Dependencies:**
 - `clap` - CLI argument parsing
@@ -216,19 +216,19 @@ pub struct Repl;
 
 ### 1. Core Abstraction Layer
 ```
-External Libraries → kimichat-core → Other Crates
+External Libraries → apchat-core → Other Crates
 ```
 The core crate provides abstractions that other crates implement and use.
 
 ### 2. Feature-Specific Layers
 ```
-External Libraries + kimichat-core → Feature Crate → CLI/Web
+External Libraries + apchat-core → Feature Crate → CLI/Web
 ```
 Feature-specific crates (terminal, agents, web, tools) build on core and are consumed by application crates.
 
 ### 3. Application Coordination
 ```
-All Feature Crates → kimichat-cli
+All Feature Crates → apchat-cli
 ```
 The CLI crate orchestrates all functionality through well-defined APIs.
 
@@ -250,8 +250,8 @@ default = ["embeddings"]
 embeddings = ["dep:fastembed"]
 
 # Crate-specific features
-kimichat-terminal = ["kimichat-core/embeddings"]
-kimichat-agents = ["kimichat-core/embeddings", "kimichat-tools/embeddings"]
+apchat-terminal = ["apchat-core/embeddings"]
+apchat-agents = ["apchat-core/embeddings", "apchat-tools/embeddings"]
 ```
 
 ### 3. Dependency Validation
@@ -266,7 +266,7 @@ kimichat-agents = ["kimichat-core/embeddings", "kimichat-tools/embeddings"]
 ### 1. Dependency Direction
 - **Always**: Lower-level crates → Higher-level crates
 - **Never**: Higher-level crates → Lower-level crates
-- **Exception**: Shared traits/interfaces in kimichat-core
+- **Exception**: Shared traits/interfaces in apchat-core
 
 ### 2. API Design
 - Keep public APIs minimal and stable
@@ -292,7 +292,7 @@ kimichat-agents = ["kimichat-core/embeddings", "kimichat-tools/embeddings"]
 **Problem:** Crate A depends on Crate B, which depends on Crate A
 
 **Solution:**
-- Move shared abstractions to kimichat-core
+- Move shared abstractions to apchat-core
 - Use trait objects to break cycles
 - Reorganize responsibilities
 
@@ -334,12 +334,12 @@ cargo tree --format "{p}" | dot -Tpng > deps.png
 ### 2. Compilation Order
 ```bash
 # Test incremental compilation
-cargo build -p kimichat-core
-cargo build -p kimichat-terminal
-cargo build -p kimichat-tools
-cargo build -p kimichat-agents
-cargo build -p kimichat-web
-cargo build -p kimichat-cli
+cargo build -p apchat-core
+cargo build -p apchat-terminal
+cargo build -p apchat-tools
+cargo build -p apchat-agents
+cargo build -p apchat-web
+cargo build -p apchat-cli
 ```
 
 ### 3. Feature Flag Testing

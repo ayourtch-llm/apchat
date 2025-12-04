@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Reorganize KimiChat from single-crate to multi-crate workspace structure
+**Goal:** Reorganize APChat from single-crate to multi-crate workspace structure
 
 **Architecture:** Functional separation into 6 crates: core, terminal, agents, web, tools, cli
 
@@ -47,7 +47,7 @@ git commit -m "backup: save working state before workspace reorganization"
 
 **Files:**
 - Create: `Cargo.toml` (new workspace root)
-- Move: `Cargo.toml` → `kimichat-cli/Cargo.toml`
+- Move: `Cargo.toml` → `apchat-cli/Cargo.toml`
 
 **Step 1: Read current Cargo.toml**
 
@@ -61,22 +61,22 @@ cat Cargo.toml
 ```toml
 [workspace]
 members = [
-    "kimichat-core",
-    "kimichat-terminal", 
-    "kimichat-agents",
-    "kimichat-web",
-    "kimichat-tools",
-    "kimichat-cli",
+    "apchat-core",
+    "apchat-terminal", 
+    "apchat-agents",
+    "apchat-web",
+    "apchat-tools",
+    "apchat-cli",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["KimiChat Team"]
+authors = ["APChat Team"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/kimichat"
-homepage = "https://github.com/your-org/kimichat"
+repository = "https://github.com/your-org/apchat"
+homepage = "https://github.com/your-org/apchat"
 description = "A Rust-based CLI application for AI-powered chat and tool execution"
 
 [workspace.dependencies]
@@ -154,8 +154,8 @@ debug = true
 
 ```bash
 # Create CLI directory and move Cargo.toml
-mkdir -p kimichat-cli
-mv Cargo.toml kimichat-cli/
+mkdir -p apchat-cli
+mv Cargo.toml apchat-cli/
 ```
 
 **Step 4: Test workspace configuration**
@@ -169,29 +169,29 @@ cargo check --workspace
 **Step 5: Commit**
 
 ```bash
-git add Cargo.toml kimichat-cli/Cargo.toml
+git add Cargo.toml apchat-cli/Cargo.toml
 git commit -m "feat: create workspace structure and move CLI crate config"
 ```
 
-### Task 3: Create kimichat-core Crate Structure
+### Task 3: Create apchat-core Crate Structure
 
 **Files:**
-- Create: `kimichat-core/Cargo.toml`
-- Create: `kimichat-core/src/lib.rs`
-- Create: `kimichat-core/src/` directories
+- Create: `apchat-core/Cargo.toml`
+- Create: `apchat-core/src/lib.rs`
+- Create: `apchat-core/src/` directories
 
 **Step 1: Create core crate Cargo.toml**
 
 ```toml
 [package]
-name = "kimichat-core"
+name = "apchat-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core functionality for KimiChat including tool system and configuration"
+description = "Core functionality for APChat including tool system and configuration"
 
 [dependencies]
 # Serialization
@@ -231,16 +231,16 @@ nursery = "warn"
 **Step 2: Create core directory structure**
 
 ```bash
-mkdir -p kimichat-core/src/{core,config,policy,models,validation,errors,utils}
+mkdir -p apchat-core/src/{core,config,policy,models,validation,errors,utils}
 ```
 
 **Step 3: Create core lib.rs**
 
 ```rust
-//! KimiChat Core Library
+//! APChat Core Library
 //! 
 //! Provides core functionality including tool system, configuration management,
-//! policy enforcement, and shared types used across the KimiChat workspace.
+//! policy enforcement, and shared types used across the APChat workspace.
 
 #![warn(missing_docs)]
 #![forbid(unsafe_code)]
@@ -266,47 +266,47 @@ pub use utils::{JsonSchema, json_schema};
 **Step 4: Test core crate compilation**
 
 ```bash
-cargo check -p kimichat-core
+cargo check -p apchat-core
 # Expected: FAIL - missing modules, but structure recognized
 ```
 
 **Step 5: Commit**
 
 ```bash
-git add kimichat-core/
-git commit -m "feat: create kimichat-core crate structure"
+git add apchat-core/
+git commit -m "feat: create apchat-core crate structure"
 ```
 
 ### Task 4: Extract Core Modules
 
 **Files:**
-- Move: `src/core/` → `kimichat-core/src/core/`
-- Move: `src/policy.rs` → `kimichat-core/src/policy.rs`
-- Move: `src/config/` → `kimichat-core/src/config/`
-- Move: `src/models/` → `kimichat-core/src/models/`
-- Move: `src/tools_execution/validation.rs` → `kimichat-core/src/validation.rs`
+- Move: `src/core/` → `apchat-core/src/core/`
+- Move: `src/policy.rs` → `apchat-core/src/policy.rs`
+- Move: `src/config/` → `apchat-core/src/config/`
+- Move: `src/models/` → `apchat-core/src/models/`
+- Move: `src/tools_execution/validation.rs` → `apchat-core/src/validation.rs`
 
 **Step 1: Move core modules**
 
 ```bash
 # Move core directory
-cp -r src/core/* kimichat-core/src/core/
+cp -r src/core/* apchat-core/src/core/
 
 # Move other core files
-cp src/policy.rs kimichat-core/src/
-cp -r src/config/* kimichat-core/src/config/
-cp -r src/models/* kimichat-core/src/models/
-cp src/tools_execution/validation.rs kimichat-core/src/validation.rs
+cp src/policy.rs apchat-core/src/
+cp -r src/config/* apchat-core/src/config/
+cp -r src/models/* apchat-core/src/models/
+cp src/tools_execution/validation.rs apchat-core/src/validation.rs
 
 # Create placeholder modules for missing pieces
-touch kimichat-core/src/errors.rs kimichat-core/src/utils.rs
+touch apchat-core/src/errors.rs apchat-core/src/utils.rs
 ```
 
 **Step 2: Create error types**
 
 ```rust
-// kimichat-core/src/errors.rs
-//! Core error types for KimiChat
+// apchat-core/src/errors.rs
+//! Core error types for APChat
 
 use thiserror::Error;
 
@@ -339,7 +339,7 @@ pub type Result<T> = std::result::Result<T, CoreError>;
 **Step 3: Create utility types**
 
 ```rust
-// kimichat-core/src/utils.rs
+// apchat-core/src/utils.rs
 //! Utility types and functions
 
 use serde::{Deserialize, Serialize};
@@ -375,28 +375,28 @@ pub type ConfigMap = HashMap<String, JsonSchema>;
 **Step 5: Test core compilation**
 
 ```bash
-cargo check -p kimichat-core
+cargo check -p apchat-core
 # Expected: May have import errors, but basic structure should compile
 ```
 
 **Step 6: Commit**
 
 ```bash
-git add kimichat-core/src/
-git commit -m "feat: extract core modules to kimichat-core crate"
+git add apchat-core/src/
+git commit -m "feat: extract core modules to apchat-core crate"
 ```
 
 ### Task 5: Update CLI Crate for Workspace
 
 **Files:**
-- Modify: `kimichat-cli/Cargo.toml`
-- Modify: `kimichat-cli/src/main.rs`
+- Modify: `apchat-cli/Cargo.toml`
+- Modify: `apchat-cli/src/main.rs`
 
 **Step 1: Update CLI crate dependencies**
 
 ```toml
 [package]
-name = "kimichat"
+name = "apchat"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -408,12 +408,12 @@ categories = ["command-line-utilities", "development-tools"]
 keywords = ["cli", "ai", "chat", "tools", "assistant"]
 
 [[bin]]
-name = "kimichat"
+name = "apchat"
 path = "src/main.rs"
 
 [dependencies]
 # Core dependency
-kimichat-core = { path = "../kimichat-core" }
+apchat-core = { path = "../apchat-core" }
 
 # CLI interface
 clap.workspace = true
@@ -438,8 +438,8 @@ portable-pty.workspace = true
 **Step 2: Update main.rs imports**
 
 ```rust
-// At the top of main.rs, add kimichat-core dependency
-use kimichat_core::{CoreError, Result};
+// At the top of main.rs, add apchat-core dependency
+use apchat_core::{CoreError, Result};
 
 // Keep existing imports for now, will be updated incrementally
 ```
@@ -449,14 +449,14 @@ use kimichat_core::{CoreError, Result};
 ```bash
 cargo check --workspace
 # Expected: May have errors but workspace structure should work
-cargo build -p kimichat-core
+cargo build -p apchat-core
 # Expected: Core crate should compile
 ```
 
 **Step 4: Commit**
 
 ```bash
-git add kimichat-cli/Cargo.toml kimichat-cli/src/main.rs
+git add apchat-cli/Cargo.toml apchat-cli/src/main.rs
 git commit -m "feat: update CLI crate for workspace structure"
 ```
 
@@ -476,16 +476,16 @@ cargo build --workspace
 **Step 2: Test core crate independently**
 
 ```bash
-cargo test -p kimichat-core
-cargo build -p kimichat-core --release
+cargo test -p apchat-core
+cargo build -p apchat-core --release
 # Expected: Core crate builds and tests pass
 ```
 
 **Step 3: Validate workspace structure**
 
 ```bash
-cargo tree --format "{p}" | grep kimichat
-# Expected: Shows proper dependency tree with kimichat-core
+cargo tree --format "{p}" | grep apchat
+# Expected: Shows proper dependency tree with apchat-core
 ```
 
 **Step 4: Final Phase 1 commit**
@@ -495,7 +495,7 @@ git add .
 git commit -m "feat: complete Phase 1 - workspace structure and core crate
 
 - Created workspace configuration with 6 member crates
-- Extracted core functionality to kimichat-core crate
+- Extracted core functionality to apchat-core crate
 - Updated CLI crate to use workspace structure
 - Established dependency management patterns
 - Core crate compiles independently"
@@ -504,10 +504,10 @@ git commit -m "feat: complete Phase 1 - workspace structure and core crate
 ## Next Phases (Overview)
 
 After Phase 1 is complete and validated:
-- **Phase 2:** Extract terminal functionality to kimichat-terminal
-- **Phase 3:** Extract agent system to kimichat-agents  
-- **Phase 4:** Extract web components to kimichat-web
-- **Phase 5:** Extract tools to kimichat-tools
+- **Phase 2:** Extract terminal functionality to apchat-terminal
+- **Phase 3:** Extract agent system to apchat-agents  
+- **Phase 4:** Extract web components to apchat-web
+- **Phase 5:** Extract tools to apchat-tools
 - **Phase 6:** Clean up CLI crate
 - **Phase 7:** Comprehensive testing and validation
 

@@ -1,8 +1,8 @@
-# KimiChat Web Frontend Design
+# APChat Web Frontend Design
 
 ## Overview
 
-This document outlines the design for a web-based frontend for KimiChat that provides the same functionality as the TUI while supporting:
+This document outlines the design for a web-based frontend for APChat that provides the same functionality as the TUI while supporting:
 - Multiple concurrent sessions
 - Ability to join existing TUI sessions
 - Create and manage independent web sessions
@@ -39,7 +39,7 @@ This document outlines the design for a web-based frontend for KimiChat that pro
                   │
                   ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              Core KimiChat Engine                            │
+│              Core APChat Engine                            │
 │     (Existing: chat, tools, agents, terminal, etc.)         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -89,7 +89,7 @@ pub struct SessionManager {
 pub struct Session {
     id: SessionId,
     session_type: SessionType,
-    kimichat: Arc<Mutex<KimiChat>>,
+    apchat: Arc<Mutex<APChat>>,
     clients: Arc<RwLock<Vec<ClientConnection>>>,
     created_at: DateTime<Utc>,
     last_activity: Arc<Mutex<DateTime<Utc>>>,
@@ -239,7 +239,7 @@ web/
 // Or clicks "New Session" button
 
 1. Client sends: CreateSession { config: SessionConfig }
-2. Server creates new KimiChat instance
+2. Server creates new APChat instance
 3. Server generates unique SessionId (UUID)
 4. Server stores session in SessionManager
 5. Server redirects client to: /session/{session_id}
@@ -287,7 +287,7 @@ web/
 ```rust
 // When assistant sends message or uses tool:
 
-1. KimiChat generates response/tool call
+1. APChat generates response/tool call
 2. Session broadcasts to all attached clients:
    - For streaming: Send chunks via AssistantMessageChunk
    - For complete: Send AssistantMessage
@@ -299,7 +299,7 @@ web/
 ```rust
 // When tool requires confirmation:
 
-1. KimiChat identifies tool needs confirmation
+1. APChat identifies tool needs confirmation
 2. Session sends ToolCallRequest to all clients
 3. First client to confirm/deny sends response
 4. Server locks tool call (prevents duplicate confirmations)
@@ -391,8 +391,8 @@ http://localhost:8080/session/{uuid}?mode=readonly → Read-only view
 ```json
 // web/manifest.json
 {
-  "name": "KimiChat",
-  "short_name": "KimiChat",
+  "name": "APChat",
+  "short_name": "APChat",
   "description": "Multi-agent AI CLI with web interface",
   "start_url": "/",
   "display": "standalone",
@@ -458,7 +458,7 @@ let cors = CorsLayer::new()
         // Allow localhost for development
         origin.as_bytes().starts_with(b"http://localhost")
         // Or allow specific domains
-        // origin.as_bytes() == b"https://kimichat.example.com"
+        // origin.as_bytes() == b"https://apchat.example.com"
     }))
     .allow_methods([Method::GET, Method::POST, Method::DELETE])
     .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
@@ -497,11 +497,11 @@ pub struct Cli {
     pub web: bool,
 
     /// Web server port
-    #[arg(long, default_value = "8080", env = "KIMICHAT_WEB_PORT")]
+    #[arg(long, default_value = "8080", env = "APCHAT_WEB_PORT")]
     pub web_port: u16,
 
     /// Web server bind address
-    #[arg(long, default_value = "127.0.0.1", env = "KIMICHAT_WEB_BIND")]
+    #[arg(long, default_value = "127.0.0.1", env = "APCHAT_WEB_BIND")]
     pub web_bind: String,
 
     /// Allow TUI session to be attached from web
@@ -509,11 +509,11 @@ pub struct Cli {
     pub web_attachable: bool,
 
     /// Web UI directory (for custom frontends)
-    #[arg(long, env = "KIMICHAT_WEB_DIR")]
+    #[arg(long, env = "APCHAT_WEB_DIR")]
     pub web_dir: Option<PathBuf>,
 
     /// Web API key (optional authentication)
-    #[arg(long, env = "KIMICHAT_WEB_API_KEY")]
+    #[arg(long, env = "APCHAT_WEB_API_KEY")]
     pub web_api_key: Option<String>,
 }
 ```
@@ -522,19 +522,19 @@ pub struct Cli {
 
 ```bash
 # Web server configuration
-KIMICHAT_WEB_PORT=8080
-KIMICHAT_WEB_BIND=0.0.0.0        # Bind to all interfaces
-KIMICHAT_WEB_API_KEY=secret123   # Optional authentication
+APCHAT_WEB_PORT=8080
+APCHAT_WEB_BIND=0.0.0.0        # Bind to all interfaces
+APCHAT_WEB_API_KEY=secret123   # Optional authentication
 
 # Session configuration
-KIMICHAT_SESSION_TIMEOUT=3600    # Session timeout in seconds
-KIMICHAT_MAX_SESSIONS=100        # Max concurrent sessions
+APCHAT_SESSION_TIMEOUT=3600    # Session timeout in seconds
+APCHAT_MAX_SESSIONS=100        # Max concurrent sessions
 ```
 
 ### Config File (future)
 
 ```toml
-# kimichat.toml
+# apchat.toml
 [web]
 enabled = true
 port = 8080
@@ -826,7 +826,7 @@ cargo run -- -i  # Prints: "Web UI available at http://localhost:8080"
 - All existing CLI commands continue to work
 - TUI remains fully functional without web server
 - Web server is optional and opt-in
-- No breaking changes to core KimiChat API
+- No breaking changes to core APChat API
 
 ## Deployment Scenarios
 
@@ -855,7 +855,7 @@ cargo run -- --web --web-bind 127.0.0.1 --web-port 8080
 # nginx config
 server {
     listen 443 ssl;
-    server_name kimichat.example.com;
+    server_name apchat.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:8080;
@@ -875,10 +875,10 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/kimichat /usr/local/bin/
-COPY --from=builder /app/web /usr/local/share/kimichat/web
+COPY --from=builder /app/target/release/apchat /usr/local/bin/
+COPY --from=builder /app/web /usr/local/share/apchat/web
 EXPOSE 8080
-CMD ["kimichat", "--web", "--web-bind", "0.0.0.0", "--web-port", "8080"]
+CMD ["apchat", "--web", "--web-bind", "0.0.0.0", "--web-port", "8080"]
 ```
 
 ## Documentation Requirements
@@ -927,10 +927,10 @@ CMD ["kimichat", "--web", "--web-bind", "0.0.0.0", "--web-port", "8080"]
 
 ## Conclusion
 
-This design provides a comprehensive roadmap for adding a web-based frontend to KimiChat. The phased approach allows for incremental development and testing, while the mobile-first responsive design ensures broad device compatibility. The session management strategy enables flexible workflows from simple standalone web sessions to collaborative multi-client sessions spanning TUI and web interfaces.
+This design provides a comprehensive roadmap for adding a web-based frontend to APChat. The phased approach allows for incremental development and testing, while the mobile-first responsive design ensures broad device compatibility. The session management strategy enables flexible workflows from simple standalone web sessions to collaborative multi-client sessions spanning TUI and web interfaces.
 
 Key benefits:
-- **Accessibility**: Use KimiChat from any device with a browser
+- **Accessibility**: Use APChat from any device with a browser
 - **Flexibility**: Switch between TUI and web seamlessly
 - **Collaboration**: Multiple users can work in the same session
 - **Mobile**: Full functionality on phones and tablets

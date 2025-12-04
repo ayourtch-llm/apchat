@@ -315,7 +315,7 @@ impl TerminalBackend for TmuxBackend {
         working_dir: Option<String>,
     ) -> Result<String> {
         // Generate unique tmux session name
-        let tmux_name = format!("kimichat_{}", id);
+        let tmux_name = format!("apchat_{}", id);
 
         // Create tmux session with command
         let mut args = vec![
@@ -551,7 +551,7 @@ struct Args {
 
 #### 4.3 Environment Variable
 
-Support `KIMICHAT_TERMINAL_BACKEND=tmux` environment variable.
+Support `APCHAT_TERMINAL_BACKEND=tmux` environment variable.
 
 ---
 
@@ -753,7 +753,7 @@ cargo run -- --terminal-backend tmux -i
 cargo run -- --terminal-backend tmux -i
 
 # Or via environment
-export KIMICHAT_TERMINAL_BACKEND=tmux
+export APCHAT_TERMINAL_BACKEND=tmux
 cargo run -- -i
 ```
 
@@ -792,18 +792,18 @@ impl TmuxBackend {
 
 ### 2. Session Name Conflicts
 
-**Problem:** Multiple KimiChat instances using tmux with same session names.
+**Problem:** Multiple APChat instances using tmux with same session names.
 
 **Solution:**
-- Include process ID in tmux session names: `kimichat_{pid}_{session_id}`
+- Include process ID in tmux session names: `apchat_{pid}_{session_id}`
 - Or use `tmux new-session -P` to get unique name from tmux
 
 ### 3. Tmux Server State
 
-**Problem:** Tmux sessions persist after KimiChat exits.
+**Problem:** Tmux sessions persist after APChat exits.
 
 **Solution:**
-- Option 1: Clean up on exit (kill all kimichat_* sessions)
+- Option 1: Clean up on exit (kill all apchat_* sessions)
 - Option 2: Allow reattachment in future runs (session persistence feature)
 - Document behavior clearly
 
@@ -894,7 +894,7 @@ let options = HashMap::from([
 
 ## Questions to Resolve
 
-1. **Session Persistence:** Should tmux sessions persist after KimiChat exit?
+1. **Session Persistence:** Should tmux sessions persist after APChat exit?
    - Pro: Can reattach later, debug issues
    - Con: Orphaned sessions if not cleaned up
 

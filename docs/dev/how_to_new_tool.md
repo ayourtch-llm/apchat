@@ -1,8 +1,8 @@
-# How to Add New Tools to kimi-chat
+# How to Add New Tools to apchat
 
 ## Overview
 
-This guide documents the process of adding new tools to the kimi-chat Rust CLI application. The tool system is modular and follows a consistent pattern for implementation.
+This guide documents the process of adding new tools to the apchat Rust CLI application. The tool system is modular and follows a consistent pattern for implementation.
 
 ## Tool System Architecture
 
@@ -61,7 +61,7 @@ fn get_tools() -> Vec<Tool> {
 Add your tool execution logic:
 
 ```rust
-impl KimiChat {
+impl APChat {
     fn my_tool(&self, parameter: &str) -> Result<String> {
         // Implementation here
         Ok(format!("Tool executed with parameter: {}", parameter))
@@ -180,7 +180,7 @@ fn get_tools() -> Vec<Tool> {
 ### 3. Implement Tool
 
 ```rust
-impl KimiChat {
+impl APChat {
     fn file_stat(&self, file_path: &str) -> Result<String> {
         let full_path = self.work_dir.join(file_path);
         

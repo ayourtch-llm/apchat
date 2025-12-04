@@ -2,13 +2,13 @@
 
 ## Overview
 
-Add stateful PTY terminal session support to kimichat, allowing LLMs to launch, interact with, and monitor terminal sessions with full VT100/ANSI support.
+Add stateful PTY terminal session support to apchat, allowing LLMs to launch, interact with, and monitor terminal sessions with full VT100/ANSI support.
 
 ## Design Decisions (Confirmed)
 
 - **Tool Naming**: All tools prefixed with `pty_*` to avoid confusion
 - **Scrollback**: 1000 lines default, configurable via tool call
-- **Persistence**: Sessions do NOT survive kimichat restarts
+- **Persistence**: Sessions do NOT survive apchat restarts
 - **Capture**: Write to file (unlimited size), timestamps for start/stop
 - **Concurrent Sessions**: Soft limit of 15 sessions
 - **User Input Timeout**: 5 minutes (configurable constant)
@@ -38,7 +38,7 @@ src/terminal/
 └── tools.rs                # LLM tool implementations
 
 Global State:
-- TerminalManager (Arc<Mutex<>>) stored in KimiChat struct
+- TerminalManager (Arc<Mutex<>>) stored in APChat struct
 - Registered with tool_registry like PolicyManager
 ```
 
@@ -315,22 +315,22 @@ Signals: `SIGTERM`, `SIGKILL`, `SIGINT`, `SIGHUP`
 
 ```bash
 # View terminal screen
-kimichat terminal view <session-id>
+apchat terminal view <session-id>
 
 # List sessions
-kimichat terminal list
+apchat terminal list
 
 # Kill session
-kimichat terminal kill <session-id>
+apchat terminal kill <session-id>
 
 # Attach to session (interactive)
-kimichat terminal attach <session-id>
+apchat terminal attach <session-id>
 
 # Show session log
-kimichat terminal log <session-id>
+apchat terminal log <session-id>
 
 # Replay session from log
-kimichat terminal replay <session-id>
+apchat terminal replay <session-id>
 ```
 
 ## Logging
@@ -360,7 +360,7 @@ logs/terminals/
 - [ ] Create `src/terminal/` module structure
 - [ ] Implement `TerminalManager` with session storage
 - [ ] Implement basic `TerminalSession` with PTY
-- [ ] Add global TerminalManager to KimiChat
+- [ ] Add global TerminalManager to APChat
 
 ### Phase 2: PTY & Screen State
 - [ ] Implement `PtyHandler` for process management
@@ -407,7 +407,7 @@ logs/terminals/
 ### 1. State Management
 
 **Problem**: Sessions persist across tool calls
-**Solution**: Store `Arc<Mutex<TerminalManager>>` in `KimiChat`, similar to `PolicyManager`
+**Solution**: Store `Arc<Mutex<TerminalManager>>` in `APChat`, similar to `PolicyManager`
 
 ### 2. Async PTY Output
 
@@ -427,7 +427,7 @@ logs/terminals/
 **Problem**: Leaked PTY processes
 **Solution**:
 - Track all sessions
-- Auto-cleanup on KimiChat drop
+- Auto-cleanup on APChat drop
 - Add session timeout/idle detection
 - Implement proper SIGTERM/SIGKILL handling
 
@@ -456,10 +456,10 @@ logs/terminals/
 
 ## Integration with Existing Code
 
-### 1. KimiChat Structure
+### 1. APChat Structure
 
 ```rust
-pub struct KimiChat {
+pub struct APChat {
     // Existing fields...
     pub(crate) terminal_manager: Arc<Mutex<TerminalManager>>,
 }

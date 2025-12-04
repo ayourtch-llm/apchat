@@ -1,6 +1,6 @@
 {
-  "name": "KimiChat - Multi-Agent AI CLI",
-  "short_name": "KimiChat",
+  "name": "APChat - Multi-Agent AI CLI",
+  "short_name": "APChat",
   "description": "Multi-agent AI CLI with web interface",
   "start_url": "/",
   "display": "standalone",

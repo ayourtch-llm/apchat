@@ -1,17 +1,17 @@
 [workspace]
 members = [
-    "kimichat-main",
-    "crates/kimichat-agents",
-    "crates/kimichat-models",
-    "crates/kimichat-logging",
-    "crates/kimichat-llm-api",
-    "crates/kimichat-todo",
-    "crates/kimichat-policy",
-    "crates/kimichat-skills",
-    "crates/kimichat-terminal",
-    "crates/kimichat-toolcore",
-    "crates/kimichat-tools",
-    "crates/kimichat-wasm",
+    "apchat-main",
+    "crates/apchat-agents",
+    "crates/apchat-models",
+    "crates/apchat-logging",
+    "crates/apchat-llm-api",
+    "crates/apchat-todo",
+    "crates/apchat-policy",
+    "crates/apchat-skills",
+    "crates/apchat-terminal",
+    "crates/apchat-toolcore",
+    "crates/apchat-tools",
+    "crates/apchat-wasm",
 ]
 resolver = "2"
 

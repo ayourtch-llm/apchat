@@ -15,14 +15,14 @@ This document provides example code for the web frontend implementation.
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
-    <title>KimiChat - Sessions</title>
+    <title>APChat - Sessions</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/styles/main.css">
 </head>
 <body class="bg-gray-900 text-white">
     <div class="container mx-auto px-4 py-8">
         <header class="mb-8">
-            <h1 class="text-4xl font-bold mb-2">🤖 KimiChat</h1>
+            <h1 class="text-4xl font-bold mb-2">🤖 APChat</h1>
             <p class="text-gray-400">Multi-agent AI CLI with web interface</p>
         </header>
 
@@ -63,7 +63,7 @@ This document provides example code for the web frontend implementation.
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
-    <title>KimiChat - Session</title>
+    <title>APChat - Session</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="/styles/main.css">
     <link rel="stylesheet" href="/styles/mobile.css">
@@ -78,7 +78,7 @@ This document provides example code for the web frontend implementation.
                 </svg>
             </a>
             <div>
-                <h1 class="text-lg font-semibold">KimiChat</h1>
+                <h1 class="text-lg font-semibold">APChat</h1>
                 <p id="sessionInfo" class="text-xs text-gray-400">Session: ...</p>
             </div>
         </div>
@@ -884,8 +884,8 @@ window.addEventListener('offline', () => {
 
 ```json
 {
-  "name": "KimiChat - Multi-Agent AI CLI",
-  "short_name": "KimiChat",
+  "name": "APChat - Multi-Agent AI CLI",
+  "short_name": "APChat",
   "description": "Multi-agent AI CLI with web interface supporting both TUI and web sessions",
   "start_url": "/",
   "display": "standalone",

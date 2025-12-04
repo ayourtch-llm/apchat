@@ -1,4 +1,4 @@
-# KimiChat LLM Color Refactoring Implementation Plan
+# APChat LLM Color Refactoring Implementation Plan
 
 ## Original Task Requirements
 
@@ -17,7 +17,7 @@ This document outlines the implementation plan for refactoring the logical LLM "
 ## Current Architecture
 
 ### ModelColor Enum
-Located in `crates/kimichat-models/src/types.rs`
+Located in `crates/apchat-models/src/types.rs`
 
 Current ModelColor enum has:
 - `BluModel` (mapped to "moonshotai/kimi-k2-instruct-0905")
@@ -28,7 +28,7 @@ Current ModelColor enum has:
 
 ### Configuration System
 
-Configuration is handled through `ClientConfig` in `kimichat-main/src/config/mod.rs` which has separate fields for:
+Configuration is handled through `ClientConfig` in `apchat-main/src/config/mod.rs` which has separate fields for:
 - backend_blu_model, backend_grn_model, backend_red_model
 - api_url_blu_model, api_url_grn_model, api_url_red_model
 - api_key_blu_model, api_key_grn_model, api_key_red_model
@@ -38,14 +38,14 @@ Configuration is handled through `ClientConfig` in `kimichat-main/src/config/mod
 
 ### Step 1: Simplify ModelColor Enum
 
-Update `crates/kimichat-models/src/types.rs`:
+Update `crates/apchat-models/src/types.rs`:
 - Remove AnthropicModel and Custom variants from core ModelColor
 - Keep only BluModel, GrnModel, RedModel
 - Preserve as_str_default, display_name, from_string functions
 
 ### Step 2: Create Default Configuration Mappings
 
-Update `crates/kimichat-llm-api/src/config/mod.rs`:
+Update `crates/apchat-llm-api/src/config/mod.rs`:
 - Add constants for default model names
 - Add constants for default backend types
 - Add constants for default API URLs
@@ -53,26 +53,26 @@ Update `crates/kimichat-llm-api/src/config/mod.rs`:
 
 ### Step 3: Update Configuration Helper Functions
 
-Update `kimichat-main/src/config/helpers.rs`:
+Update `apchat-main/src/config/helpers.rs`:
 - Update get_model_config_from_env() to work with new parsing approach
 - Update create_model_client() to use mapping system
 - Update create_client_for_model_color() to use mapping system
 
 ### Step 4: Update CLI Interface (if needed)
 
-Update `kimichat-main/src/cli.rs`:
+Update `apchat-main/src/cli.rs`:
 - Update help text if necessary
 - Ensure backward compatibility
 
 ### Step 5: Update Main Application
 
-Update `kimichat-main/src/main.rs`:
+Update `apchat-main/src/main.rs`:
 - Ensure initialization works with new structure
 - Maintain backward compatibility
 
 ## Detailed Changes
 
-### ModelColor Simplification (crates/kimichat-models/src/types.rs)
+### ModelColor Simplification (crates/apchat-models/src/types.rs)
 
 The ModelColor enum will be simplified to:
 
@@ -87,7 +87,7 @@ pub enum ModelColor {
 
 And maintain all existing helper methods.
 
-### Configuration Mapping (crates/kimichat-llm-api/src/config/mod.rs)
+### Configuration Mapping (crates/apchat-llm-api/src/config/mod.rs)
 
 Add mapping system:
 

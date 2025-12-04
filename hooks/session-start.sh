@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SessionStart hook for kimichat skills system
+# SessionStart hook for apchat skills system
 # Injects foundational skills at the start of each REPL session
 
 set -euo pipefail
@@ -22,7 +22,7 @@ if [ -f "$USING_SKILLS_FILE" ]; then
     # Escape the content for JSON
     SKILL_ESCAPED=$(echo "$SKILL_CONTENT" | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
 
-    # Output context injection as plain text (kimichat will add it to system prompt)
+    # Output context injection as plain text (apchat will add it to system prompt)
     cat <<EOF
 <EXTREMELY_IMPORTANT>
 You have access to skills - proven workflows and techniques that you MUST follow.

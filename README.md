@@ -1,10 +1,10 @@
-# Kimi Chat - AI-powered Development Assistant
+# APChat - AI-powered Development Assistant
 
 A sophisticated Rust-based AI development assistant that provides a Claude Code-like experience with multi-model support, rich tool integration, web API, and terminal management capabilities. Built for developers who need powerful AI assistance with fine-grained control and extensibility.
 
 ## Overview
 
-Kimi Chat is a production-ready AI assistant that seamlessly integrates multiple LLM providers (Groq, Anthropic Claude, OpenAI, and llama.cpp) with a comprehensive toolset for file operations, terminal interaction, task management, and multi-agent workflows. Whether you're working in CLI mode, task mode, or through a web interface, Kimi Chat adapts to your development workflow.
+APChat is a production-ready AI assistant that seamlessly integrates multiple LLM providers (Groq, Anthropic Claude, OpenAI, and llama.cpp) with a comprehensive toolset for file operations, terminal interaction, task management, and multi-agent workflows. Whether you're working in CLI mode, task mode, or through a web interface, APChat adapts to your development workflow.
 
 ## Key Features
 
@@ -141,7 +141,7 @@ Kimi Chat is a production-ready AI assistant that seamlessly integrates multiple
 ```bash
 
 git clone <repository-url>
-cd kimichat
+cd apchat
 ```
 
 2. Build the project:
@@ -152,8 +152,8 @@ cargo build --release
 
 3. (Optional) Generate shell completions:
 ```bash
-./target/release/kimichat --generate bash > kimichat-completion.bash
-source kimichat-completion.bash
+./target/release/apchat --generate bash > apchat-completion.bash
+source apchat-completion.bash
 ```
 
 ## Configuration
@@ -229,7 +229,7 @@ Start an interactive session:
 ```bash
 cargo run
 # or
-./target/release/kimichat
+./target/release/apchat
 ```
 
 The application will:
@@ -256,17 +256,17 @@ The application will:
 Execute a single task:
 
 ```bash
-kimichat --task "Analyze all Rust files and create a summary report"
+apchat --task "Analyze all Rust files and create a summary report"
 ```
 
-Results are logged to `~/.kimichat/sessions/` by default.
+Results are logged to `~/.apchat/sessions/` by default.
 
 ### Web Server Mode
 
 Start the web server:
 
 ```bash
-kimichat --web --bind 127.0.0.1:8080
+apchat --web --bind 127.0.0.1:8080
 ```
 
 Then interact via HTTP API or WebSocket. Example using curl:
@@ -287,7 +287,7 @@ curl http://localhost:8080/api/sessions
 Enable multi-agent system for complex tasks:
 
 ```bash
-kimichat --agents --task "Design and implement a complete authentication system"
+apchat --agents --task "Design and implement a complete authentication system"
 ```
 
 Multiple specialized agents coordinate to complete the task.
@@ -299,7 +299,7 @@ Multiple specialized agents coordinate to complete the task.
 Use llama.cpp for local inference:
 
 ```bash
-kimichat --llama-cpp-url http://localhost:8080/v1 \
+apchat --llama-cpp-url http://localhost:8080/v1 \
          --model-blu-model "llama3-8b" \
          --model-grn-model "llama3-70b"
 ```
@@ -369,27 +369,27 @@ Find relevant skills:
 ### Project Structure
 
 ```
-kimichat/
+apchat/
 ├── Cargo.toml              # Workspace configuration
-├── kimichat-main/          # Main binary and CLI
-├── kimichat-agents/        # Multi-agent orchestration
-├── kimichat-llm-api/       # Unified LLM client interface
-├── kimichat-models/        # Data structures and types
-├── kimichat-toolcore/      # Tool execution framework
-├── kimichat-tools/         # 20+ implemented tools
-├── kimichat-terminal/      # PTY session management
-├── kimichat-skills/        # Skill registry and loading
-├── kimichat-policy/        # Security and approval system
-├── kimichat-logging/       # Conversation logging
-├── kimichat-todo/          # Task tracking
-├── kimichat-wasm/          # WebAssembly frontend
+├── apchat-main/          # Main binary and CLI
+├── apchat-agents/        # Multi-agent orchestration
+├── apchat-llm-api/       # Unified LLM client interface
+├── apchat-models/        # Data structures and types
+├── apchat-toolcore/      # Tool execution framework
+├── apchat-tools/         # 20+ implemented tools
+├── apchat-terminal/      # PTY session management
+├── apchat-skills/        # Skill registry and loading
+├── apchat-policy/        # Security and approval system
+├── apchat-logging/       # Conversation logging
+├── apchat-todo/          # Task tracking
+├── apchat-wasm/          # WebAssembly frontend
 └── skills/                 # Skill definitions (SKILL.md files)
 ```
 
 ### Component Overview
 
 ```
-KimiChat
+APChat
 ├── Chat System (messages, history, state)
 ├── API Layer (multi-provider LLM integration)
 ├── Tool System (extensible framework)

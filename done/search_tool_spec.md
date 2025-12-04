@@ -151,8 +151,8 @@ fn search_files(
 
 ## 5. Integration checklist
 
-1. **Add the tool definition** in `KimiChat::get_tools()` – copy the JSON block above, change `name` to `"search_files"` and `description` to the human‑readable description.
-2. **Add a match arm** in `KimiChat::execute_tool`:
+1. **Add the tool definition** in `APChat::get_tools()` – copy the JSON block above, change `name` to `"search_files"` and `description` to the human‑readable description.
+2. **Add a match arm** in `APChat::execute_tool`:
    ```rust
    "search_files" => {
        let args: SearchFilesArgs = serde_json::from_str(arguments)?;

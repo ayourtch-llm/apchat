@@ -1,8 +1,8 @@
-# KimiChat - Multi-Agent AI CLI
+# APChat - Multi-Agent AI CLI
 
 ## Project Overview
 
-KimiChat is a Rust CLI application providing a Claude Code-like experience with tool-enabled LLM interactions. It operates in two modes:
+APChat is a Rust CLI application providing a Claude Code-like experience with tool-enabled LLM interactions. It operates in two modes:
 
 1. **Single LLM Mode** - Direct conversation with one LLM that has full tool access
 2. **Multi-Agent Mode** (`--agents`) - Sophisticated planner-first architecture with specialized agents for complex tasks
@@ -11,7 +11,7 @@ Supports multiple LLM backends: Groq, Anthropic, and llama.cpp.
 
 ## Core Architecture
 
-KimiChat operates in two modes:
+APChat operates in two modes:
 
 ### 1. Single LLM Mode (Default)
 
@@ -81,7 +81,7 @@ The system uses a single configurable agent implementation (`ConfigurableAgent`)
 
 ## Skills System Architecture
 
-KimiChat includes a comprehensive skills system inspired by [obra/superpowers](https://github.com/obra/superpowers). Skills are proven workflows and best practices that agents MUST follow when applicable.
+APChat includes a comprehensive skills system inspired by [obra/superpowers](https://github.com/obra/superpowers). Skills are proven workflows and best practices that agents MUST follow when applicable.
 
 ### Philosophy
 
@@ -156,7 +156,7 @@ The `hooks/session-start.sh` script runs at REPL startup and injects the `using-
 
 **Context Propagation:**
 ```
-KimiChat.skill_registry (Arc<SkillRegistry>)
+APChat.skill_registry (Arc<SkillRegistry>)
   → ExecutionContext.skill_registry
   → ToolContext.skill_registry
   → Skill Tools (load_skill, etc.)
@@ -214,7 +214,7 @@ Each skill is a battle-tested workflow that prevents common mistakes and ensures
 
 ```
 src/
-├── main.rs              # KimiChat struct, main entry point
+├── main.rs              # APChat struct, main entry point
 ├── app/                 # Application modes (setup, REPL, task)
 ├── api/                 # LLM API clients (streaming/non-streaming)
 ├── chat/                # Conversation management
@@ -405,7 +405,7 @@ cargo run -- --llama-cpp-url http://localhost:8080 -i
 - Tool execution is async with proper error handling
 - Conversation state persists across tool calls
 - All file operations respect gitignore patterns
-- Batch edits use file-based state (`.kimichat_edit_plan.json`)
+- Batch edits use file-based state (`.apchat_edit_plan.json`)
 - PTY sessions use background reader threads for continuous screen buffer updates
 - Loop detection distinguishes between consecutive and scattered repeats
 - Read-only tools (file reads, searches) allowed more repetitions than write operations

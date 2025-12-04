@@ -1,0 +1,755 @@
+use anyhow::Result;
+use clap::{Parser, Subcommand};
+use clap_complete::Shell;
+use std::env;
+use std::future::Future;
+use std::pin::Pin;
+
+use apchat_toolcore::{Tool, ToolParameters, ToolContext};
+use apchat_policy::PolicyManager;
+use apchat_tools::{
+    OpenFileTool, ReadFileTool, WriteFileTool, EditFileTool, ListFilesTool,
+    RunCommandTool, SearchFilesTool,
+    PtyLaunchTool, PtySendKeysTool, PtyGetScreenTool, PtyListTool, PtyKillTool,
+};
+use apchat_models::{ModelConfig, ModelColor};
+use apchat_llm_api::config::parse_model_attings;
+
+// Note: APChat is needed for the Switch command
+// It will be imported from the parent module when needed
+
+/// CLI arguments for apchat
+#[derive(Parser)]
+#[command(name = "apchat")]
+#[command(about = "APChat - Claude Code-like Experience with Multi-Model AI Support")]
+#[command(version = "0.1.0")]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+
+    /// Run in interactive mode (default)
+    #[arg(short, long, action = clap::ArgAction::SetTrue)]
+    pub interactive: bool,
+
+    /// Enable multi-agent system for specialized task handling
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub agents: bool,
+
+    /// Generate shell completions
+    #[arg(long, value_enum)]
+    pub generate: Option<Shell>,
+
+    /// Run in summary mode – give a short description of the task.
+    #[arg(long, value_name = "TEXT")]
+    pub task: Option<String>,
+
+    /// Pretty‑print the JSON output (only useful with --task)
+    #[arg(long)]
+    pub pretty: bool,
+
+    /// Use llama.cpp server for all models (e.g., http://localhost:8080)
+    /// This is a convenience flag that sets --api-url-blu-model, --api-url-grn-model, and --api-url-red-model
+    #[arg(long, value_name = "URL")]
+    pub llama_cpp_url: Option<String>,
+
+    /// API URL for the 'blu_model' model (e.g., http://localhost:8080)
+    /// If set, uses llama.cpp for blu_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    pub api_url_blu_model: Option<String>,
+
+    /// API URL for the 'grn_model' model (e.g., http://localhost:8081)
+    /// If set, uses llama.cpp for grn_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    pub api_url_grn_model: Option<String>,
+
+    /// API URL for the 'red_model' model (e.g., http://localhost:8082)
+    /// If set, uses llama.cpp for red_model; otherwise uses Groq
+    #[arg(long, value_name = "URL")]
+    pub api_url_red_model: Option<String>,
+
+    /// Override the 'blu_model' model with a custom model name (supports model@backend[url] syntax)
+    #[arg(long, value_name = "MODEL")]
+    pub model_blu_model: Option<String>,
+
+    /// Override the 'grn_model' model with a custom model name (supports model@backend[url] syntax)
+    #[arg(long, value_name = "MODEL")]
+    pub model_grn_model: Option<String>,
+
+    /// Override the 'red_model' model with a custom model name (supports model@backend[url] syntax)
+    #[arg(long, value_name = "MODEL")]
+    pub model_red_model: Option<String>,
+
+    /// Set base/default model for all models (can be overridden by specific model flags)
+    /// Supports model@backend[url] syntax to set model, backend, and URL simultaneously
+    /// This is a convenience flag that sets the default model for --model-blu-model, --model-grn-model, and --model-red-model
+    /// Use specific --model-*-model flags to override this base setting for individual models
+    #[arg(long, value_name = "MODEL")]
+    pub model: Option<String>,
+
+    /// Backend type for blu_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub blu_backend: Option<String>,
+
+    /// Backend type for grn_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub grn_backend: Option<String>,
+
+    /// Backend type for red_model (groq, anthropic, llama, openai)
+    #[arg(long, value_name = "BACKEND")]
+    pub red_backend: Option<String>,
+
+    /// API key for blu_model
+    #[arg(long, value_name = "KEY")]
+    pub blu_key: Option<String>,
+
+    /// API key for grn_model
+    #[arg(long, value_name = "KEY")]
+    pub grn_key: Option<String>,
+
+    /// API key for red_model
+    #[arg(long, value_name = "KEY")]
+    pub red_key: Option<String>,
+
+    /// Auto-confirm all actions without asking (auto-pilot mode)
+    #[arg(long)]
+    pub auto_confirm: bool,
+
+    /// Load all superpowers at conversation start instead of before each task
+    /// This includes all available skills in the initial system prompt for immediate availability
+    #[arg(long)]
+    pub early_superpowers: bool,
+
+    /// Path to policy file (default: policies.toml in project root)
+    #[arg(long, value_name = "PATH")]
+    pub policy_file: Option<String>,
+
+    /// Learn from user decisions and save them to policy file
+    #[arg(long)]
+    pub learn_policies: bool,
+
+    /// Enable streaming mode - show AI responses as they're generated
+    #[arg(long)]
+    pub stream: bool,
+
+    /// Enable verbose debug output (shows HTTP requests, responses, headers, etc.)
+    #[arg(long, short = 'v')]
+    pub verbose: bool,
+
+    /// Terminal backend to use for PTY sessions (pty, tmux)
+    /// Default: pty. Can also be set via APCHAT_TERMINAL_BACKEND env var
+    #[arg(long, value_name = "BACKEND")]
+    pub terminal_backend: Option<String>,
+
+    /// Enable web server
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub web: bool,
+
+    /// Web server port
+    #[arg(long, default_value = "8080", env = "APCHAT_WEB_PORT")]
+    pub web_port: u16,
+
+    /// Web server bind address
+    #[arg(long, default_value = "127.0.0.1", env = "APCHAT_WEB_BIND")]
+    pub web_bind: String,
+
+    /// Allow TUI session to be attached from web
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub web_attachable: bool,
+
+    /// Directory for persistent web session storage
+    #[arg(long, default_value = "~/.okaychat/sessions", env = "OKAYCHAT_SESSIONS_DIR")]
+    pub sessions_dir: String,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Read file contents (shows first 10 lines with total count)
+    Read {
+        /// Path to the file to read
+        file_path: String,
+    },
+    /// Write content to a file
+    Write {
+        /// Path to the file to write
+        file_path: String,
+        /// Content to write to the file
+        content: String,
+    },
+    /// Edit a file by replacing old content with new content
+    Edit {
+        /// Path to the file to edit
+        file_path: String,
+        /// Old content to find and replace (must not be empty)
+        #[arg(short = 'o', long)]
+        old_content: String,
+        /// New content to replace with
+        #[arg(short = 'n', long)]
+        new_content: String,
+    },
+    /// List files matching a glob pattern (no recursive ** allowed)
+    List {
+        /// Glob pattern (e.g., 'src/*.rs'). Defaults to '*'
+        #[arg(default_value = "*")]
+        pattern: String,
+    },
+    /// Search for text across files
+    Search {
+        /// Text or pattern to search for
+        query: String,
+        /// File pattern to search in (e.g., 'src/*.rs'). Defaults to '*.rs'
+        #[arg(short = 'p', long, default_value = "*.rs")]
+        pattern: String,
+        /// Treat query as regular expression
+        #[arg(short = 'r', long)]
+        regex: bool,
+        /// Case-insensitive search
+        #[arg(short = 'i', long)]
+        case_insensitive: bool,
+        /// Maximum number of results to return
+        #[arg(short = 'm', long, default_value = "100")]
+        max_results: u32,
+    },
+    /// Switch to a different AI model
+    Switch {
+        /// Model to switch to ('kimi' or 'gpt-oss')
+        model: String,
+        /// Reason for switching
+        reason: String,
+    },
+    /// Run a shell command
+    Run {
+        /// Command to execute
+        command: String,
+    },
+    /// Open and display file contents with optional line range
+    Open {
+        /// Path to the file to open
+        file_path: String,
+        /// Starting line number (1-based)
+        #[arg(short = 's', long)]
+        start_line: Option<usize>,
+        /// Ending line number (1-based)
+        #[arg(short = 'e', long)]
+        end_line: Option<usize>,
+    },
+    /// Manage terminal sessions (PTY sessions)
+    Terminal {
+        #[command(subcommand)]
+        command: TerminalCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TerminalCommands {
+    /// Launch a new terminal session
+    Launch {
+        /// Command to execute (defaults to shell)
+        #[arg(short = 'c', long)]
+        command: Option<String>,
+        /// Working directory
+        #[arg(short = 'd', long)]
+        working_dir: Option<String>,
+        /// Terminal columns
+        #[arg(long, default_value = "80")]
+        cols: u16,
+        /// Terminal rows
+        #[arg(long, default_value = "24")]
+        rows: u16,
+    },
+    /// View the screen contents of a terminal session
+    View {
+        /// Session ID to view
+        session_id: u32,
+    },
+    /// List all active terminal sessions
+    List,
+    /// Kill a terminal session
+    Kill {
+        /// Session ID to kill
+        session_id: u32,
+    },
+    /// Send keys to a terminal session
+    Send {
+        /// Session ID to send keys to
+        session_id: u32,
+        /// Keys to send (supports ^C, [UP], [F1], etc.)
+        keys: String,
+    },
+}
+
+impl Cli {
+    /// Extract model configurations as an array indexed by ModelColor
+    pub fn get_model_configs(&self) -> [ModelConfig; ModelColor::COUNT] {
+        [
+            ModelConfig {
+                backend: self.blu_backend.clone(),
+                api_url: self.api_url_blu_model.clone(),
+                api_key: self.blu_key.clone(),
+                model: self.model_blu_model.clone(),
+            },
+            ModelConfig {
+                backend: self.grn_backend.clone(),
+                api_url: self.api_url_grn_model.clone(),
+                api_key: self.grn_key.clone(),
+                model: self.model_grn_model.clone(),
+            },
+            ModelConfig {
+                backend: self.red_backend.clone(),
+                api_url: self.api_url_red_model.clone(),
+                api_key: self.red_key.clone(),
+                model: self.model_red_model.clone(),
+            },
+        ]
+    }
+    
+    /// Apply the global llama_cpp_url to all model configurations if they don't have specific URLs
+    pub fn apply_llama_cpp_url_to_configs(&self, mut configs: [ModelConfig; ModelColor::COUNT]) -> [ModelConfig; ModelColor::COUNT] {
+        if let Some(ref llama_url) = self.llama_cpp_url {
+            for config in &mut configs {
+                if config.api_url.is_none() {
+                    config.api_url = Some(llama_url.clone());
+                }
+            }
+        }
+        configs
+    }
+    
+    /// Apply the global model to all model configurations if they don't have specific models
+    /// Note: If the global model contains @backend(url) format, we extract and apply the model name, backend, and URL
+    pub fn apply_global_model_to_configs(&self, mut configs: [ModelConfig; ModelColor::COUNT]) -> [ModelConfig; ModelColor::COUNT] {
+        if let Some(ref global_model) = self.model {
+            // Parse the global model to extract model name, backend, and URL
+            let (model_name_only, parsed_backend, parsed_url) = if global_model.contains('@') {
+                // Use the same parsing logic as in setup.rs
+                apchat_llm_api::config::parse_model_attings(global_model)
+            } else {
+                (global_model.clone(), None, None)
+            };
+            
+            for config in &mut configs {
+                if config.model.is_none() {
+                    config.model = Some(model_name_only.clone());
+                }
+                // Apply parsed backend and URL if they're not already set and if they were parsed from global model
+                if let Some(ref backend) = parsed_backend {
+                    if config.backend.is_none() {
+                        config.backend = Some(backend.as_str().to_string());
+                    }
+                }
+                if let Some(ref url) = parsed_url {
+                    if config.api_url.is_none() {
+                        config.api_url = Some(url.clone());
+                    }
+                }
+            }
+        }
+        configs
+    }
+}
+
+impl Commands {
+    pub fn execute(&self) -> Pin<Box<dyn Future<Output = Result<String>> + '_>> {
+        match self {
+            Commands::Read { file_path } => {
+                let work_dir = env::current_dir().unwrap();
+                let file_path = file_path.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("file_path", file_path);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = ReadFileTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Write { file_path, content } => {
+                let work_dir = env::current_dir().unwrap();
+                let file_path = file_path.clone();
+                let content = content.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("file_path", file_path);
+                    params.set("content", content);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = WriteFileTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Edit { file_path, old_content, new_content } => {
+                let work_dir = env::current_dir().unwrap();
+                let file_path = file_path.clone();
+                let old_content = old_content.clone();
+                let new_content = new_content.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("file_path", file_path);
+                    params.set("old_content", old_content);
+                    params.set("new_content", new_content);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = EditFileTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::List { pattern } => {
+                let work_dir = env::current_dir().unwrap();
+                let pattern = pattern.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("pattern", pattern);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = ListFilesTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Search { query, pattern, regex, case_insensitive, max_results } => {
+                let work_dir = env::current_dir().unwrap();
+                let query = query.clone();
+                let pattern = pattern.clone();
+                let regex = *regex;
+                let case_insensitive = *case_insensitive;
+                let max_results = *max_results;
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("query", query);
+                    params.set("pattern", pattern);
+                    params.set("regex", regex);
+                    params.set("case_insensitive", case_insensitive);
+                    params.set("max_results", max_results as i64);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = SearchFilesTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Switch { model, reason } => {
+                // This needs APChat which we'll handle in main.rs
+                let model = model.clone();
+                let reason = reason.clone();
+                Box::pin(async move {
+                    // This will be handled specially in main.rs
+                    Ok(format!("Switch to {} for: {}", model, reason))
+                })
+            }
+            Commands::Run { command } => {
+                let work_dir = env::current_dir().unwrap();
+                let command = command.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("command", command);
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = RunCommandTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Open { file_path, start_line, end_line } => {
+                let work_dir = env::current_dir().unwrap();
+                let file_path = file_path.clone();
+                let start_line = *start_line;
+                let end_line = *end_line;
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("file_path", file_path);
+                    if let Some(start) = start_line {
+                        params.set("start_line", start as i64);
+                    }
+                    if let Some(end) = end_line {
+                        params.set("end_line", end as i64);
+                    }
+                    let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    let result = OpenFileTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            Commands::Terminal { .. } => {
+                // Terminal commands need special handling in main.rs with TerminalManager
+                Box::pin(async move {
+                    Err(anyhow::anyhow!("Terminal commands require special handling"))
+                })
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_cli_parsing() -> Result<(), Box<dyn std::error::Error>> {
+        // RED: This test should initially fail because we haven't implemented the test yet
+        let cli = Cli::try_parse_from(&["apchat"])?;
+        
+        assert!(cli.command.is_none());
+        assert!(!cli.interactive); // Default should be false
+        assert!(!cli.agents);
+        assert!(!cli.auto_confirm);
+        assert!(!cli.stream);
+        assert!(!cli.verbose);
+        assert!(!cli.web);
+        assert_eq!(cli.web_port, 8080);
+        assert_eq!(cli.web_bind, "127.0.0.1");
+        assert!(!cli.web_attachable);
+        assert!(!cli.learn_policies);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_interactive_flag() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "--interactive"])?;
+        
+        assert!(cli.interactive);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_agents_flag() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "--agents"])?;
+        
+        assert!(cli.agents);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_web_server_flags() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "--web", "--web-port", "3000", "--web-attachable"])?;
+        
+        assert!(cli.web);
+        assert_eq!(cli.web_port, 3000);
+        assert!(cli.web_attachable);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_task_argument() -> Result<(), Box<dyn std::error::Error>> {
+        let task_text = "help me debug this issue";
+        let cli = Cli::try_parse_from(&["apchat", "--task", task_text])?;
+        
+        assert_eq!(cli.task, Some(task_text.to_string()));
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "read", "src/main.rs"])?;
+        
+        match cli.command {
+            Some(Commands::Read { file_path }) => {
+                assert_eq!(file_path, "src/main.rs");
+            }
+            _ => panic!("Expected Read command"),
+        }
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "write", "test.txt", "hello world"])?;
+        
+        match cli.command {
+            Some(Commands::Write { file_path, content }) => {
+                assert_eq!(file_path, "test.txt");
+                assert_eq!(content, "hello world");
+            }
+            _ => panic!("Expected Write command"),
+        }
+        
+        Ok(())
+    }
+}
+
+impl TerminalCommands {
+    pub fn execute(&self, terminal_manager: std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>) -> Pin<Box<dyn Future<Output = Result<String>> + '_>> {
+        match self {
+            TerminalCommands::Launch { command, working_dir, cols, rows } => {
+                let command = command.clone();
+                let working_dir = working_dir.clone().map(std::path::PathBuf::from);
+                let cols = *cols;
+                let rows = *rows;
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    if let Some(cmd) = command {
+                        params.set("command", cmd);
+                    }
+                    if let Some(wd) = working_dir {
+                        params.set("working_dir", wd.to_string_lossy().to_string());
+                    }
+                    params.set("cols", cols as i64);
+                    params.set("rows", rows as i64);
+
+                    let work_dir = env::current_dir().unwrap();
+                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager);
+
+                    let result = PtyLaunchTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            TerminalCommands::View { session_id } => {
+                let session_id = *session_id;
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("session_id", session_id as i64);
+
+                    let work_dir = env::current_dir().unwrap();
+                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager);
+
+                    let result = PtyGetScreenTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            TerminalCommands::List => {
+                Box::pin(async move {
+                    let params = ToolParameters::new();
+
+                    let work_dir = env::current_dir().unwrap();
+                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager);
+
+                    let result = PtyListTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            TerminalCommands::Kill { session_id } => {
+                let session_id = *session_id;
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("session_id", session_id as i64);
+
+                    let work_dir = env::current_dir().unwrap();
+                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager);
+
+                    let result = PtyKillTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+            TerminalCommands::Send { session_id, keys } => {
+                let session_id = *session_id;
+                let keys = keys.clone();
+                Box::pin(async move {
+                    let mut params = ToolParameters::new();
+                    params.set("session_id", session_id as i64);
+                    params.set("keys", keys);
+                    params.set("special", true); // Enable special key processing
+
+                    let work_dir = env::current_dir().unwrap();
+                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager);
+
+                    let result = PtySendKeysTool.execute(params, &context).await;
+                    if result.success {
+                        Ok(result.content)
+                    } else {
+                        Err(anyhow::anyhow!("{}", result.error.unwrap_or_default()))
+                    }
+                })
+            }
+        }
+    }
+}
+
+    #[test]
+    fn test_task_argument() -> Result<(), Box<dyn std::error::Error>> {
+        let task_text = "help me debug this issue";
+        let cli = Cli::try_parse_from(&["apchat", "--task", task_text])?;
+        
+        assert_eq!(cli.task, Some(task_text.to_string()));
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_read_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "read", "src/main.rs"])?;
+        
+        match cli.command {
+            Some(Commands::Read { file_path }) => {
+                assert_eq!(file_path, "src/main.rs");
+            }
+            _ => panic!("Expected Read command"),
+        }
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "write", "test.txt", "hello world"])?;
+        
+        match cli.command {
+            Some(Commands::Write { file_path, content }) => {
+                assert_eq!(file_path, "test.txt");
+                assert_eq!(content, "hello world");
+            }
+            _ => panic!("Expected Write command"),
+        }
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_search_command() -> Result<(), Box<dyn std::error::Error>> {
+        let cli = Cli::try_parse_from(&["apchat", "search", "function test", "--case-insensitive"])?;
+        
+        match cli.command {
+            Some(Commands::Search { query, pattern, regex, case_insensitive, max_results }) => {
+                assert_eq!(query, "function test");
+                assert_eq!(pattern, "*.rs");
+                assert!(!regex);
+                assert!(case_insensitive);
+                assert_eq!(max_results, 100);
+            }
+            _ => panic!("Expected Search command"),
+        }
+        
+        Ok(())
+    }

@@ -1,4 +1,4 @@
-# KimiChat LLM Color Refactoring - Implementation Status
+# APChat LLM Color Refactoring - Implementation Status
 
 ## Summary
 
@@ -6,12 +6,12 @@ I have successfully implemented the refactoring to separate logical LLM "colors"
 
 ## Changes Made
 
-1. **Updated `crates/kimichat-models/src/types.rs`**:
+1. **Updated `crates/apchat-models/src/types.rs`**:
    - Simplified `ModelColor` enum to only include `BluModel`, `GrnModel`, and `RedModel`
    - Maintained all existing helper methods (`as_str_default`, `as_str`, `display_name`, `from_string`)
    - Kept backward compatibility for `AnthropicModel` and `Custom(String)` handling in `from_string`
 
-2. **Updated `crates/kimichat-llm-api/src/config/mod.rs`**:
+2. **Updated `crates/apchat-llm-api/src/config/mod.rs`**:
    - Added default model constants for each color:
      - `DEFAULT_BLU_MODEL`, `DEFAULT_GRN_MODEL`, `DEFAULT_RED_MODEL`
    - Added default backend constants for each color:
@@ -20,7 +20,7 @@ I have successfully implemented the refactoring to separate logical LLM "colors"
      - `DEFAULT_BLU_API_URL`, `DEFAULT_GRN_API_URL`, `DEFAULT_RED_API_URL`
    - Added `parse_model_attings` function for parsing strings like "model@backend(api_url)"
 
-3. **Enhanced `kimichat-main/src/config/helpers.rs`**:
+3. **Enhanced `apchat-main/src/config/helpers.rs`**:
    - Updated imports to include new constants from the config module
    - Modified `create_model_client` to use the new default constants
    - Updated `create_client_for_model_color` to use the new defaults

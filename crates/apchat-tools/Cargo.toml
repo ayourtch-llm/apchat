@@ -1,0 +1,35 @@
+[package]
+name = "apchat-tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+chrono = "0.4.42"
+colored = "2.1"
+glob = "0.3"
+ignore = "0.4"
+apchat-logging = { path = "../apchat-logging" }
+apchat-models = { path = "../apchat-models" }
+apchat-policy = { path = "../apchat-policy" }
+apchat-skills = { path = "../apchat-skills" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-todo = { path = "../apchat-todo" }
+apchat-toolcore = { path = "../apchat-toolcore" }
+regex = "*"
+rustyline = "14.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+similar = { version = "2.6", features = ["inline"] }
+thiserror = "1.0"
+tokio = { version = "1.41", features = ["fs", "process"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio-test = { workspace = true }
+mockall = { workspace = true }
+pretty_assertions = { workspace = true }
+serde_json = { workspace = true }
+proptest = { workspace = true }
+wiremock = { workspace = true }

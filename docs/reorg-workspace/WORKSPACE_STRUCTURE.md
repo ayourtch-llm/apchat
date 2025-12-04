@@ -1,33 +1,33 @@
 # Workspace Structure
 
-This document provides a detailed breakdown of the proposed workspace structure for KimiChat, including the responsibilities of each crate and their public APIs.
+This document provides a detailed breakdown of the proposed workspace structure for APChat, including the responsibilities of each crate and their public APIs.
 
 ## Crate Overview
 
 ```
-kimichat-workspace/
+apchat-workspace/
 ├── Cargo.toml                    # Workspace configuration
-├── kimichat-core/               # Foundation layer
+├── apchat-core/               # Foundation layer
 │   ├── Cargo.toml
 │   └── src/
-├── kimichat-terminal/           # Terminal operations
+├── apchat-terminal/           # Terminal operations
 │   ├── Cargo.toml
 │   └── src/
-├── kimichat-agents/             # Multi-agent system
+├── apchat-agents/             # Multi-agent system
 │   ├── Cargo.toml
 │   └── src/
-├── kimichat-web/                # Web interface
+├── apchat-web/                # Web interface
 │   ├── Cargo.toml
 │   └── src/
-├── kimichat-tools/              # Tool implementations
+├── apchat-tools/              # Tool implementations
 │   ├── Cargo.toml
 │   └── src/
-└── kimichat-cli/                # Main application
+└── apchat-cli/                # Main application
     ├── Cargo.toml
     └── src/
 ```
 
-## 1. kimichat-core - Foundation Layer
+## 1. apchat-core - Foundation Layer
 
 ### Purpose
 Central hub providing core types, tool system, and configuration management that other crates depend on.
@@ -82,7 +82,7 @@ pub use errors::{CoreError, Result};
 pub use utils::{JsonSchema, json_schema};
 ```
 
-## 2. kimichat-terminal - Terminal Operations
+## 2. apchat-terminal - Terminal Operations
 
 ### Purpose
 Complete terminal session management with PTY support and multiple backend implementations.
@@ -106,7 +106,7 @@ Complete terminal session management with PTY support and multiple backend imple
 ### Dependencies
 ```toml
 [dependencies]
-kimichat-core = { path = "../kimichat-core" }
+apchat-core = { path = "../apchat-core" }
 portable-pty = "0.8"
 vt100 = "0.15"
 tokio = { version = "1.41", features = ["full"] }
@@ -144,7 +144,7 @@ pub use tools::{
 };
 ```
 
-## 3. kimichat-agents - Multi-Agent System
+## 3. apchat-agents - Multi-Agent System
 
 ### Purpose
 Agent framework with LLM client implementations and coordination logic.
@@ -168,8 +168,8 @@ Agent framework with LLM client implementations and coordination logic.
 ### Dependencies
 ```toml
 [dependencies]
-kimichat-core = { path = "../kimichat-core" }
-kimichat-tools = { path = "../kimichat-tools" }
+apchat-core = { path = "../apchat-core" }
+apchat-tools = { path = "../apchat-tools" }
 reqwest = { version = "0.12", features = ["json", "stream"] }
 futures-util = "0.3"
 futures = "0.3"
@@ -205,7 +205,7 @@ pub use model_switching::{ModelSwitcher, SwitchModelArgs};
 pub use message::{ChatMessage, MessageRole, MessageContent};
 ```
 
-## 4. kimichat-web - Web Interface
+## 4. apchat-web - Web Interface
 
 ### Purpose
 Real-time web interface with WebSocket communication and session management.
@@ -228,9 +228,9 @@ Real-time web interface with WebSocket communication and session management.
 ### Dependencies
 ```toml
 [dependencies]
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
-kimichat-agents = { path = "../kimichat-agents" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-agents = { path = "../apchat-agents" }
 axum = { version = "0.7", features = ["ws", "macros"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
@@ -259,7 +259,7 @@ pub use websocket::{WebSocketManager, ConnectionManager};
 pub use auth::{AuthMiddleware, WebAuth};
 ```
 
-## 5. kimichat-tools - Tool Implementations
+## 5. apchat-tools - Tool Implementations
 
 ### Purpose
 All tool implementations that extend the core tool system with specific functionality.
@@ -281,8 +281,8 @@ All tool implementations that extend the core tool system with specific function
 ### Dependencies
 ```toml
 [dependencies]
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
 glob = "0.3"
 ignore = "0.4"
 regex = "1.0"
@@ -322,7 +322,7 @@ pub use todo_tools::{
 };
 ```
 
-## 6. kimichat-cli - Main Application
+## 6. apchat-cli - Main Application
 
 ### Purpose
 CLI interface, REPL, and application coordination that ties all other crates together.
@@ -346,11 +346,11 @@ CLI interface, REPL, and application coordination that ties all other crates tog
 ### Dependencies
 ```toml
 [dependencies]
-kimichat-core = { path = "../kimichat-core" }
-kimichat-terminal = { path = "../kimichat-terminal" }
-kimichat-agents = { path = "../kimichat-agents" }
-kimichat-web = { path = "../kimichat-web" }
-kimichat-tools = { path = "../kimichat-tools" }
+apchat-core = { path = "../apchat-core" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-agents = { path = "../apchat-agents" }
+apchat-web = { path = "../apchat-web" }
+apchat-tools = { path = "../apchat-tools" }
 
 clap = { version = "4.5", features = ["derive", "env"] }
 clap_complete = "4.5"
@@ -382,30 +382,30 @@ pub use history::{ChatHistory, HistoryManager};
 ## Inter-Crate Dependencies
 
 ```
-kimichat-cli
-    ├── kimichat-web
-    ├── kimichat-agents
-    ├── kimichat-tools
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-cli
+    ├── apchat-web
+    ├── apchat-agents
+    ├── apchat-tools
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-web
-    ├── kimichat-agents
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-web
+    ├── apchat-agents
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-agents
-    ├── kimichat-tools
-    └── kimichat-core
+apchat-agents
+    ├── apchat-tools
+    └── apchat-core
 
-kimichat-tools
-    ├── kimichat-terminal
-    └── kimichat-core
+apchat-tools
+    ├── apchat-terminal
+    └── apchat-core
 
-kimichat-terminal
-    └── kimichat-core
+apchat-terminal
+    └── apchat-core
 
-kimichat-core (no internal dependencies)
+apchat-core (no internal dependencies)
 ```
 
 ## Benefits of This Structure
