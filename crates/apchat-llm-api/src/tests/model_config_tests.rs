@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod model_config_tests {
-    use crate::config::{parse_model_attings, BackendType, get_default_url_for_backend, get_default_model_for_backend};
+    use crate::config::{parse_model_attings, get_default_url_for_backend, get_default_model_for_backend};
+use apchat_models::BackendType;
 
     #[test]
     fn test_parse_model_full_format() {

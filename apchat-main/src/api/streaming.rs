@@ -5,6 +5,7 @@ use std::io::Write;
 use crate::APChat;
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk};
 use apchat_agents::{ToolDefinition, ChatMessage};
+use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
 use crate::{ToolCall, FunctionCall};
@@ -397,6 +398,9 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
     // Initialize response accumulation
     let mut accumulated_content = String::new();
+    let mut accumulated_tool_calls: Vec<ToolCall> = Vec::new();
+    let mut tool_calls_in_progress: std::collections::HashMap<usize, (String, String, String)> = std::collections::HashMap::new(); // index -> (id, name, arguments)
+    let mut role = String::new();
 
     // Get the streaming response
     let mut stream = llm_client.chat_streaming(chat_messages.clone(), tools.clone()).await?;
@@ -405,10 +409,23 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     use futures::StreamExt;
     use std::io::{self, Write};
 
+    // Show thinking indicator
+    print!("🤔 Thinking...");
+    io::stdout().flush().unwrap();
+    let mut first_chunk = true;
+
     // Ensure stdout is flushed immediately for each chunk
     while let Some(chunk_result) = stream.next().await {
         match chunk_result {
             Ok(chunk) => {
+                // Handle the first chunk
+                if first_chunk {
+                    // Clear the "Thinking..." indicator
+                    print!("\r");
+                    io::stdout().flush().unwrap();
+                    first_chunk = false;
+                }
+
                 // Print the delta immediately without any buffering
                 if !chunk.delta.is_empty() {
                     // Use direct write and flush for minimal latency
@@ -417,9 +434,42 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                     accumulated_content.push_str(&chunk.delta);
                 }
 
+                // Handle tool call events
+                if let Some(ref tool_event) = chunk.tool_call_event {
+                    match tool_event {
+                        ToolCallEvent::Start { index, id, name } => {
+                            if chat.verbose {
+                                eprintln!("🔧 Tool call started: index={}, id={}, name={}", index, id, name);
+                            }
+                            tool_calls_in_progress.insert(*index, (id.clone(), name.clone(), String::new()));
+                        }
+                        ToolCallEvent::Delta { index, arguments_delta } => {
+                            if chat.verbose {
+                                eprintln!("🔧 Tool call delta: index={}, delta={}", index, arguments_delta);
+                            }
+                            if let Some((id, name, args)) = tool_calls_in_progress.get_mut(index) {
+                                args.push_str(arguments_delta);
+                            }
+                        }
+                    }
+                }
+
                 // Check if we're done
                 if let Some(ref reason) = chunk.finish_reason {
                     if reason == "stop" {
+                        // Finalize tool calls
+                        for (index, (id, name, arguments)) in &tool_calls_in_progress {
+                            if !id.is_empty() && !name.is_empty() {
+                                accumulated_tool_calls.push(crate::ToolCall {
+                                    id: id.clone(),
+                                    tool_type: "function".to_string(),
+                                    function: crate::FunctionCall {
+                                        name: name.clone(),
+                                        arguments: arguments.clone(),
+                                    },
+                                });
+                            }
+                        }
                         break;
                     }
                 }
@@ -433,34 +483,19 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
     println!(); // New line after streaming complete
 
-    // For now, we'll make a non-streaming call to get the complete response with tool calls
-    // This is a limitation of the current format translation approach
-    let response = llm_client.chat(chat_messages, tools).await?;
-
     // Convert the response back to the old format
     let message = Message {
-        role: response.message.role,
-        content: response.message.content,
-        tool_calls: response.message.tool_calls.map(|calls| {
-            calls.into_iter().map(|call| crate::ToolCall {
-                id: call.id,
-                tool_type: "function".to_string(),
-                function: crate::FunctionCall {
-                    name: call.function.name,
-                    arguments: call.function.arguments,
-                },
-            }).collect()
-        }),
-        tool_call_id: response.message.tool_call_id,
-        name: response.message.name,
+        role: if role.is_empty() { "assistant".to_string() } else { role },
+        content: accumulated_content.clone(),
+        tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
+        tool_call_id: None,
+        name: None,
         reasoning: None,
     };
 
-    let usage = response.usage.map(|u| Usage {
-        prompt_tokens: u.prompt_tokens as usize,
-        completion_tokens: u.completion_tokens as usize,
-        total_tokens: u.total_tokens as usize,
-    });
+    // For now, we don't have usage information from streaming
+    // This could be enhanced by extracting usage from the final message_stop event
+    let usage: Option<Usage> = None;
 
     // Log the final response for LlmClient streaming
     let response_body = format!("Role: {}\n\nContent:\n{}\n\nTool calls: {}\n\nUsage: {:?}",

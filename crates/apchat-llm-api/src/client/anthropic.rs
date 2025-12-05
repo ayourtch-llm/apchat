@@ -667,3 +667,87 @@ impl AnthropicLlmClient {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_sse_line_text_delta() {
+        let line = "data: {\"type\": \"content_block_delta\", \"index\": 0, \"delta\": {\"type\": \"text_delta\", \"text\": \"Hello\"}}";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+
+        let chunk = result.unwrap().unwrap();
+        assert_eq!(chunk.delta, "Hello");
+        assert!(chunk.tool_call_event.is_none());
+    }
+
+    #[test]
+    fn test_parse_sse_line_tool_use_start() {
+        let line = "data: {\"type\": \"content_block_start\", \"index\": 0, \"content_block\": {\"type\": \"tool_use\", \"id\": \"toolu_01234\", \"name\": \"test_function\"}}";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.delta.is_empty());
+        assert!(matches!(chunk.tool_call_event, Some(ToolCallEvent::Start { index: 0, id, name }) if id == "toolu_01234" && name == "test_function"));
+    }
+
+    #[test]
+    fn test_parse_sse_line_tool_use_delta() {
+        let line = "data: {\"type\": \"content_block_delta\", \"index\": 0, \"delta\": {\"type\": \"input_json_delta\", \"partial_json\": \"{\\\"arg1\\\": \\\"value1\\\"\"}}";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.delta.is_empty());
+        assert!(matches!(chunk.tool_call_event, Some(ToolCallEvent::Delta { index: 0, arguments_delta }) if arguments_delta.contains("arg1")));
+    }
+
+    #[test]
+    fn test_parse_sse_line_message_stop() {
+        let line = "data: {\"type\": \"message_stop\"}";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.delta.is_empty());
+        assert_eq!(chunk.finish_reason, Some("stop".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sse_line_done_marker() {
+        let line = "data: [DONE]";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+
+        let chunk = result.unwrap().unwrap();
+        assert!(chunk.delta.is_empty());
+        assert_eq!(chunk.finish_reason, Some("stop".to_string()));
+    }
+
+    #[test]
+    fn test_parse_sse_line_error() {
+        let line = "data: {\"type\": \"error\", \"error\": {\"type\": \"invalid_request_error\", \"message\": \"Invalid request\"}}";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid request"));
+    }
+
+    #[test]
+    fn test_parse_sse_line_non_data_line() {
+        let line = "event: ping";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_parse_sse_line_empty_line() {
+        let line = "";
+        let result = AnthropicLlmClient::parse_sse_line(line);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+}
