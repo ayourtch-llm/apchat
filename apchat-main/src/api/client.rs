@@ -48,13 +48,44 @@ pub(crate) async fn call_api(
     // Retry logic with exponential backoff
     let mut retry_count = 0;
     loop {
+        // Convert messages for Mistral/Ministral compatibility:
+        // Ministral allows ONE optional system message at the start, then alternating user/assistant.
+        // Merge all consecutive leading system messages into one system message.
+        let mut converted_messages: Vec<Message> = Vec::new();
+        let mut leading_system_contents: Vec<String> = Vec::new();
+        let mut past_leading_systems = false;
+
+        for msg in messages.iter() {
+            if msg.role == "system" && !past_leading_systems {
+                // Collect leading system message contents
+                leading_system_contents.push(msg.content.clone());
+            } else {
+                // Past the leading system messages
+                if !past_leading_systems {
+                    // Add merged system message if we collected any
+                    if !leading_system_contents.is_empty() {
+                        converted_messages.push(Message {
+                            role: "system".to_string(),
+                            content: leading_system_contents.join("\n\n"),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        });
+                    }
+                    past_leading_systems = true;
+                }
+                converted_messages.push(msg.clone());
+            }
+        }
+
         let request = ChatRequest {
             model: current_model.as_str(
                 chat.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
                 chat.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
                 chat.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
             ).to_string(),
-            messages: messages.clone(),
+            messages: converted_messages,
             tools: chat.get_tools(),
             tool_choice: "auto".to_string(),
             stream: None,

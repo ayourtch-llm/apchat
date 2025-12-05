@@ -19,12 +19,39 @@ pub(crate) async fn call_api_streaming(
 
     let current_model = chat.current_model.clone();
 
-    // Strip reasoning field from messages (only supported by some models like Groq)
-    let messages: Vec<Message> = orig_messages.iter().map(|m| {
+    // Convert messages for Mistral/Ministral compatibility:
+    // Ministral allows ONE optional system message at the start, then alternating user/assistant.
+    // Merge all consecutive leading system messages into one, and strip reasoning field.
+    let mut messages: Vec<Message> = Vec::new();
+    let mut leading_system_contents: Vec<String> = Vec::new();
+    let mut past_leading_systems = false;
+
+    for m in orig_messages.iter() {
         let mut msg = m.clone();
         msg.reasoning = None; // Strip reasoning field to avoid compatibility issues
-        msg
-    }).collect();
+
+        if msg.role == "system" && !past_leading_systems {
+            // Collect leading system message contents
+            leading_system_contents.push(msg.content.clone());
+        } else {
+            // Past the leading system messages
+            if !past_leading_systems {
+                // Add merged system message if we collected any
+                if !leading_system_contents.is_empty() {
+                    messages.push(Message {
+                        role: "system".to_string(),
+                        content: leading_system_contents.join("\n\n"),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    });
+                }
+                past_leading_systems = true;
+            }
+            messages.push(msg);
+        }
+    }
 
     let request = ChatRequest {
         model: current_model.as_str(

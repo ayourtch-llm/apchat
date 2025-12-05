@@ -84,10 +84,23 @@ impl LlmClient for LlamaCppClient {
     }
 
     async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String> {
+        // Convert system messages to user messages for Mistral compatibility
+        let converted_messages: Vec<serde_json::Value> = messages.iter().map(|msg| {
+            let role = if msg.role == "system" {
+                "user"
+            } else {
+                &msg.role
+            };
+            serde_json::json!({
+                "role": role,
+                "content": &msg.content
+            })
+        }).collect();
+
         // For progress evaluation, make a simple API call without tools
         let api_request = serde_json::json!({
             "model": self.model,
-            "messages": messages,
+            "messages": converted_messages,
             "temperature": 0.1,
             "max_tokens": 2000
         });
@@ -119,8 +132,16 @@ impl LlmClient for LlamaCppClient {
 impl LlamaCppClient {
     async fn build_chat_request(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<serde_json::Value> {
         let chat_messages: Vec<apchat_models::Message> = messages.into_iter().map(|msg| {
+            // Convert system role to user role for models that don't support it
+            // (e.g., Llama.cpp with Mistral models)
+            let role = if msg.role == "system" {
+                "user".to_string()
+            } else {
+                msg.role
+            };
+
             apchat_models::Message {
-                role: msg.role,
+                role,
                 content: msg.content,
                 tool_calls: msg.tool_calls.map(|calls| {
                     calls.into_iter().map(|call| apchat_models::ToolCall {
