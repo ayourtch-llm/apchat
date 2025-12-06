@@ -1,6 +1,6 @@
 use anyhow::Result;
 use colored::Colorize;
-use std::io::Write;
+use std::time::{Instant, Duration};
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk};
@@ -10,11 +10,86 @@ use apchat_logging::{log_request, log_request_to_file, log_response, log_respons
 use apchat_toolcore::parse_xml_tool_calls;
 use crate::{ToolCall, FunctionCall};
 
+/// Metrics for token generation rate tracking
+#[derive(Debug, Clone)]
+pub struct StreamingMetrics {
+    pub start_time: Instant,
+    pub total_tokens: usize,
+    pub completion_tokens: usize,
+    pub prompt_tokens: Option<usize>,
+    pub duration: Option<Duration>,
+}
+
+impl StreamingMetrics {
+    pub fn new() -> Self {
+        Self {
+            start_time: Instant::now(),
+            total_tokens: 0,
+            completion_tokens: 0,
+            prompt_tokens: None,
+            duration: None,
+        }
+    }
+
+    pub fn finish(&mut self) {
+        self.duration = Some(self.start_time.elapsed());
+    }
+
+    pub fn tokens_per_second(&self) -> f64 {
+        match self.duration {
+            Some(duration) => {
+                let seconds = duration.as_secs_f64();
+                if seconds > 0.0 {
+                    self.completion_tokens as f64 / seconds
+                } else {
+                    0.0
+                }
+            }
+            None => 0.0,
+        }
+    }
+
+    pub fn print_metrics(&self) {
+        match self.duration {
+            Some(duration) => {
+                let seconds = duration.as_secs_f64();
+                let tps = self.tokens_per_second();
+                
+                println!("\n{}", "📊 Streaming Metrics:".bright_blue());
+                println!("  ⏱️  Duration: {:.2}s", seconds);
+                println!("  🪪 Completion Tokens: {}", self.completion_tokens);
+                
+                if let Some(prompt) = self.prompt_tokens {
+                    println!("  📝 Prompt Tokens: {}", prompt);
+                    println!("  🪪 Total Tokens: {}", self.completion_tokens + prompt);
+                }
+                
+                println!("  ⚡ Rate: {:.1} tokens/sec", tps);
+                
+                if tps >= 100.0 {
+                    println!("  🚀 Performance: Excellent");
+                } else if tps >= 50.0 {
+                    println!("  👍 Performance: Good");
+                } else if tps >= 20.0 {
+                    println!("  📈 Performance: Moderate");
+                } else {
+                    println!("  🐌 Performance: Slow");
+                }
+                
+                println!("{}", "─".repeat(50).dimmed());
+            }
+            None => {
+                println!("\n{} Streaming metrics unavailable - duration not measured", "⚠️".yellow());
+            }
+        }
+    }
+}
+
 /// Handle streaming API response for Groq-style APIs
 pub(crate) async fn call_api_streaming(
     chat: &APChat,
     orig_messages: &[Message],
-) -> Result<(Message, Option<Usage>, ModelColor)> {
+) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
     use std::io::{self, Write};
     use futures_util::StreamExt;
 
@@ -110,6 +185,9 @@ pub(crate) async fn call_api_streaming(
         println!("{}", "═".repeat(80).bright_cyan());
     }
 
+    // Initialize metrics tracking
+    let mut metrics = StreamingMetrics::new();
+
     // Process streaming response
     let mut accumulated_content = String::new();
     let mut accumulated_reasoning = String::new();
@@ -165,6 +243,12 @@ pub(crate) async fn call_api_streaming(
                     if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
                         if let Some(usage_data) = chunk.usage {
                             usage = Some(usage_data);
+                            // Update metrics with usage information
+                            if let Some(ref usage_info) = usage {
+                                metrics.completion_tokens = usage_info.completion_tokens;
+                                metrics.prompt_tokens = Some(usage_info.prompt_tokens);
+                                metrics.total_tokens = usage_info.total_tokens;
+                            }
                         }
 
                         if let Some(choice) = chunk.choices.first() {
@@ -211,6 +295,9 @@ pub(crate) async fn call_api_streaming(
                                 }
 
                                 accumulated_content.push_str(content);
+                                // Update token count in metrics (rough estimate: 1 token ≈ 4 characters)
+                                metrics.completion_tokens += content.len() / 4;
+                                metrics.total_tokens += content.len() / 4;
                                 print!("{}", content);
                                 io::stdout().flush().unwrap();
                             }
@@ -272,6 +359,9 @@ pub(crate) async fn call_api_streaming(
     }
 
     println!(); // New line after streaming complete
+
+    // Finish metrics collection
+    metrics.finish();
 
     // Create a response body representation for logging with raw content
     let response_body_for_logging = if accumulated_tool_calls.is_empty() {
@@ -335,7 +425,7 @@ pub(crate) async fn call_api_streaming(
         }
     }
 
-    Ok((message, usage, current_model))
+    Ok((message, usage, current_model, metrics))
 }
 
 /// Streaming API call using the new LlmClient system (for Anthropic and llama.cpp)
@@ -343,7 +433,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     chat: &APChat,
     messages: &[Message],
     model: &ModelColor,
-) -> Result<(Message, Option<Usage>, ModelColor)> {
+) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
     if chat.should_show_debug(1) {
         println!("🔧 DEBUG: call_api_streaming_with_llm_client called with model: {:?}", model);
     }
@@ -396,6 +486,9 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
     println!("\n{}", "📡 Starting Anthropic streaming response...".bright_cyan());
 
+    // Initialize metrics tracking
+    let mut metrics = StreamingMetrics::new();
+
     // Initialize response accumulation
     let mut accumulated_content = String::new();
     let mut accumulated_tool_calls: Vec<ToolCall> = Vec::new();
@@ -432,6 +525,9 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                     io::stdout().write_all(chunk.delta.as_bytes()).unwrap();
                     io::stdout().flush().unwrap();
                     accumulated_content.push_str(&chunk.delta);
+                    // Update token count in metrics (rough estimate: 1 token ≈ 4 characters)
+                    metrics.completion_tokens += chunk.delta.len() / 4;
+                    metrics.total_tokens += chunk.delta.len() / 4;
                 }
 
                 // Handle tool call events
@@ -483,6 +579,9 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
     println!(); // New line after streaming complete
 
+    // Finish metrics collection
+    metrics.finish();
+
     // Convert the response back to the old format
     let message = Message {
         role: if role.is_empty() { "assistant".to_string() } else { role },
@@ -515,5 +614,5 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     
     let _ = log_response_to_file(&status, &headers, &response_body, request_timestamp, model);
 
-    Ok((message, usage, model.clone()))
+    Ok((message, usage, model.clone(), metrics))
 }

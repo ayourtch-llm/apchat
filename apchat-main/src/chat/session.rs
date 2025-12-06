@@ -69,7 +69,7 @@ pub(crate) async fn chat(
             }
 
             // Race API call against cancellation token
-            let (response, usage, current_model) = if let Some(ref token) = cancellation_token {
+            let (response, usage, current_model, streaming_metrics) = if let Some(ref token) = cancellation_token {
                 tokio::select! {
                     result = async {
                         if chat.stream_responses {
@@ -90,7 +90,16 @@ pub(crate) async fn chat(
                                 crate::api::call_api_streaming(chat, &chat.messages).await
                             }
                         } else {
-                            crate::api::call_api(chat, &chat.messages).await
+                            // For non-streaming calls, create dummy metrics
+                            let (response, usage, current_model) = crate::api::call_api(chat, &chat.messages).await?;
+                            let metrics = crate::api::StreamingMetrics {
+                                start_time: std::time::Instant::now(),
+                                total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
+                                completion_tokens: usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0),
+                                prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
+                                duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
+                            };
+                            Ok((response, usage, current_model, metrics))
                         }
                     } => result?,
                     _ = token.cancelled() => {
@@ -117,7 +126,16 @@ pub(crate) async fn chat(
                         crate::api::call_api_streaming(chat, &chat.messages).await?
                     }
                 } else {
-                    crate::api::call_api(chat, &chat.messages).await?
+                    // For non-streaming calls, create dummy metrics
+                    let (response, usage, current_model) = crate::api::call_api(chat, &chat.messages).await?;
+                    let metrics = crate::api::StreamingMetrics {
+                        start_time: std::time::Instant::now(),
+                        total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
+                        completion_tokens: usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0),
+                        prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
+                        duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
+                    };
+                    (response, usage, current_model, metrics)
                 }
             };
 
@@ -147,6 +165,11 @@ pub(crate) async fn chat(
                     usage.total_tokens.to_string().bright_black(),
                     chat.total_tokens_used.to_string().cyan()
                 );
+            }
+
+            // Display streaming metrics if streaming was used
+            if chat.stream_responses {
+                streaming_metrics.print_metrics();
             }
 
             if let Some(tool_calls) = &response.tool_calls {
