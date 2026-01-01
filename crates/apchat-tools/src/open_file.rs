@@ -10,8 +10,6 @@ pub enum OpenFileError {
     FileNotFound(String),
     #[error("permission denied: {0}")]
     PermissionDenied(String),
-    #[error("invalid line range {start}..={end} for a file with {total_lines} lines")]
-    InvalidLineRange { start: usize, end: usize, total_lines: usize },
     #[error("file exceeds maximum allowed size of {0} bytes")]
     FileTooLarge(usize),
     #[error("binary file cannot be displayed as text")]
@@ -26,11 +24,13 @@ const MAX_FILE_SIZE: usize = 1024 * 1024; // 1 MiB
 ///
 /// * `work_dir` – The root workspace directory. The function ensures the resolved file stays inside this directory.
 /// * `file_path` – Path relative to the workspace.
-/// * `line_range` – Optional inclusive 1‑based line range. If `None`, the whole file is returned.
+/// * `start_line` – Optional inclusive 1‑based start line. If `None`, assume line 1.
+/// * `read_line_count` - Optional line count. If `None`, assume as many as possible.
 pub async fn open_file(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
-    line_range: Option<RangeInclusive<usize>>,
+    start_line: Option<usize>,
+    read_line_count: Option<usize>,
 ) -> Result<String> {
     // Resolve the absolute path
     let abs_path = work_dir.join(file_path.as_ref());
@@ -101,26 +101,22 @@ pub async fn open_file(
     let raw_bytes = fs::read(&canonical)?;
     let content = String::from_utf8(raw_bytes).map_err(|_| OpenFileError::BinaryFileNotSupported)?;
 
-    // If a line range is requested, slice the lines
-    if let Some(range) = line_range {
-        let lines: Vec<&str> = content.lines().collect();
-        let total = lines.len();
-        let requested_start = *range.start();
-        let requested_end = *range.end();
+    let lines: Vec<&str> = content.lines().collect();
+    let total = lines.len();
 
-        // Clamp the range to valid values instead of failing
-        let start = requested_start.max(1).min(total.max(1));
-        let end = requested_end.min(total).max(start);
-
-        // If the file is empty, return empty string
-        if total == 0 {
-            return Ok(String::new());
-        }
-
-        // Convert to 0-based slice indices (inclusive end)
-        let slice = &lines[(start - 1)..end];
-        Ok(slice.join("\n"))
-    } else {
-        Ok(content)
+    // If the file is empty, return empty string
+    if total == 0 {
+         return Ok(String::new());
     }
+
+    let start = start_line.unwrap_or(1).max(1).min(total.max(1));
+    let count = read_line_count.unwrap_or(total);
+
+    let end = start + count - 1;
+    // Clamp the range to valid values instead of failing
+    let end = end.min(total).max(start);
+
+    // Convert to 0-based slice indices - inclusive end)
+    let slice = &lines[(start - 1)..end];
+    Ok(slice.join("\n"))
 }

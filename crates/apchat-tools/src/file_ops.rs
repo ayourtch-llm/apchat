@@ -25,7 +25,7 @@ impl Tool for OpenFileTool {
         HashMap::from([
             param!("file_path", "string", "Path to the file relative to the work directory", required),
             param!("start_line", "integer", "Starting line number (1-based)", optional),
-            param!("end_line", "integer", "Ending line number (1-based)", optional),
+            param!("read_line_count", "integer", "How many lines to read", optional),
         ])
     }
 
@@ -35,20 +35,10 @@ impl Tool for OpenFileTool {
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
-        let start_line = params.get_optional::<i32>("start_line").unwrap_or(None);
-        let end_line = params.get_optional::<i32>("end_line").unwrap_or(None);
+        let start_line = params.get_optional::<usize>("start_line").unwrap_or(None);
+        let read_line_count = params.get_optional::<usize>("read_line_count").unwrap_or(None);
 
-        let line_range = if let (Some(start), Some(end)) = (start_line, end_line) {
-            if start > 0 && end > 0 {
-                Some((start as usize)..=(end as usize))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        match open_file::open_file(&context.work_dir, &file_path, line_range).await {
+        match open_file::open_file(&context.work_dir, &file_path, start_line, read_line_count).await {
             Ok(content) => ToolResult::success(content),
             Err(e) => ToolResult::error(format!("Failed to open file: {}", e)),
         }
