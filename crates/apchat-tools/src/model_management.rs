@@ -157,23 +157,39 @@ fn normalize_whitespace(s: &str) -> String {
 
 // Helper function to find similar content in file and provide helpful suggestions
 fn find_similar_content(file_content: &str, search_for: &str, max_context_lines: usize) -> Option<String> {
-    // Try to find the first few words/lines of search_for in the file
     let search_lines: Vec<&str> = search_for.lines().collect();
     if search_lines.is_empty() {
         return None;
     }
 
-    let first_search_line = search_lines[0].trim();
-    if first_search_line.is_empty() && search_lines.len() > 1 {
-        // Try second line if first is empty
-        let second_line = search_lines[1].trim();
-        if !second_line.is_empty() {
-            return find_content_near(file_content, second_line, max_context_lines);
+    // Try multi-line matching first (most specific)
+    if search_lines.len() >= 3 {
+        // Try to find a sequence of 3 lines
+        let pattern = search_lines[0..3].join("\n");
+        if let Some(result) = find_content_near(file_content, &pattern, max_context_lines) {
+            return Some(result);
         }
     }
 
-    if !first_search_line.is_empty() {
-        return find_content_near(file_content, first_search_line, max_context_lines);
+    // Try matching on a substantial single line (skip very short/common patterns)
+    for search_line in &search_lines {
+        let trimmed = search_line.trim();
+        // Skip short or very common patterns (like single `#` or whitespace)
+        if trimmed.len() >= 10 && !trimmed.chars().all(|c| c == '#' || c.is_whitespace()) {
+            if let Some(result) = find_content_near(file_content, trimmed, max_context_lines) {
+                return Some(result);
+            }
+        }
+    }
+
+    // Last resort: try the first non-empty line even if short
+    for search_line in &search_lines {
+        let trimmed = search_line.trim();
+        if !trimmed.is_empty() {
+            if let Some(result) = find_content_near(file_content, trimmed, max_context_lines) {
+                return Some(result);
+            }
+        }
     }
 
     None
@@ -183,24 +199,55 @@ fn find_similar_content(file_content: &str, search_for: &str, max_context_lines:
 fn find_content_near(file_content: &str, pattern: &str, context_lines: usize) -> Option<String> {
     let file_lines: Vec<&str> = file_content.lines().collect();
 
-    // Try to find the pattern (or part of it) in the file
-    for (idx, line) in file_lines.iter().enumerate() {
-        if line.contains(pattern) || pattern.contains(line.trim()) {
-            // Found something similar, return context around it
-            let start = idx.saturating_sub(context_lines);
-            let end = (idx + context_lines + 1).min(file_lines.len());
+    // For multi-line patterns, try to find the sequence
+    if pattern.contains('\n') {
+        let pattern_lines: Vec<&str> = pattern.lines().collect();
+        let pattern_len = pattern_lines.len();
 
-            let context: Vec<String> = file_lines[start..end]
-                .iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    let line_num = start + i + 1;
-                    let marker = if start + i == idx { ">>>" } else { "   " };
-                    format!("{} {:4} | {}", marker, line_num, l)
-                })
-                .collect();
+        for idx in 0..=file_lines.len().saturating_sub(pattern_len) {
+            // Check if this window matches the pattern
+            let window = &file_lines[idx..idx + pattern_len];
+            let window_text = window.join("\n");
 
-            return Some(context.join("\n"));
+            // Check if the window contains the pattern
+            if window_text.contains(pattern) {
+                let start = idx.saturating_sub(context_lines);
+                let end = (idx + pattern_len + context_lines).min(file_lines.len());
+
+                let context: Vec<String> = file_lines[start..end]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| {
+                        let line_num = start + i + 1;
+                        let marker = if start + i == idx { ">>>" } else { "   " };
+                        format!("{} {:4} | {}", marker, line_num, l)
+                    })
+                    .collect();
+
+                return Some(context.join("\n"));
+            }
+        }
+    } else {
+        // Single-line pattern
+        for (idx, line) in file_lines.iter().enumerate() {
+            // Only check if the line contains the pattern
+            // Don't do the reverse check (pattern.contains(line)) as it matches too broadly
+            if line.contains(pattern) {
+                let start = idx.saturating_sub(context_lines);
+                let end = (idx + context_lines + 1).min(file_lines.len());
+
+                let context: Vec<String> = file_lines[start..end]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| {
+                        let line_num = start + i + 1;
+                        let marker = if start + i == idx { ">>>" } else { "   " };
+                        format!("{} {:4} | {}", marker, line_num, l)
+                    })
+                    .collect();
+
+                return Some(context.join("\n"));
+            }
         }
     }
 

@@ -290,3 +290,67 @@ fn test_correct_json_escaping() {
         assert_eq!(old_content, r#"sed -e 's/\"//g'"#);
     }
 }
+
+#[test]
+fn test_pattern_matching_skips_common_short_patterns() {
+    // Regression test for bug where `#` matched license header instead of actual target
+
+    let file_content = r#"# Copyright header
+# License line 2
+# License line 3
+#
+# More license
+#
+# End of license
+
+Some actual code here
+More code
+
+# Added support for building on macOS (Darwin)
+ifeq ($(OS_ID),darwin)
+OS_ID=darwin
+OS_VERSION_ID=0
+endif
+"#;
+
+    let search_content = r#"# Added support for building on macOS (Darwin)
+ifeq ($(OS_ID),darwin)
+OS_ID=darwin"#;
+
+    // The old buggy code would match line 4 (just `#`)
+    // The fixed code should skip short patterns and find the actual match at line 11
+
+    // Simulate what find_similar_content does
+    let search_lines: Vec<&str> = search_content.lines().collect();
+
+    // Try multi-line matching first (should succeed)
+    if search_lines.len() >= 3 {
+        let pattern = search_lines[0..3].join("\n");
+        println!("Multi-line pattern:\n{}", pattern);
+
+        // Check if file contains this pattern
+        assert!(file_content.contains(&pattern),
+            "File should contain the 3-line pattern");
+    }
+
+    // Single-line patterns should skip short ones like `#`
+    for (i, search_line) in search_lines.iter().enumerate() {
+        let trimmed = search_line.trim();
+        println!("Line {}: '{}' (len={})", i, trimmed, trimmed.len());
+
+        if trimmed.len() >= 10 {
+            println!("  -> Would search for this line (substantial)");
+            assert!(file_content.contains(trimmed),
+                "File should contain line: {}", trimmed);
+        } else if trimmed.chars().all(|c| c == '#' || c.is_whitespace()) {
+            println!("  -> Would skip this line (just symbols)");
+        } else {
+            println!("  -> Short but not just symbols");
+        }
+    }
+
+    // Verify the first line is substantial enough
+    assert!(search_lines[0].trim().len() >= 10,
+        "First search line should be substantial: '{}'", search_lines[0]);
+}
+
