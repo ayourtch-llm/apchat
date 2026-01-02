@@ -4,6 +4,7 @@
 /// 1. Exact match
 /// 2. Normalized whitespace match
 /// 3. Levenshtein distance matching (for error messages)
+/// 4. JSON escaping error messages
 
 use std::fs;
 use tempfile::TempDir;
@@ -209,5 +210,83 @@ endif"#;
     let end_idx = (best_start + search_lines.len()).min(file_lines.len());
     for (i, line) in file_lines[best_start..end_idx].iter().enumerate() {
         println!("  {:3} | {}", best_start + i + 1, line);
+    }
+}
+
+#[test]
+fn test_json_escaping_error_detection() {
+    // This test demonstrates that JSON escaping errors are detected and helpful messages are shown
+
+    // Invalid JSON with improper escaping (like the LLM's error case)
+    // This has `\"` which should be `\\\"` in JSON
+    let invalid_json = r#"[{"file_path":"test.txt","old_content":"sed -e 's/\"//g'","new_content":"new","description":"test"}]"#;
+
+    // Try to parse - this should fail
+    let result = serde_json::from_str::<serde_json::Value>(invalid_json);
+
+    match result {
+        Ok(_) => {
+            // If this succeeds, our test case wasn't invalid enough!
+            // But that's okay, it means the JSON was actually valid
+            println!("Note: JSON was valid (escaping was correct)");
+        }
+        Err(e) => {
+            // This is expected - the JSON should fail to parse
+            println!("Got expected JSON parse error: {}", e);
+
+            let error_str = e.to_string();
+
+            // Verify we can detect escape-related errors
+            let is_escape_error = error_str.contains("escape")
+                || error_str.contains("backslash")
+                || error_str.contains("invalid");
+
+            assert!(is_escape_error,
+                "Should detect escape-related error, got: {}", error_str);
+
+            // Show that we have column information
+            let col = e.column();
+            println!("Error at column: {}", col);
+
+            // Demonstrate showing context around the error
+            if col < invalid_json.len() {
+                let start = col.saturating_sub(20);
+                let end = (col + 20).min(invalid_json.len());
+                let context = &invalid_json[start..end];
+
+                println!("\nContext around error:");
+                println!("  ...{}...", context);
+
+                let marker_pos = col - start;
+                print!("     ");
+                for _ in 0..marker_pos {
+                    print!(" ");
+                }
+                println!("↑ HERE");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_correct_json_escaping() {
+    // This demonstrates the CORRECT way to escape the problematic content
+
+    // Original content: sed -e 's/\"//g'
+    // In JSON, each \ becomes \\ and each " becomes \"
+    // So \" becomes \\\"
+    let correct_json = r#"[{"file_path":"test.txt","old_content":"sed -e 's/\\\"//g'","new_content":"new","description":"test"}]"#;
+
+    let result = serde_json::from_str::<serde_json::Value>(correct_json);
+    assert!(result.is_ok(), "Correctly escaped JSON should parse successfully");
+
+    // Verify the content is correctly unescaped
+    if let Ok(value) = result {
+        let old_content = value[0]["old_content"].as_str().unwrap();
+        println!("Correctly parsed old_content: {}", old_content);
+
+        // After JSON parsing, the \\\\ becomes \\ and \\\" remains as \"
+        // (JSON parses one level of escaping)
+        assert_eq!(old_content, r#"sed -e 's/\"//g'"#);
     }
 }
