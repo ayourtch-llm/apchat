@@ -8,6 +8,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use rustyline::DefaultEditor;
+use strsim::levenshtein;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EditOperation {
@@ -225,6 +226,117 @@ fn content_matches(haystack: &str, needle: &str, strategy: MatchStrategy) -> boo
     }
 }
 
+// Structure to hold a match candidate with its Levenshtein distance
+#[derive(Debug)]
+struct LevenshteinMatch {
+    content: String,
+    distance: usize,
+    start_line: usize,
+    end_line: usize,
+}
+
+// Helper function to find the closest matching content using Levenshtein distance
+fn find_closest_by_levenshtein(file_content: &str, search_for: &str, max_results: usize) -> Vec<LevenshteinMatch> {
+    let file_lines: Vec<&str> = file_content.lines().collect();
+    let search_lines: Vec<&str> = search_for.lines().collect();
+    let search_line_count = search_lines.len();
+
+    if search_line_count == 0 || file_lines.is_empty() {
+        return vec![];
+    }
+
+    let mut matches: Vec<LevenshteinMatch> = Vec::new();
+
+    // Create a sliding window of the same size as the search content
+    // We'll compare each window against the search content
+    for start_idx in 0..file_lines.len() {
+        let end_idx = (start_idx + search_line_count).min(file_lines.len());
+
+        // Extract the window
+        let window_lines = &file_lines[start_idx..end_idx];
+        let window_content = window_lines.join("\n");
+
+        // Calculate Levenshtein distance
+        let distance = levenshtein(&window_content, search_for);
+
+        matches.push(LevenshteinMatch {
+            content: window_content,
+            distance,
+            start_line: start_idx + 1,  // 1-indexed for display
+            end_line: end_idx,  // 1-indexed for display
+        });
+
+        // Also try with different window sizes (±20% of the search size)
+        // This helps when the actual content is slightly longer/shorter
+        if search_line_count > 5 {
+            // Try slightly smaller window
+            let smaller_size = (search_line_count as f32 * 0.8) as usize;
+            if smaller_size > 0 && start_idx + smaller_size <= file_lines.len() {
+                let small_end = start_idx + smaller_size;
+                let small_window = file_lines[start_idx..small_end].join("\n");
+                let small_distance = levenshtein(&small_window, search_for);
+
+                matches.push(LevenshteinMatch {
+                    content: small_window,
+                    distance: small_distance,
+                    start_line: start_idx + 1,
+                    end_line: small_end,
+                });
+            }
+
+            // Try slightly larger window
+            let larger_size = (search_line_count as f32 * 1.2) as usize;
+            if start_idx + larger_size <= file_lines.len() {
+                let large_end = start_idx + larger_size;
+                let large_window = file_lines[start_idx..large_end].join("\n");
+                let large_distance = levenshtein(&large_window, search_for);
+
+                matches.push(LevenshteinMatch {
+                    content: large_window,
+                    distance: large_distance,
+                    start_line: start_idx + 1,
+                    end_line: large_end,
+                });
+            }
+        }
+    }
+
+    // Sort by distance (closest first)
+    matches.sort_by_key(|m| m.distance);
+
+    // Return top N results
+    matches.into_iter().take(max_results).collect()
+}
+
+// Helper to format a Levenshtein match for display
+fn format_levenshtein_match(file_lines: &[&str], lev_match: &LevenshteinMatch, search_for: &str) -> String {
+    let mut output = String::new();
+
+    // Calculate similarity percentage (0% = completely different, 100% = identical)
+    let max_len = search_for.len().max(lev_match.content.len());
+    let similarity = if max_len == 0 {
+        100.0
+    } else {
+        ((max_len - lev_match.distance) as f64 / max_len as f64) * 100.0
+    };
+
+    output.push_str(&format!(
+        "Lines {}-{} ({:.1}% similar, Levenshtein distance: {}):\n",
+        lev_match.start_line, lev_match.end_line, similarity, lev_match.distance
+    ));
+
+    // Show the content with line numbers
+    let start_idx = lev_match.start_line.saturating_sub(1);
+    let end_idx = lev_match.end_line.min(file_lines.len());
+
+    for (i, line) in file_lines[start_idx..end_idx].iter().enumerate() {
+        let line_num = start_idx + i + 1;
+        output.push_str(&format!("  {:4} | {}\n", line_num, line));
+    }
+
+    output
+}
+
 /// Tool for planning multiple file edits
 pub struct PlanEditsTool;
 
@@ -319,7 +431,7 @@ impl Tool for PlanEditsTool {
                         error_msg.push_str(&format!("  {}\n", "... (truncated)".bright_black()));
                     }
 
-                    // Try to find similar content
+                    // Try to find similar content using simple pattern matching
                     if let Some(similar) = find_similar_content(&current_content, &edit.old_content, 3) {
                         error_msg.push_str(&format!("\n{}:\n", "Similar content found in file".bright_cyan()));
                         error_msg.push_str(&format!("{}\n", similar));
@@ -328,8 +440,32 @@ impl Tool for PlanEditsTool {
                         error_msg.push_str(&format!("  {} Line endings (↵ = LF, ⏎ = CR)\n", "•".bright_blue()));
                         error_msg.push_str(&format!("  {} Leading/trailing whitespace\n", "•".bright_blue()));
                     } else {
-                        error_msg.push_str(&format!("\n{}\n", "No similar content found in file.".bright_red()));
-                        error_msg.push_str(&format!("{}\n", "The content you're trying to match may not exist in the file.".bright_black()));
+                        // Pattern matching failed - try Levenshtein distance
+                        error_msg.push_str(&format!("\n{}\n", "No pattern match found. Searching for closest matches by edit distance...".bright_yellow()));
+
+                        let closest_matches = find_closest_by_levenshtein(&current_content, &edit.old_content, 3);
+                        let file_lines: Vec<&str> = current_content.lines().collect();
+
+                        if !closest_matches.is_empty() {
+                            error_msg.push_str(&format!("\n{}:\n", "Closest matches by Levenshtein distance".bright_cyan()));
+
+                            for (i, lev_match) in closest_matches.iter().enumerate() {
+                                if i > 0 {
+                                    error_msg.push_str("\n");
+                                }
+                                error_msg.push_str(&format!("{}. ", i + 1));
+                                error_msg.push_str(&format_levenshtein_match(&file_lines, lev_match, &edit.old_content));
+                            }
+
+                            error_msg.push_str(&format!("\n{}\n", "Hint: Check for differences in:".bright_yellow()));
+                            error_msg.push_str(&format!("  {} Tabs vs spaces (⇥ = tab, · = space)\n", "•".bright_blue()));
+                            error_msg.push_str(&format!("  {} Line endings (↵ = LF, ⏎ = CR)\n", "•".bright_blue()));
+                            error_msg.push_str(&format!("  {} Leading/trailing whitespace\n", "•".bright_blue()));
+                            error_msg.push_str(&format!("  {} Actual content differences\n", "•".bright_blue()));
+                        } else {
+                            error_msg.push_str(&format!("\n{}\n", "No similar content found in file.".bright_red()));
+                            error_msg.push_str(&format!("{}\n", "The content you're trying to match may not exist in the file.".bright_black()));
+                        }
                     }
 
                     return ToolResult::error(error_msg);
@@ -518,6 +654,23 @@ impl Tool for ApplyEditPlanTool {
                 let visible_search = show_whitespace(&edit.old_content);
                 for line in visible_search.lines().take(10) {
                     error_msg.push_str(&format!("  {}\n", line));
+                }
+
+                // Try Levenshtein distance to find closest matches
+                error_msg.push_str(&format!("\n{}\n", "Searching for closest matches by edit distance...".bright_yellow()));
+                let closest_matches = find_closest_by_levenshtein(&current_content, &edit.old_content, 3);
+                let file_lines: Vec<&str> = current_content.lines().collect();
+
+                if !closest_matches.is_empty() {
+                    error_msg.push_str(&format!("\n{}:\n", "Closest matches in current file".bright_cyan()));
+
+                    for (i, lev_match) in closest_matches.iter().enumerate() {
+                        if i > 0 {
+                            error_msg.push_str("\n");
+                        }
+                        error_msg.push_str(&format!("{}. ", i + 1));
+                        error_msg.push_str(&format_levenshtein_match(&file_lines, lev_match, &edit.old_content));
+                    }
                 }
 
                 return ToolResult::error(error_msg);
