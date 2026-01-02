@@ -130,6 +130,101 @@ fn show_unified_diff(old_content: &str, new_content: &str) -> String {
     output
 }
 
+// Helper function to visualize whitespace characters for better debugging
+fn show_whitespace(s: &str) -> String {
+    s.replace('\t', "⇥")
+     .replace('\n', "↵\n")
+     .replace('\r', "⏎")
+     .replace(' ', "·")
+}
+
+// Helper function to normalize whitespace for fuzzy matching
+fn normalize_whitespace(s: &str) -> String {
+    // Convert tabs to spaces
+    let with_spaces = s.replace('\t', "    ");
+
+    // Normalize line endings to \n
+    let normalized_lines = with_spaces.replace("\r\n", "\n").replace('\r', "\n");
+
+    // Trim each line and rejoin
+    normalized_lines
+        .lines()
+        .map(|line| line.trim_end())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// Helper function to find similar content in file and provide helpful suggestions
+fn find_similar_content(file_content: &str, search_for: &str, max_context_lines: usize) -> Option<String> {
+    // Try to find the first few words/lines of search_for in the file
+    let search_lines: Vec<&str> = search_for.lines().collect();
+    if search_lines.is_empty() {
+        return None;
+    }
+
+    let first_search_line = search_lines[0].trim();
+    if first_search_line.is_empty() && search_lines.len() > 1 {
+        // Try second line if first is empty
+        let second_line = search_lines[1].trim();
+        if !second_line.is_empty() {
+            return find_content_near(file_content, second_line, max_context_lines);
+        }
+    }
+
+    if !first_search_line.is_empty() {
+        return find_content_near(file_content, first_search_line, max_context_lines);
+    }
+
+    None
+}
+
+// Helper to find content near a pattern and return context
+fn find_content_near(file_content: &str, pattern: &str, context_lines: usize) -> Option<String> {
+    let file_lines: Vec<&str> = file_content.lines().collect();
+
+    // Try to find the pattern (or part of it) in the file
+    for (idx, line) in file_lines.iter().enumerate() {
+        if line.contains(pattern) || pattern.contains(line.trim()) {
+            // Found something similar, return context around it
+            let start = idx.saturating_sub(context_lines);
+            let end = (idx + context_lines + 1).min(file_lines.len());
+
+            let context: Vec<String> = file_lines[start..end]
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    let line_num = start + i + 1;
+                    let marker = if start + i == idx { ">>>" } else { "   " };
+                    format!("{} {:4} | {}", marker, line_num, l)
+                })
+                .collect();
+
+            return Some(context.join("\n"));
+        }
+    }
+
+    None
+}
+
+// Enum to represent different matching strategies
+#[derive(Debug, Clone, Copy)]
+enum MatchStrategy {
+    Exact,
+    NormalizedWhitespace,
+}
+
+// Helper function to check if content matches using the specified strategy
+fn content_matches(haystack: &str, needle: &str, strategy: MatchStrategy) -> bool {
+    match strategy {
+        MatchStrategy::Exact => haystack.contains(needle),
+        MatchStrategy::NormalizedWhitespace => {
+            let normalized_haystack = normalize_whitespace(haystack);
+            let normalized_needle = normalize_whitespace(needle);
+            normalized_haystack.contains(&normalized_needle)
+        }
+    }
+}
+
 /// Tool for planning multiple file edits
 pub struct PlanEditsTool;
 
@@ -200,11 +295,45 @@ impl Tool for PlanEditsTool {
                 ));
             }
 
-            if !current_content.contains(&edit.old_content) {
-                return ToolResult::error(format!(
-                    "Edit #{}: old_content not found in file {}\n\nLooking for:\n{}\n\nFile does not currently contain this content.",
-                    idx + 1, edit.file_path, edit.old_content
-                ));
+            // Try exact match first
+            if !content_matches(&current_content, &edit.old_content, MatchStrategy::Exact) {
+                // Exact match failed - try normalized whitespace match
+                if content_matches(&current_content, &edit.old_content, MatchStrategy::NormalizedWhitespace) {
+                    // Found with normalized whitespace - warn but allow
+                    println!("  {} Whitespace differences detected - using normalized matching", "⚠".yellow());
+                    println!("  {} Make sure tabs/spaces match exactly in the future", "ℹ".bright_blue());
+                } else {
+                    // Neither exact nor normalized match worked - provide detailed error
+                    let mut error_msg = format!(
+                        "Edit #{}: old_content not found in file {}\n\n",
+                        idx + 1, edit.file_path
+                    );
+
+                    // Show what we're looking for with visible whitespace
+                    error_msg.push_str(&format!("{}:\n", "Looking for (whitespace shown)".bright_yellow()));
+                    let visible_search = show_whitespace(&edit.old_content);
+                    for line in visible_search.lines().take(20) {
+                        error_msg.push_str(&format!("  {}\n", line.bright_white()));
+                    }
+                    if edit.old_content.lines().count() > 20 {
+                        error_msg.push_str(&format!("  {}\n", "... (truncated)".bright_black()));
+                    }
+
+                    // Try to find similar content
+                    if let Some(similar) = find_similar_content(&current_content, &edit.old_content, 3) {
+                        error_msg.push_str(&format!("\n{}:\n", "Similar content found in file".bright_cyan()));
+                        error_msg.push_str(&format!("{}\n", similar));
+                        error_msg.push_str(&format!("\n{}\n", "Hint: Check for differences in:".bright_yellow()));
+                        error_msg.push_str(&format!("  {} Tabs vs spaces (⇥ = tab, · = space)\n", "•".bright_blue()));
+                        error_msg.push_str(&format!("  {} Line endings (↵ = LF, ⏎ = CR)\n", "•".bright_blue()));
+                        error_msg.push_str(&format!("  {} Leading/trailing whitespace\n", "•".bright_blue()));
+                    } else {
+                        error_msg.push_str(&format!("\n{}\n", "No similar content found in file.".bright_red()));
+                        error_msg.push_str(&format!("{}\n", "The content you're trying to match may not exist in the file.".bright_black()));
+                    }
+
+                    return ToolResult::error(error_msg);
+                }
             }
 
             // Show unified diff preview
@@ -342,18 +471,57 @@ impl Tool for ApplyEditPlanTool {
             };
 
             // Check if content still exists (might have changed due to previous edits)
-            if !current_content.contains(&edit.old_content) {
-                clear_edit_plan(&context.work_dir);
-                return ToolResult::error(format!(
-                    "Edit #{} failed: old_content no longer found in {}. \
-                    A previous edit in this plan may have affected this file. \
-                    Edit plan aborted at step {}. No further edits applied. Plan has been cleared.",
-                    idx + 1, edit.file_path, idx + 1
-                ));
-            }
+            // Try exact match first, fall back to normalized if needed
+            let updated_content = if current_content.contains(&edit.old_content) {
+                // Exact match - use normal replace
+                current_content.replace(&edit.old_content, &edit.new_content)
+            } else if content_matches(&current_content, &edit.old_content, MatchStrategy::NormalizedWhitespace) {
+                // Found with normalized whitespace - need to find and replace with normalization
+                println!("  {} Using normalized whitespace matching", "ℹ".bright_blue());
 
-            // Apply the edit
-            let updated_content = current_content.replace(&edit.old_content, &edit.new_content);
+                // Find the actual content in the file that matches when normalized
+                // This is more complex - we need to find the matching substring
+                let normalized_old = normalize_whitespace(&edit.old_content);
+                let normalized_current = normalize_whitespace(&current_content);
+
+                if let Some(pos) = normalized_current.find(&normalized_old) {
+                    // Found the normalized position - now map back to original
+                    // For simplicity, use normalized content for the replacement
+                    // This ensures the edit works even with whitespace differences
+                    let before_normalized = &normalized_current[..pos];
+                    let after_normalized = &normalized_current[pos + normalized_old.len()..];
+                    let normalized_new = normalize_whitespace(&edit.new_content);
+
+                    format!("{}{}{}", before_normalized, normalized_new, after_normalized)
+                } else {
+                    // This shouldn't happen since content_matches returned true
+                    clear_edit_plan(&context.work_dir);
+                    return ToolResult::error(format!(
+                        "Edit #{} failed: Internal error in normalized matching for {}. \
+                        Edit plan aborted and cleared.",
+                        idx + 1, edit.file_path
+                    ));
+                }
+            } else {
+                // Neither exact nor normalized match worked
+                clear_edit_plan(&context.work_dir);
+
+                let mut error_msg = format!(
+                    "Edit #{} failed: old_content no longer found in {}.\n\
+                    A previous edit in this plan may have affected this file.\n\
+                    Edit plan aborted at step {}. No further edits applied. Plan has been cleared.\n\n",
+                    idx + 1, edit.file_path, idx + 1
+                );
+
+                // Show what we were looking for
+                error_msg.push_str(&format!("{}:\n", "Was looking for (whitespace shown)".bright_yellow()));
+                let visible_search = show_whitespace(&edit.old_content);
+                for line in visible_search.lines().take(10) {
+                    error_msg.push_str(&format!("  {}\n", line));
+                }
+
+                return ToolResult::error(error_msg);
+            };
 
             // Write the updated content
             if let Err(e) = fs::write(&full_path, &updated_content) {
