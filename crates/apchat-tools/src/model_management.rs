@@ -415,36 +415,37 @@ impl Tool for PlanEditsTool {
             Err(e) => {
                 let mut error_msg = format!("Failed to parse edits JSON: {}\n\n", e);
 
-                // Check if this is an escape-related error
+                // Always show error location with markers for all JSON errors
+                let col = e.column();
+                error_msg.push_str(&format!("{}\n", "📍 Error location:".bright_red().bold()));
+
+                // Show context around the error (70 chars before and after for better visibility)
+                let start = col.saturating_sub(70);
+                let end = (col + 70).min(edits_str.len());
+                let context = &edits_str[start..end];
+
+                // Calculate where the error marker should go
+                let marker_pos = col - start;
+
+                error_msg.push_str("  ...");
+                error_msg.push_str(context);
+                error_msg.push_str("...\n");
+
+                // Add marker pointing to the error
+                error_msg.push_str("     ");
+                for _ in 0..marker_pos {
+                    error_msg.push(' ');
+                }
+                error_msg.push_str(&format!("{}\n", "↑ ERROR HERE".bright_red().bold()));
+                error_msg.push_str(&format!("     {}column {}{}\n\n", "(at ".bright_black(), col, ")".bright_black()));
+
+                // Check what type of error and provide specific guidance
                 let error_str = e.to_string();
-                if error_str.contains("escape") || error_str.contains("backslash") || error_str.contains("invalid") {
-                    error_msg.push_str(&format!("{}\n", "🔍 This looks like a JSON escaping issue!".bright_yellow().bold()));
+
+                if error_str.contains("escape") || error_str.contains("backslash") {
+                    // Escape-specific guidance
+                    error_msg.push_str(&format!("{}\n", "🔍 This is a JSON escaping issue!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-
-                    // Extract the column number from the error
-                    let col = e.column();
-                    error_msg.push_str(&format!("{}\n", "📍 Error location:".bright_red().bold()));
-
-                    // Show context around the error (50 chars before and after)
-                    let start = col.saturating_sub(50);
-                    let end = (col + 50).min(edits_str.len());
-                    let context = &edits_str[start..end];
-
-                    // Calculate where the error marker should go
-                    let marker_pos = col - start;
-
-                    error_msg.push_str("  ...");
-                    error_msg.push_str(context);
-                    error_msg.push_str("...\n");
-
-                    // Add marker pointing to the error
-                    error_msg.push_str("     ");
-                    for _ in 0..marker_pos {
-                        error_msg.push(' ');
-                    }
-                    error_msg.push_str(&format!("{}\n", "↑ ERROR HERE".bright_red().bold()));
-                    error_msg.push_str(&format!("     {}column {}{}\n\n", "(at ".bright_black(), col, ")".bright_black()));
-
                     error_msg.push_str(&format!("{}\n", "Common causes:".bright_cyan()));
                     error_msg.push_str(&format!("  {} Backslashes in the content (e.g., sed commands, regex patterns)\n", "•".bright_blue()));
                     error_msg.push_str(&format!("  {} Double quotes that need escaping\n", "•".bright_blue()));
@@ -460,24 +461,47 @@ impl Tool for PlanEditsTool {
                     error_msg.push_str("  Actual content:    sed -e 's/\\\"//g'\n");
                     error_msg.push_str("  In JSON it becomes: sed -e 's/\\\\\\\"//g'\n");
                     error_msg.push_str("                         ↑↑↑↑ Each \\ becomes \\\\\n");
+                } else if error_str.contains("expected") {
+                    // Syntax error guidance
+                    error_msg.push_str(&format!("{}\n", "🔍 This is a JSON syntax error!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "✨ RECOMMENDED APPROACH:".bright_green().bold()));
-                    error_msg.push_str(&format!("  {} Instead of guessing escaping, READ THE FILE FIRST:\n", "1.".bright_yellow()));
-                    error_msg.push_str("     - Use the Read tool to see the exact file content\n");
-                    error_msg.push_str("     - Copy the exact lines you want to replace\n");
-                    error_msg.push_str("     - The Read tool output shows content correctly escaped\n");
+                    error_msg.push_str(&format!("{}\n", "Common causes:".bright_cyan()));
+                    error_msg.push_str(&format!("  {} Unescaped backslash causing the next character to be treated as escape\n", "•".bright_blue()));
+                    error_msg.push_str(&format!("  {} Incorrect escaping breaking the JSON structure\n", "•".bright_blue()));
+                    error_msg.push_str(&format!("  {} Missing quotes, commas, or brackets\n", "•".bright_blue()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("  {} For Makefile/shell content:\n", "2.".bright_yellow()));
-                    error_msg.push_str("     - Read the file to get exact content\n");
-                    error_msg.push_str("     - When you see backslashes, double them: \\ → \\\\\n");
-                    error_msg.push_str("     - When you see quotes, escape them: \" → \\\"\n");
-                    error_msg.push_str("     - Combine both rules: \\\" → \\\\\\\"\n");
+                    error_msg.push_str(&format!("{}\n", "💡 Quick Debug Steps:".bright_cyan()));
+                    error_msg.push_str(&format!("  {} Look at the character marked with ↑ above\n", "1.".bright_green()));
+                    error_msg.push_str(&format!("  {} Check if there's a backslash before it that should be doubled: \\ → \\\\\n", "2.".bright_green()));
+                    error_msg.push_str(&format!("  {} Verify all backslashes in shell commands are doubled\n", "3.".bright_green()));
+                    error_msg.push_str(&format!("  {} Count opening and closing quotes/brackets\n", "4.".bright_green()));
+                } else {
+                    // Generic JSON error
+                    error_msg.push_str(&format!("{}\n", "🔍 This is a JSON parsing error!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("  {} Alternative approach - use normalized matching:\n", "3.".bright_yellow()));
-                    error_msg.push_str("     - The tool supports normalized whitespace matching\n");
-                    error_msg.push_str("     - Get close enough and let normalization handle small differences\n");
-                    error_msg.push_str("\n");
+                    error_msg.push_str(&format!("{}\n", "💡 Debugging tips:".bright_cyan()));
+                    error_msg.push_str(&format!("  {} Check the character marked with ↑ above\n", "1.".bright_green()));
+                    error_msg.push_str(&format!("  {} Verify JSON structure (quotes, commas, brackets)\n", "2.".bright_green()));
+                    error_msg.push_str(&format!("  {} For shell/Makefile content, ensure backslashes are doubled: \\ → \\\\\n", "3.".bright_green()));
                 }
+
+                error_msg.push_str("\n");
+                error_msg.push_str(&format!("{}\n", "✨ RECOMMENDED APPROACH:".bright_green().bold()));
+                error_msg.push_str(&format!("  {} Instead of guessing escaping, READ THE FILE FIRST:\n", "1.".bright_yellow()));
+                error_msg.push_str("     - Use the Read tool to see the exact file content\n");
+                error_msg.push_str("     - Copy the exact lines you want to replace\n");
+                error_msg.push_str("     - The Read tool output shows content correctly escaped\n");
+                error_msg.push_str("\n");
+                error_msg.push_str(&format!("  {} For Makefile/shell content:\n", "2.".bright_yellow()));
+                error_msg.push_str("     - Read the file to get exact content\n");
+                error_msg.push_str("     - When you see backslashes, double them: \\ → \\\\\n");
+                error_msg.push_str("     - When you see quotes, escape them: \" → \\\"\n");
+                error_msg.push_str("     - Combine both rules: \\\" → \\\\\\\"\n");
+                error_msg.push_str("\n");
+                error_msg.push_str(&format!("  {} Alternative approach - use normalized matching:\n", "3.".bright_yellow()));
+                error_msg.push_str("     - The tool supports normalized whitespace matching\n");
+                error_msg.push_str("     - Get close enough and let normalization handle small differences\n");
+                error_msg.push_str("\n");
 
                 return ToolResult::error(error_msg);
             }
