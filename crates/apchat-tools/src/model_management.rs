@@ -1,5 +1,6 @@
 use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefinition};
 use apchat_toolcore::tool_context::ToolContext;
+use apchat_policy;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
@@ -7,7 +8,6 @@ use std::path::PathBuf;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
-use rustyline::DefaultEditor;
 use strsim::levenshtein;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -682,49 +682,24 @@ impl Tool for ApplyEditPlanTool {
 
         println!("{}", "═".repeat(60).bright_black());
 
-        // Check if we need to ask for confirmation
-        // In non-interactive mode (web/API), skip prompt - already confirmed via web UI
-        if !context.non_interactive {
-            // Ask for confirmation in interactive mode
-            println!("\n{}", "Apply all these changes? [Y/n]".bright_green().bold());
+        // Check permission using policy system
+        let (approved, rejection_reason) = match context.check_permission(
+            apchat_policy::ActionType::ApplyEditPlan,
+            "",
+            "Apply all these changes? [Y/n]"
+        ) {
+            Ok((approved, reason)) => (approved, reason),
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        };
 
-            let mut rl = match DefaultEditor::new() {
-                Ok(rl) => rl,
-                Err(e) => return ToolResult::error(format!("Failed to create readline editor: {}", e)),
+        if !approved {
+            clear_edit_plan(&context.work_dir);
+            let error_msg = if let Some(reason) = rejection_reason {
+                format!("Edit plan application cancelled by user: {}", reason)
+            } else {
+                "Edit plan application cancelled by user or policy".to_string()
             };
-
-            let response = match rl.readline(">>> ") {
-                Ok(resp) => resp,
-                Err(_) => {
-                    clear_edit_plan(&context.work_dir);
-                    return ToolResult::error("Edit plan application cancelled by user".to_string());
-                }
-            };
-
-            let response = response.trim().to_lowercase();
-
-            match response.as_str() {
-                "" | "y" | "yes" => {
-                    // Continue with applying edits
-                    println!("\n{}", "Applying edits...".green());
-                }
-                _ => {
-                    // Cancelled - ask for optional feedback
-                    println!("{}", "Would you like to provide feedback to the model about why you rejected this? (optional)".bright_yellow());
-                    println!("{}", "Press Enter to skip, or type your feedback:".bright_black());
-
-                    let feedback = match rl.readline("") {
-                        Ok(fb) if !fb.trim().is_empty() => format!(" - {}", fb.trim()),
-                        _ => String::new(),
-                    };
-
-                    clear_edit_plan(&context.work_dir);
-                    return ToolResult::error(format!("Edit plan application cancelled by user{}", feedback));
-                }
-            }
-        } else {
-            // Non-interactive mode - auto-confirm (already confirmed via web UI)
-            println!("\n{}", "✓ Confirmed via web UI - Applying edits...".green());
+            return ToolResult::error(error_msg);
         }
 
         // Apply all edits sequentially
