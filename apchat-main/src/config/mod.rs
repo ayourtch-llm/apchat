@@ -128,6 +128,9 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     // Register system tools
     registry.register_with_categories(RunCommandTool, vec!["system".to_string()]);
 
+    // Register web tools
+    registry.register_with_categories(FetchUrlTool, vec!["web".to_string()]);
+
     // Register model management tools
     registry.register_with_categories(SwitchModelTool::new(), vec!["model_management".to_string()]);
     registry.register_with_categories(PlanEditsTool, vec!["model_management".to_string()]);

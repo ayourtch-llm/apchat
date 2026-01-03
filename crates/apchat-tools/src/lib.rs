@@ -1,7 +1,7 @@
 //! Tool modules for APChat
 //!
 //! This module contains all available tools that can be used by AI models,
-//! organized by functionality (file operations, search, system, model management, project tools).
+//! organized by functionality (file operations, search, system, model management, project tools, web).
 
 pub mod file_ops;
 pub mod search;
@@ -15,6 +15,7 @@ pub mod todo_tools;
 pub mod terminal_tools;
 pub mod open_file;
 pub mod subagent_tools;
+pub mod web;
 
 pub use file_ops::*;
 pub use search::*;
@@ -25,3 +26,4 @@ pub use skill_tools::*;
 pub use todo_tools::*;
 pub use terminal_tools::*;
 pub use subagent_tools::*;
+pub use web::*;

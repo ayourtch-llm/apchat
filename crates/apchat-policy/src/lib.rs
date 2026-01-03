@@ -21,6 +21,8 @@ pub enum ActionType {
     PlanEdits,
     /// Applying a batch edit plan
     ApplyEditPlan,
+    /// Making HTTP network requests
+    NetworkRequest,
 }
 
 impl std::fmt::Display for ActionType {
@@ -33,6 +35,7 @@ impl std::fmt::Display for ActionType {
             ActionType::CommandExecution => write!(f, "command_execution"),
             ActionType::PlanEdits => write!(f, "plan_edits"),
             ActionType::ApplyEditPlan => write!(f, "apply_edit_plan"),
+            ActionType::NetworkRequest => write!(f, "network_request"),
         }
     }
 }
@@ -106,6 +109,10 @@ impl PolicyRule {
             ActionType::CommandExecution => {
                 // For commands, use prefix matching or wildcards
                 command_match(&self.pattern, target)
+            }
+            ActionType::NetworkRequest => {
+                // For URLs, use pattern matching on domain/path
+                url_match(&self.pattern, target)
             }
             ActionType::PlanEdits | ActionType::ApplyEditPlan => {
                 // These don't have specific targets, match all
@@ -389,6 +396,30 @@ fn command_match(pattern: &str, command: &str) -> bool {
 
     // Exact match
     pattern == command
+}
+
+/// Simple URL matching implementation
+fn url_match(pattern: &str, url: &str) -> bool {
+    // Support wildcards in URL patterns
+    if pattern == "*" {
+        return true;
+    }
+
+    // Handle domain patterns (e.g., "*.example.com")
+    if pattern.starts_with("*.") {
+        let domain = pattern.trim_start_matches("*.");
+        // Check if URL contains the domain
+        return url.contains(domain);
+    }
+
+    // Handle prefix patterns (e.g., "https://api.example.com/*")
+    if pattern.ends_with("/*") || pattern.ends_with("*") {
+        let prefix = pattern.trim_end_matches('*').trim_end_matches('/');
+        return url.starts_with(prefix);
+    }
+
+    // Exact match
+    pattern == url
 }
 
 #[cfg(test)]
