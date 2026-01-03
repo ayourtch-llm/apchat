@@ -1,5 +1,6 @@
 use anyhow::Result;
 use colored::Colorize;
+use std::collections::HashSet;
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
@@ -26,9 +27,101 @@ pub fn get_max_session_size(model: &ModelColor) -> usize {
 pub fn should_compact_session(chat: &APChat, model: &ModelColor) -> bool {
     let conversation_size = calculate_conversation_size(&chat.messages);
     let max_size = get_max_session_size(model);
-    
+
     // Add a 25% buffer before triggering compaction
     conversation_size > (max_size * 125) / 100
+}
+
+/// Find the cutoff point for keeping recent messages while preserving tool call/result pairs
+///
+/// Returns the index in the messages array where we should start keeping messages.
+/// All messages from this index onwards will be kept (not summarized).
+///
+/// This function ensures that:
+/// 1. If we keep an assistant message with tool_calls, we also keep all corresponding tool results
+/// 2. If we keep a tool result, we also keep the assistant message with the tool_call
+/// 3. We don't orphan any tool calls or tool results
+fn find_cutoff_preserving_tool_pairs(
+    messages: &[Message],
+    target_keep_count: usize,
+) -> usize {
+    if messages.is_empty() || messages.len() <= target_keep_count {
+        return 0; // Keep everything
+    }
+
+    // Start with the naive cutoff
+    let naive_cutoff = messages.len() - target_keep_count;
+
+    // Track which indices we must keep
+    let mut must_keep = HashSet::new();
+    for i in naive_cutoff..messages.len() {
+        must_keep.insert(i);
+    }
+
+    // Expand to include complete tool call/result pairs
+    let mut needs_processing = true;
+    while needs_processing {
+        needs_processing = false;
+        let current_must_keep: Vec<usize> = must_keep.iter().copied().collect();
+
+        for &idx in &current_must_keep {
+            let message = &messages[idx];
+
+            // If this is an assistant message with tool calls, ensure all results are included
+            if message.role == "assistant" {
+                if let Some(tool_calls) = &message.tool_calls {
+                    let tool_call_ids: HashSet<String> = tool_calls
+                        .iter()
+                        .map(|tc| tc.id.clone())
+                        .collect();
+
+                    // Find all corresponding tool results after this message
+                    for j in (idx + 1)..messages.len() {
+                        if messages[j].role == "tool" {
+                            if let Some(tool_call_id) = &messages[j].tool_call_id {
+                                if tool_call_ids.contains(tool_call_id) {
+                                    if !must_keep.contains(&j) {
+                                        must_keep.insert(j);
+                                        needs_processing = true;
+                                    }
+                                }
+                            }
+                        } else if messages[j].role == "assistant" || messages[j].role == "user" {
+                            // Stop looking for results after we hit another assistant/user message
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // If this is a tool result, ensure the assistant message with the call is included
+            if message.role == "tool" {
+                if let Some(tool_call_id) = &message.tool_call_id {
+                    // Search backwards for the assistant message with this tool call
+                    for j in (0..idx).rev() {
+                        if messages[j].role == "assistant" {
+                            if let Some(tool_calls) = &messages[j].tool_calls {
+                                let has_matching_call = tool_calls
+                                    .iter()
+                                    .any(|tc| &tc.id == tool_call_id);
+
+                                if has_matching_call {
+                                    if !must_keep.contains(&j) {
+                                        must_keep.insert(j);
+                                        needs_processing = true;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Find the minimum index that must be kept
+    must_keep.into_iter().min().unwrap_or(naive_cutoff)
 }
 
 /// Intelligent compaction that preserves recent tool call context while summarizing older messages
@@ -95,17 +188,23 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     
     // Keep system message and very recent messages
     let system_message = chat.messages.first().cloned();
+
+    // Find the cutoff point that preserves tool call/result pairs
+    // Start from the rough cutoff and adjust to avoid breaking tool pairs
+    let final_cutoff = find_cutoff_preserving_tool_pairs(&chat.messages, PRESERVE_RECENT_MESSAGES);
+
+    // Extract recent messages (from cutoff to end)
     let recent_messages: Vec<Message> = chat.messages
         .iter()
-        .skip(cutoff)
+        .skip(final_cutoff)
         .cloned()
         .collect();
-    
+
     // Get messages to summarize (everything between system and recent)
     let to_summarize: Vec<Message> = chat.messages
         .iter()
         .skip(1) // Skip system
-        .take(cutoff - 1)
+        .take(final_cutoff.saturating_sub(1))
         .cloned()
         .collect();
     
@@ -295,11 +394,14 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
 
     // Keep system message and recent messages
     let system_message = chat.messages.first().cloned();
+
+    // Find the cutoff point that preserves tool call/result pairs
+    let cutoff = find_cutoff_preserving_tool_pairs(&chat.messages, KEEP_RECENT_MESSAGES);
+
+    // Extract recent messages (from cutoff to end)
     let recent_messages: Vec<Message> = chat.messages
         .iter()
-        .rev()
-        .take(KEEP_RECENT_MESSAGES)
-        .rev()
+        .skip(cutoff)
         .cloned()
         .collect();
 
@@ -307,7 +409,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     let to_summarize: Vec<Message> = chat.messages
         .iter()
         .skip(1) // Skip system
-        .take(chat.messages.len() - KEEP_RECENT_MESSAGES - 1)
+        .take(cutoff.saturating_sub(1))
         .cloned()
         .collect();
 
