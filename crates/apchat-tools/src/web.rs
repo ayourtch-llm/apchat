@@ -33,7 +33,7 @@ impl Tool for FetchUrlTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("url", "string", "The URL to fetch", required),
-            param!("format", "string", "Response format: 'auto' (default), 'raw', 'json', or 'text'", optional),
+            param!("format", "string", "Response format: 'auto' (default), 'raw', 'json', 'text', or 'markdown'", optional),
             param!("headers", "object", "Custom HTTP headers as key-value pairs", optional),
             param!("timeout", "number", "Request timeout in seconds (default: 30, max: 120)", optional),
             param!("max_size", "number", "Maximum response size in bytes (default: 10MB, max: 50MB)", optional),
@@ -54,8 +54,8 @@ impl Tool for FetchUrlTool {
             .unwrap_or_else(|| "auto".to_string());
 
         // Validate format
-        if !matches!(format.as_str(), "auto" | "raw" | "json" | "text") {
-            return ToolResult::error(format!("Invalid format '{}'. Must be 'auto', 'raw', 'json', or 'text'", format));
+        if !matches!(format.as_str(), "auto" | "raw" | "json" | "text" | "markdown") {
+            return ToolResult::error(format!("Invalid format '{}'. Must be 'auto', 'raw', 'json', 'text', or 'markdown'", format));
         }
 
         // Parse optional timeout parameter
@@ -169,6 +169,7 @@ impl Tool for FetchUrlTool {
             "raw" => body,
             "json" => format_as_json(&body, &content_type),
             "text" => format_as_text(&body, &content_type),
+            "markdown" => format_as_markdown(&body, &content_type),
             "auto" => auto_format(&body, &content_type),
             _ => body, // Should not reach here due to validation above
         };
@@ -321,6 +322,20 @@ fn format_as_text(body: &str, content_type: &str) -> String {
     }
 }
 
+/// Format response as markdown (convert HTML to markdown if detected)
+fn format_as_markdown(body: &str, content_type: &str) -> String {
+    if content_type.contains("html") || body.trim_start().starts_with("<!DOCTYPE") || body.trim_start().starts_with("<html") {
+        // Convert HTML to markdown
+        html2md::parse_html(body)
+    } else if content_type.contains("json") {
+        // JSON doesn't need markdown conversion, just return as-is
+        format_as_json(body, content_type)
+    } else {
+        // Plain text, return as-is
+        body.to_string()
+    }
+}
+
 /// Simple HTML tag stripping
 fn strip_html_tags(html: &str) -> String {
     let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
@@ -393,5 +408,37 @@ mod tests {
         assert!(stripped.contains("Paragraph"));
         assert!(!stripped.contains("<html>"));
         assert!(!stripped.contains("<p>"));
+    }
+
+    #[test]
+    fn test_format_as_markdown() {
+        let html = "<html><body><h1>Title</h1><p>This is a <strong>paragraph</strong> with <a href='http://example.com'>a link</a>.</p></body></html>";
+        let markdown = format_as_markdown(html, "text/html");
+
+        // Check that markdown conversion happened
+        assert!(markdown.contains("# Title") || markdown.contains("Title"));
+        assert!(markdown.contains("paragraph"));
+        assert!(!markdown.contains("<h1>"));
+        assert!(!markdown.contains("<p>"));
+        assert!(!markdown.contains("<strong>"));
+    }
+
+    #[test]
+    fn test_format_as_markdown_with_json() {
+        let json = r#"{"key": "value"}"#;
+        let result = format_as_markdown(json, "application/json");
+
+        // Should format as JSON, not try to convert as HTML
+        assert!(result.contains("key"));
+        assert!(result.contains("value"));
+    }
+
+    #[test]
+    fn test_format_as_markdown_with_plain_text() {
+        let text = "Just plain text";
+        let result = format_as_markdown(text, "text/plain");
+
+        // Should return as-is
+        assert_eq!(result, text);
     }
 }

@@ -19,7 +19,7 @@ Add a `fetch_url` tool to enable HTTP GET requests for documentation, API explor
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `url` | string | Yes | - | The URL to fetch |
-| `format` | string | No | "auto" | Response format: "auto", "raw", "json", or "text" |
+| `format` | string | No | "auto" | Response format: "auto", "raw", "json", "text", or "markdown" |
 | `headers` | object | No | {} | Custom HTTP headers as key-value pairs |
 | `timeout` | number | No | 30 | Request timeout in seconds (max 120) |
 | `max_size` | number | No | 10485760 | Maximum response size in bytes (10MB default, 50MB max) |
@@ -33,7 +33,8 @@ Add a `fetch_url` tool to enable HTTP GET requests for documentation, API explor
   - Binary → Return error
 - **`raw`**: Return raw response body unchanged
 - **`json`**: Parse and pretty-print as JSON
-- **`text`**: Return as plain text
+- **`text`**: Return as plain text (strip HTML tags if detected)
+- **`markdown`**: Convert HTML to markdown format (useful for reading web pages)
 
 ## Security Measures
 
@@ -101,7 +102,8 @@ Partial response available: [first 10MB]
 - `reqwest` (already available)
 - `serde_json` (already available)
 - `tokio` with timeout feature (already available)
-- HTML text extraction: simple regex or `scraper` crate
+- `html2md` - HTML to markdown conversion
+- `regex` - HTML tag stripping for text format
 
 ### Error Handling
 
