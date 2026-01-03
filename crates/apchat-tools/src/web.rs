@@ -27,13 +27,13 @@ impl Tool for FetchUrlTool {
     }
 
     fn description(&self) -> &str {
-        "Fetch content from a URL via HTTP GET request"
+        "Fetch content from a URL via HTTP GET request. Prefer 'markdown' format for HTML pages - it converts to clean, readable markdown. Use 'raw' only if you need unprocessed content, as it may include large amounts of JavaScript and CSS."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("url", "string", "The URL to fetch", required),
-            param!("format", "string", "Response format: 'auto' (default), 'raw', 'json', 'text', or 'markdown'", optional),
+            param!("format", "string", "Response format: 'auto' (default), 'raw', 'json', or 'markdown'", optional),
             param!("headers", "object", "Custom HTTP headers as key-value pairs", optional),
             param!("timeout", "number", "Request timeout in seconds (default: 30, max: 120)", optional),
             param!("max_size", "number", "Maximum response size in bytes (default: 10MB, max: 50MB)", optional),
@@ -54,8 +54,8 @@ impl Tool for FetchUrlTool {
             .unwrap_or_else(|| "auto".to_string());
 
         // Validate format
-        if !matches!(format.as_str(), "auto" | "raw" | "json" | "text" | "markdown") {
-            return ToolResult::error(format!("Invalid format '{}'. Must be 'auto', 'raw', 'json', 'text', or 'markdown'", format));
+        if !matches!(format.as_str(), "auto" | "raw" | "json" | "markdown") {
+            return ToolResult::error(format!("Invalid format '{}'. Must be 'auto', 'raw', 'json', or 'markdown'", format));
         }
 
         // Parse optional timeout parameter
@@ -168,7 +168,6 @@ impl Tool for FetchUrlTool {
         let formatted_body = match format.as_str() {
             "raw" => body,
             "json" => format_as_json(&body, &content_type),
-            "text" => format_as_text(&body, &content_type),
             "markdown" => format_as_markdown(&body, &content_type),
             "auto" => auto_format(&body, &content_type),
             _ => body, // Should not reach here due to validation above
@@ -282,7 +281,8 @@ fn auto_format(body: &str, content_type: &str) -> String {
     if content_type.contains("application/json") || content_type.contains("json") {
         format_as_json(body, content_type)
     } else if content_type.contains("text/html") || content_type.contains("html") {
-        format!("HTML content ({} bytes)\n\n{}", body.len(), strip_html_tags(body))
+        // Convert HTML to markdown for better readability
+        html2md::parse_html(body)
     } else if content_type.starts_with("text/") {
         body.to_string()
     } else if content_type.contains("image/") || content_type.contains("video/") || content_type.contains("audio/") {
@@ -313,15 +313,6 @@ fn format_as_json(body: &str, _content_type: &str) -> String {
     }
 }
 
-/// Format response as text (strip HTML if detected)
-fn format_as_text(body: &str, content_type: &str) -> String {
-    if content_type.contains("html") || body.trim_start().starts_with("<!DOCTYPE") || body.trim_start().starts_with("<html") {
-        strip_html_tags(body)
-    } else {
-        body.to_string()
-    }
-}
-
 /// Format response as markdown (convert HTML to markdown if detected)
 fn format_as_markdown(body: &str, content_type: &str) -> String {
     if content_type.contains("html") || body.trim_start().starts_with("<!DOCTYPE") || body.trim_start().starts_with("<html") {
@@ -336,28 +327,6 @@ fn format_as_markdown(body: &str, content_type: &str) -> String {
     }
 }
 
-/// Simple HTML tag stripping
-fn strip_html_tags(html: &str) -> String {
-    let tag_regex = regex::Regex::new(r"<[^>]*>").unwrap();
-    let without_tags = tag_regex.replace_all(html, "");
-
-    // Decode common HTML entities
-    let decoded = without_tags
-        .replace("&nbsp;", " ")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'");
-
-    // Clean up excessive whitespace
-    let lines: Vec<&str> = decoded.lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .collect();
-
-    lines.join("\n")
-}
 
 #[cfg(test)]
 mod tests {
@@ -398,16 +367,6 @@ mod tests {
         assert!(is_private_or_localhost("192.168.1.1"));
         assert!(!is_private_or_localhost("8.8.8.8"));
         assert!(!is_private_or_localhost("example.com"));
-    }
-
-    #[test]
-    fn test_strip_html_tags() {
-        let html = "<html><body><h1>Title</h1><p>Paragraph</p></body></html>";
-        let stripped = strip_html_tags(html);
-        assert!(stripped.contains("Title"));
-        assert!(stripped.contains("Paragraph"));
-        assert!(!stripped.contains("<html>"));
-        assert!(!stripped.contains("<p>"));
     }
 
     #[test]
