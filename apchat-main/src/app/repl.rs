@@ -188,6 +188,24 @@ pub async fn run_repl_mode(
 
     let mut rl = DefaultEditor::new()?;
 
+    // Validate and process idle timeout configuration
+    let idle_config = if let (Some(timeout_secs), Some(input_text)) = (&cli.idle_timeout, &cli.idle_input) {
+        // Validate timeout range
+        if *timeout_secs < 1 || *timeout_secs > 86400 {
+            anyhow::bail!("Idle timeout must be between 1 and 86400 seconds");
+        }
+        println!("{} Idle timeout enabled: {} seconds -> \"{}\"",
+            "⏱️".bright_yellow(),
+            timeout_secs,
+            input_text.bright_cyan()
+        );
+        Some((*timeout_secs, input_text.clone()))
+    } else if cli.idle_timeout.is_some() || cli.idle_input.is_some() {
+        anyhow::bail!("Both --idle-timeout and --idle-input must be specified together");
+    } else {
+        None
+    };
+
     // Read apchat.md if it exists to get project context
     let kimi_context = if let Ok(kimi_content) = chat.read_file("apchat.md") {
         println!("{} {}", "📖".bright_cyan(), "Reading project context from apchat.md...".bright_black());
@@ -248,7 +266,41 @@ pub async fn run_repl_mode(
     loop {
         let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
         let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
-        let readline = rl.readline(&format!("{} {} ", model_indicator, "You:".bright_green().bold()));
+        let prompt = format!("{} {} ", model_indicator, "You:".bright_green().bold());
+
+        // Read input with optional timeout support
+        let readline = if let Some((timeout_secs, ref idle_input_text)) = idle_config {
+            // Use tokio::select to wait for either user input or timeout
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<String, ReadlineError>>(1);
+            let prompt_clone = prompt.clone();
+
+            // Spawn readline in a blocking task
+            tokio::task::spawn_blocking(move || {
+                let mut rl_temp = DefaultEditor::new().unwrap();
+                let result = rl_temp.readline(&prompt_clone);
+                let _ = tx.blocking_send(result);
+            });
+
+            // Wait for either readline or timeout
+            let timeout_duration = std::time::Duration::from_secs(timeout_secs as u64);
+            tokio::select! {
+                Some(result) = rx.recv() => {
+                    // User provided input before timeout
+                    result
+                }
+                _ = tokio::time::sleep(timeout_duration) => {
+                    // Timeout occurred - inject the configured input
+                    println!("{} Idle timeout reached, injecting: \"{}\"",
+                        "⏱️".bright_yellow(),
+                        idle_input_text.bright_cyan()
+                    );
+                    Ok(idle_input_text.clone())
+                }
+            }
+        } else {
+            // No timeout - use regular readline with persistent instance
+            rl.readline(&prompt)
+        };
 
         match readline {
             Ok(line) => {

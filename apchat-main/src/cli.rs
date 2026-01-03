@@ -159,6 +159,14 @@ pub struct Cli {
     /// Directory for persistent web session storage
     #[arg(long, default_value = "~/.okaychat/sessions", env = "OKAYCHAT_SESSIONS_DIR")]
     pub sessions_dir: String,
+
+    /// Idle timeout in seconds (1-86400). If no keystrokes for this duration, inject idle_input string
+    #[arg(long, value_name = "SECONDS")]
+    pub idle_timeout: Option<u32>,
+
+    /// String to inject as user input when idle timeout is reached
+    #[arg(long, value_name = "TEXT")]
+    pub idle_input: Option<String>,
 }
 
 #[derive(Subcommand)]
