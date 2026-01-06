@@ -369,6 +369,10 @@ impl Tool for ListFilesTool {
 
                     // Get relative path
                     if let Ok(relative_path) = path.strip_prefix(&context.work_dir) {
+                        if relative_path.starts_with(".git") {
+                            // skip everything that is a git repo
+                            continue;
+                        }
                         if let Some(path_str) = relative_path.to_str() {
                             // Check if path matches the glob pattern
                             if glob_matcher.matches(path_str) {
