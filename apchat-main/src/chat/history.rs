@@ -124,6 +124,42 @@ fn find_cutoff_preserving_tool_pairs(
     must_keep.into_iter().min().unwrap_or(naive_cutoff)
 }
 
+/// Ensure proper role alternation after system messages
+/// After system messages, conversation must alternate between user and assistant roles
+/// This function ensures that after system messages, the first non-system message is user
+fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
+    if messages.len() <= 2 {
+        return; // Not enough messages to have an issue
+    }
+    
+    // Find the first non-system message after system messages
+    let mut first_non_system_idx = 0;
+    for (i, msg) in messages.iter().enumerate() {
+        if msg.role != "system" {
+            first_non_system_idx = i;
+            break;
+        }
+    }
+    
+    // If the first non-system message is not user, we need to fix it
+    if first_non_system_idx > 0 && first_non_system_idx < messages.len() {
+        let first_non_system = &messages[first_non_system_idx];
+        
+        // If it's assistant (not a tool call/result), convert it to user
+        if first_non_system.role == "assistant" {
+            // Check if it's actually a tool call message
+            let is_tool_call = first_non_system.tool_calls.is_some();
+            
+            if !is_tool_call {
+                // Convert assistant to user message to maintain alternation
+                let mut fixed_msg = first_non_system.clone();
+                fixed_msg.role = "user".to_string();
+                messages[first_non_system_idx] = fixed_msg;
+            }
+        }
+    }
+}
+
 /// Intelligent compaction that preserves recent tool call context while summarizing older messages
 /// This is designed to work during tool-calling loops without losing recent context
 pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: usize) -> Result<()> {
@@ -307,8 +343,13 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     if !response.status().is_success() {
         // If summarization fails, do simple trimming
         println!("{} Intelligent compaction failed, doing simple trim", "⚠️".yellow());
-        chat.messages = vec![system_message.unwrap()];
-        chat.messages.extend(recent_messages);
+        let mut new_history = vec![system_message.unwrap()];
+        new_history.extend(recent_messages);
+        
+        // Ensure proper role alternation after system messages
+        ensure_proper_role_alternation(&mut new_history);
+        
+        chat.messages = new_history;
         return Ok(());
     }
     
@@ -341,6 +382,9 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         
         // Add recent messages (including recent tool context)
         new_history.extend(recent_messages);
+        
+        // Ensure proper role alternation after system messages
+        ensure_proper_role_alternation(&mut new_history);
         
         chat.messages = new_history;
         
@@ -488,8 +532,13 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     if !response.status().is_success() {
         // If summarization fails, just trim without summarizing
         println!("{} Summarization failed, doing simple trim", "⚠️".yellow());
-        chat.messages = vec![system_message.unwrap()];
-        chat.messages.extend(recent_messages);
+        let mut new_history = vec![system_message.unwrap()];
+        new_history.extend(recent_messages);
+        
+        // Ensure proper role alternation after system messages
+        ensure_proper_role_alternation(&mut new_history);
+        
+        chat.messages = new_history;
         return Ok(());
     }
 
@@ -529,6 +578,9 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
 
         // Add recent messages
         new_history.extend(recent_messages);
+        
+        // Ensure proper role alternation after system messages
+        ensure_proper_role_alternation(&mut new_history);
 
         chat.messages = new_history;
 
