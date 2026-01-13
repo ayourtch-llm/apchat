@@ -20,8 +20,8 @@ This document outlines the implementation plan for refactoring the logical LLM "
 Located in `crates/apchat-models/src/types.rs`
 
 Current ModelColor enum has:
-- `BluModel` (mapped to "moonshotai/kimi-k2-instruct-0905")
-- `GrnModel` (mapped to "openai/gpt-oss-120b")
+- `BluModel` (mapped to "some-model")
+- `GrnModel` (mapped to "some-model")
 - `RedModel` (mapped to "meta-llama/llama-3.1-70b-versatile")
 - `AnthropicModel` (mapped to "claude-3-5-sonnet-20241022")
 - `Custom(String)`
@@ -93,8 +93,8 @@ Add mapping system:
 
 ```rust
 // Default mappings for each model color
-pub const DEFAULT_BLU_MODEL: &str = "moonshotai/kimi-k2-instruct-0905";
-pub const DEFAULT_GRN_MODEL: &str = "openai/gpt-oss-120b";
+pub const DEFAULT_BLU_MODEL: &str = "some-model";
+pub const DEFAULT_GRN_MODEL: &str = "some-model";
 pub const DEFAULT_RED_MODEL: &str = "meta-llama/llama-3.1-70b-versatile";
 
 pub const DEFAULT_BLU_BACKEND: BackendType = BackendType::Groq;

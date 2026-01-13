@@ -6,9 +6,9 @@ mod model_resolution_tests {
     fn test_default_model_resolution() {
         assert_eq!(
             ModelColor::BluModel.as_str_default(),
-            "moonshotai/kimi-k2-instruct-0905"
+            "some-model"
         );
-        assert_eq!(ModelColor::GrnModel.as_str_default(), "openai/gpt-oss-120b");
+        assert_eq!(ModelColor::GrnModel.as_str_default(), "some-model");
         assert_eq!(
             ModelColor::RedModel.as_str_default(),
             "meta-llama/llama-3.1-70b-versatile"
@@ -57,11 +57,11 @@ mod model_resolution_tests {
 
         assert_eq!(
             ModelColor::BluModel.as_str(no_override, no_override, no_override),
-            "moonshotai/kimi-k2-instruct-0905"
+            "some-model"
         );
         assert_eq!(
             ModelColor::GrnModel.as_str(no_override, no_override, no_override),
-            "openai/gpt-oss-120b"
+            "some-model"
         );
         assert_eq!(
             ModelColor::RedModel.as_str(no_override, no_override, no_override),
@@ -107,7 +107,7 @@ mod model_resolution_tests {
         );
         assert_eq!(
             ModelColor::GrnModel.as_str(blu_override, no_grn, red_override),
-            "openai/gpt-oss-120b" // Falls back to default
+            "some-model" // Falls back to default
         );
         assert_eq!(
             ModelColor::RedModel.as_str(blu_override, no_grn, red_override),

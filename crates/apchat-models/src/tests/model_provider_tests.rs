@@ -13,7 +13,7 @@ mod tests {
                 Some("key1".to_string()),
             ),
             ModelProvider::with_config(
-                "openai/gpt-oss-120b".to_string(),
+                "some-model".to_string(),
                 Some(BackendType::OpenAI),
                 Some("https://api.openai.com".to_string()),
                 Some("key2".to_string()),
@@ -27,8 +27,8 @@ mod tests {
         ];
 
         // Test that indexing works correctly with explicit discriminants
-        assert_eq!(providers[ModelColor::BluModel as usize].model_name, "moonshotai/kimi-k2-instruct-0905");
-        assert_eq!(providers[ModelColor::GrnModel as usize].model_name, "openai/gpt-oss-120b");
+        assert_eq!(providers[ModelColor::BluModel as usize].model_name, "some-model");
+        assert_eq!(providers[ModelColor::GrnModel as usize].model_name, "some-model");
         assert_eq!(providers[ModelColor::RedModel as usize].model_name, "meta-llama/llama-3.1-70b-versatile");
 
         // Test backends

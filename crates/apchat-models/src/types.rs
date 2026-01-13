@@ -133,9 +133,9 @@ impl ModelColor {
     /// with any color regardless of the default mapping shown below.
     pub fn default_model(&self) -> String {
         match self {
-            ModelColor::BluModel => "moonshotai/kimi-k2-instruct-0905".to_string(),
-            ModelColor::GrnModel => "openai/gpt-oss-120b".to_string(),
-            ModelColor::RedModel => "moonshotai/kimi-k2-instruct".to_string(),
+            ModelColor::BluModel => "some-model".to_string(),
+            ModelColor::GrnModel => "some-model".to_string(),
+            ModelColor::RedModel => "some-model".to_string(),
         }
     }
 

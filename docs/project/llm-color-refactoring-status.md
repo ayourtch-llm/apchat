@@ -43,8 +43,8 @@ The refactoring successfully:
    - `model` - e.g., "gpt-oss-120b"
 
 2. **Default Mappings**: Each color now has a default mapping:
-   - BluModel: moonshotai/kimi-k2-instruct-0905, Groq backend, Groq API URL
-   - GrnModel: openai/gpt-oss-120b, Groq backend, Groq API URL
+   - BluModel: some-model, Groq backend, Groq API URL
+   - GrnModel: some-model, Groq backend, Groq API URL
    - RedModel: meta-llama/llama-3.1-70b-versatile, Groq backend, Groq API URL
 
 This refactoring makes the system more flexible while maintaining full backward compatibility.

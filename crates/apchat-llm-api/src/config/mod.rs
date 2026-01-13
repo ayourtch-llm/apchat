@@ -33,8 +33,8 @@ pub fn get_default_model_for_backend(backend: &BackendType) -> &'static str {
 }
 
 /// Default model names for each color
-pub const DEFAULT_BLU_MODEL: &str = "moonshotai/kimi-k2-instruct-0905";
-pub const DEFAULT_GRN_MODEL: &str = "openai/gpt-oss-120b";
+pub const DEFAULT_BLU_MODEL: &str = "some-model";
+pub const DEFAULT_GRN_MODEL: &str = "some-model";
 pub const DEFAULT_RED_MODEL: &str = "meta-llama/llama-3.1-70b-versatile";
 
 /// Default backends for each color

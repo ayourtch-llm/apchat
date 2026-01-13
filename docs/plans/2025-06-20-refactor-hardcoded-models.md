@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Replace hardcoded model identifiers (like "moonshotai/kimi-k2-instruct-0905") with configurable models from the current config system, enabling proper model overrides.
+**Goal:** Replace hardcoded model identifiers (like "some-model") with configurable models from the current config system, enabling proper model overrides.
 
 **Architecture:** 
 - Create a new method `get_model_identifier()` that uses the current chat config instead of hardcoded values
@@ -17,8 +17,8 @@
 ## Analysis Phase
 
 ### Current Hardcoded Models Found:
-- `ModelColor::BluModel.as_str()` → "moonshotai/kimi-k2-instruct-0905"
-- `ModelColor::GrnModel.as_str()` → "openai/gpt-oss-120b"  
+- `ModelColor::BluModel.as_str()` → "some-model"
+- `ModelColor::GrnModel.as_str()` → "some-model"  
 - `ModelColor::RedModel.as_str()` → "meta-llama/llama-3.1-70b-versatile"
 - `ModelColor::AnthropicModel.as_str()` → "claude-3-5-sonnet-20241022"
 
@@ -273,8 +273,8 @@ mod model_resolution_tests {
 
     #[test]
     fn test_default_model_resolution() {
-        assert_eq!(ModelColor::BluModel.as_str_default(), "moonshotai/kimi-k2-instruct-0905");
-        assert_eq!(ModelColor::GrnModel.as_str_default(), "openai/gpt-oss-120b");
+        assert_eq!(ModelColor::BluModel.as_str_default(), "some-model");
+        assert_eq!(ModelColor::GrnModel.as_str_default(), "some-model");
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod model_resolution_tests {
         );
         assert_eq!(
             ModelColor::GrnModel.as_str(Some(&config)),
-            "openai/gpt-oss-120b"  // falls back to default
+            "some-model"  // falls back to default
         );
     }
 
@@ -296,7 +296,7 @@ mod model_resolution_tests {
     fn test_no_config_fallback() {
         assert_eq!(
             ModelColor::BluModel.as_str(None),
-            "moonshotai/kimi-k2-instruct-0905"
+            "some-model"
         );
     }
 
