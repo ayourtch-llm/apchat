@@ -292,9 +292,10 @@ impl PolicyManager {
         Ok(())
     }
 
-    /// Get the policy file path
-    pub fn policy_file(&self) -> Option<&Path> {
-        self.policy_file.as_deref()
+    /// Check if the policy manager is in allow-all mode (auto-confirm enabled)
+    pub fn is_allow_all(&self) -> bool {
+        let config = self.config.read().unwrap();
+        matches!(config.default, Decision::Allow)
     }
 
     /// Check if learning mode is enabled

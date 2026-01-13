@@ -487,6 +487,7 @@ pub async fn run_repl_mode(
                     println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
                     println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
                     println!("  /compact               - Force immediate conversation compaction to reduce session size");
+                    println!("  /confirm                - Toggle auto-confirm mode (enable/disable confirmation prompts)");
                     println!("  /skills help            - Show this help");
                     continue;
                 }
@@ -610,6 +611,28 @@ pub async fn run_repl_mode(
                             eprintln!("{} Failed to compact conversation: {}", "❌".bright_red(), e);
                         }
                     }
+                    continue;
+                }
+
+                // Handle /confirm command
+                if line == "/confirm" {
+                    // Check if we're in auto-confirm mode
+                    let is_auto_confirm = chat.policy_manager.is_allow_all();
+                    
+                    // Toggle the mode
+                    if is_auto_confirm {
+                        // Switch to regular policy manager that asks for confirmation
+                        chat.policy_manager = PolicyManager::new();
+                        println!("{} Auto-confirm mode disabled. Actions will now require confirmation.", "✓".bright_green());
+                    } else {
+                        // Switch to allow-all policy manager for auto-confirm
+                        chat.policy_manager = PolicyManager::allow_all();
+                        println!("{} Auto-confirm mode enabled. All actions will be approved automatically.", "✓".bright_green());
+                    }
+                    
+                    // Print current state
+                    let current_state = chat.policy_manager.is_allow_all();
+                    println!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"});
                     continue;
                 }
 
