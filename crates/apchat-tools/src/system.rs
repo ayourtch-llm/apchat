@@ -6,6 +6,12 @@ use tokio::process::Command as AsyncCommand;
 use colored::Colorize;
 use std::io::Write;
 
+/// Maximum allowed timeout (120 seconds)
+const MAX_TIMEOUT: u64 = 120;
+
+/// Default timeout (30 seconds)
+const DEFAULT_TIMEOUT: u64 = 30;
+
 /// Tool for running shell commands
 pub struct RunCommandTool;
 
@@ -22,6 +28,7 @@ impl Tool for RunCommandTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("command", "string", "Shell command to execute", required),
+            param!("timeout", "number", "Request timeout in seconds (default: 30, max: 120)", optional),
         ])
     }
 
@@ -30,6 +37,16 @@ impl Tool for RunCommandTool {
             Ok(command) => command,
             Err(e) => return ToolResult::error(e.to_string()),
         };
+
+        // Parse optional timeout parameter
+        let timeout_secs = params.get_optional::<u64>("timeout")
+            .ok()
+            .flatten()
+            .unwrap_or(DEFAULT_TIMEOUT);
+
+        if timeout_secs > MAX_TIMEOUT {
+            return ToolResult::error(format!("Timeout {} exceeds maximum of {} seconds", timeout_secs, MAX_TIMEOUT));
+        }
 
         // Basic security checks - prevent dangerous commands
         let dangerous_patterns = [
@@ -68,7 +85,7 @@ impl Tool for RunCommandTool {
             return ToolResult::error(error_msg);
         }
 
-        println!("{} {}", "Running:".green(), command.cyan());
+        println!("{} {} {}ms", "Running:".green(), command.cyan(), timeout_secs * 1000);
 
         // Parse command and arguments
         let orig_command = command.clone();
@@ -79,16 +96,21 @@ impl Tool for RunCommandTool {
 
         let (cmd, args) = parts.split_first().unwrap();
 
-        // Execute command in work directory
-        let output = match AsyncCommand::new("bash")
-            .args(["-c", &orig_command])
-            .current_dir(&context.work_dir)
-            .output()
-            .await
-        {
-            Ok(output) => output,
-            Err(e) => {
+        // Execute command in work directory with timeout
+        let timeout_duration = std::time::Duration::from_secs(timeout_secs);
+        let output = match tokio::time::timeout(timeout_duration, async {
+            AsyncCommand::new("bash")
+                .args(["-c", &orig_command])
+                .current_dir(&context.work_dir)
+                .output()
+                .await
+        }).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
                 return ToolResult::error(format!("Failed to execute command: {}", e));
+            }
+            Err(_) => {
+                return ToolResult::error(format!("Command timed out after {} seconds", timeout_secs));
             }
         };
 
@@ -113,5 +135,31 @@ impl Tool for RunCommandTool {
         };
 
         ToolResult::success(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_parameters_includes_timeout() {
+        let tool = RunCommandTool;
+        let params = tool.parameters();
+        
+        // Check that timeout parameter exists
+        assert!(params.contains_key("timeout"));
+        
+        // Check parameter details
+        let timeout_param = &params["timeout"];
+        assert_eq!(timeout_param.param_type, "number");
+        assert_eq!(timeout_param.description, "Request timeout in seconds (default: 30, max: 120)");
+        assert_eq!(timeout_param.required, false);
+    }
+    
+    #[test]
+    fn test_timeout_constants() {
+        assert_eq!(DEFAULT_TIMEOUT, 30);
+        assert_eq!(MAX_TIMEOUT, 120);
     }
 }
