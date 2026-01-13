@@ -2,8 +2,10 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::io::{BufRead, BufReader};
 use serde_json;
+
 
 /// Tool for launching a subagent to execute a task independently
 pub struct LaunchSubagentTool;
@@ -64,19 +66,62 @@ impl Tool for LaunchSubagentTool {
             cmd.env("APCHAT_TIMEOUT", timeout_seconds.to_string());
         }
 
-        // Execute the command
-        let output = match tokio::task::spawn_blocking(move || {
-            cmd.output()
-        }).await {
-            Ok(Ok(output)) => output,
-            Ok(Err(e)) => return ToolResult::error(format!("Failed to execute subagent: {}", e)),
-            Err(e) => return ToolResult::error(format!("Task join error: {}", e)),
+        // Spawn the process to get PID and capture output
+        let mut child = match cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => return ToolResult::error(format!("Failed to spawn subagent: {}", e)),
+        };
+
+        let pid = child.id();
+        let pid_prefix = format!("[{}] ", pid);
+
+        // Read stdout and stderr in real-time and print with PID prefix
+        let stdout_reader = BufReader::new(child.stdout.take().unwrap());
+        let stderr_reader = BufReader::new(child.stderr.take().unwrap());
+
+        // Use spawn_blocking to read output since we're in async context
+        let result = tokio::task::spawn_blocking(move || {
+            let mut stdout_content = String::new();
+            let mut stderr_content = String::new();
+
+            // Read stdout
+            for line_result in stdout_reader.lines() {
+                if let Ok(line) = line_result {
+                    println!("{}{}", pid_prefix, line);
+                    stdout_content.push_str(&line);
+                    stdout_content.push('\n');
+                }
+            }
+
+            // Read stderr
+            for line_result in stderr_reader.lines() {
+                if let Ok(line) = line_result {
+                    eprintln!("{}{}", pid_prefix, line);
+                    stderr_content.push_str(&line);
+                    stderr_content.push('\n');
+                }
+            }
+
+            (stdout_content, stderr_content)
+        }).await;
+
+        let (stdout, stderr) = match result {
+            Ok(result) => result,
+            Err(e) => return ToolResult::error(format!("Failed to read subagent output: {}", e)),
+        };
+
+        // Wait for process to complete
+        let status = match child.wait() {
+            Ok(status) => status,
+            Err(e) => return ToolResult::error(format!("Failed to wait for subagent: {}", e)),
         };
 
         // Parse the JSON output
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            
+        if status.success() {
             // Try to parse as JSON
             match serde_json::from_str::<serde_json::Value>(&stdout) {
                 Ok(json_result) => {
@@ -99,9 +144,6 @@ impl Tool for LaunchSubagentTool {
                 }
             }
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            
             let error_msg = format!(
                 "❌ **Subagent Task Failed**\n\n**Task:** {}\n\n**Error:**\n{}\n\n**Output:**\n{}",
                 task,
@@ -174,19 +216,62 @@ impl Tool for LaunchSubagentPrettyTool {
             cmd.env("APCHAT_TIMEOUT", timeout_seconds.to_string());
         }
 
-        // Execute the command
-        let output = match tokio::task::spawn_blocking(move || {
-            cmd.output()
-        }).await {
-            Ok(Ok(output)) => output,
-            Ok(Err(e)) => return ToolResult::error(format!("Failed to execute subagent: {}", e)),
-            Err(e) => return ToolResult::error(format!("Task join error: {}", e)),
+        // Spawn the process to get PID and capture output
+        let mut child = match cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => return ToolResult::error(format!("Failed to spawn subagent: {}", e)),
+        };
+
+        let pid = child.id();
+        let pid_prefix = format!("[{}] ", pid);
+
+        // Read stdout and stderr in real-time and print with PID prefix
+        let stdout_reader = BufReader::new(child.stdout.take().unwrap());
+        let stderr_reader = BufReader::new(child.stderr.take().unwrap());
+
+        // Use spawn_blocking to read output since we're in async context
+        let result = tokio::task::spawn_blocking(move || {
+            let mut stdout_content = String::new();
+            let mut stderr_content = String::new();
+
+            // Read stdout
+            for line_result in stdout_reader.lines() {
+                if let Ok(line) = line_result {
+                    println!("{}{}", pid_prefix, line);
+                    stdout_content.push_str(&line);
+                    stdout_content.push('\n');
+                }
+            }
+
+            // Read stderr
+            for line_result in stderr_reader.lines() {
+                if let Ok(line) = line_result {
+                    eprintln!("{}{}", pid_prefix, line);
+                    stderr_content.push_str(&line);
+                    stderr_content.push('\n');
+                }
+            }
+
+            (stdout_content, stderr_content)
+        }).await;
+
+        let (stdout, stderr) = match result {
+            Ok(result) => result,
+            Err(e) => return ToolResult::error(format!("Failed to read subagent output: {}", e)),
+        };
+
+        // Wait for process to complete
+        let status = match child.wait() {
+            Ok(status) => status,
+            Err(e) => return ToolResult::error(format!("Failed to wait for subagent: {}", e)),
         };
 
         // Parse the JSON output
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            
+        if status.success() {
             // Try to parse as JSON
             match serde_json::from_str::<serde_json::Value>(&stdout) {
                 Ok(json_result) => {
@@ -209,9 +294,6 @@ impl Tool for LaunchSubagentPrettyTool {
                 }
             }
         } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            
             let error_msg = format!(
                 "❌ **Subagent Task Failed**\n\n**Task:** {}\n\n**Error:**\n```\n{}\n```\n\n**Output:**\n```\n{}\n```",
                 task,
