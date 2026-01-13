@@ -74,6 +74,8 @@ pub(crate) struct APChat {
     pub(crate) debug_level: u32,
     // Process ID
     pub(crate) process_id: u32,
+    // Readline history for REPL
+    pub(crate) readline_history: Option<crate::chat::readline_history::ReadlineHistory>,
     
 }
 
