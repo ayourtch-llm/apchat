@@ -414,28 +414,14 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
         let summary = summary_msg.content;
         
-        // Rebuild history with summary
+        // Rebuild history WITHOUT adding a new system message in the middle
         let mut new_history = vec![];
         
         if let Some(sys_msg) = system_message {
             new_history.push(sys_msg);
         }
         
-        // Add intelligent compaction summary
-        new_history.push(Message {
-            role: "system".to_string(),
-            content: format!(
-                "Session compacted at tool iteration {}: {}", 
-                current_tool_iteration, 
-                safe_truncate(&summary, 500)
-            ),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            reasoning: None,
-        });
-        
-        // Add recent messages (including recent tool context)
+        // Add recent messages (including recent tool context) - NO system message added!
         new_history.extend(recent_messages);
         
         // Ensure proper role alternation after system messages
@@ -614,24 +600,14 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             (full_response, None)
         };
 
-        // Rebuild history with summary
+        // Rebuild history WITHOUT adding a new system message in the middle
         let mut new_history = vec![];
 
         if let Some(sys_msg) = system_message {
             new_history.push(sys_msg);
         }
 
-        // Add summary as a system-level context message
-        new_history.push(Message {
-            role: "system".to_string(),
-            content: format!("Previous conversation summary: {}", summary),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            reasoning: None,
-        });
-
-        // Add recent messages
+        // Add recent messages - NO summary system message added!
         new_history.extend(recent_messages);
         
         // Ensure proper role alternation after system messages
@@ -645,7 +621,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             .unwrap_or(0);
 
         println!(
-            "{} History summarized and trimmed to {} messages ({:.1} KB)",
+            "{} History trimmed to {} messages ({:.1} KB)",
             "✅".green(),
             chat.messages.len(),
             new_size as f64 / 1024.0

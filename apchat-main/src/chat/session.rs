@@ -328,18 +328,12 @@ pub(crate) async fn chat(
 
                                 if evaluation.change_strategy {
                                     println!("{}", "🔄 Agent evaluation suggests changing strategy".bright_yellow());
-                                    chat.messages.push(Message {
-                                        role: "system".to_string(),
-                                        content: format!(
-                                            "Progress evaluation suggests changing approach. Reasoning: {}\nRecommendations:\n{}",
-                                            evaluation.reasoning,
-                                            evaluation.recommendations.join("\n")
-                                        ),
-                                        tool_calls: None,
-                                        tool_call_id: None,
-                                        name: None,
-                                        reasoning: None,
-                                    });
+                                    // Remove the progress evaluation system message to avoid breaking conversation flow
+                                    // The evaluation is logged but not added to the conversation history
+                                    println!("{} Progress evaluation: {}", "📊".bright_cyan(), evaluation.reasoning);
+                                    if !evaluation.recommendations.is_empty() {
+                                        println!("{} Recommendations: {}", "💡".bright_yellow(), evaluation.recommendations.join(", "));
+                                    }
                                 } else {
                                     // should_continue is true and no strategy change needed
                                     println!("{}", "✅ Progress evaluation: continuing execution with current approach".bright_green());
