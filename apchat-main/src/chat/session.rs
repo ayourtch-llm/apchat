@@ -143,15 +143,7 @@ pub(crate) async fn chat(
                 println!("Forced model switch: {:?} -> {:?}", &chat.current_model, &current_model);
                 chat.current_model = current_model.clone();
 
-                // Add message to conversation history about model switch
-                chat.messages.push(Message {
-                    role: "system".to_string(),
-                    content: format!("Model switched to: {} (reason: forced by API)", current_model.display_name()),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                    reasoning: None,
-                });
+                // Removed: Model switch message no longer added to conversation history
             }
 
             // Display token usage

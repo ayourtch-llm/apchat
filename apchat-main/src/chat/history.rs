@@ -733,15 +733,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
                                 );
                                 chat.current_model = summary_model.clone();
 
-                                // Add message to conversation history about model switch
-                                chat.messages.push(Message {
-                                    role: "system".to_string(),
-                                    content: format!("Model switched to: {}", summary_model.display_name()),
-                                    tool_calls: None,
-                                    tool_call_id: None,
-                                    name: None,
-                                    reasoning: None,
-                                });
+                                // Removed: Model switch message no longer added to conversation history
                             } else {
                                 println!(
                                     "{} Staying with {}",

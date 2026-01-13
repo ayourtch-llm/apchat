@@ -332,13 +332,12 @@ impl ChatApp {
             }
 
             ServerMessage::ModelSwitched {
-                old_model,
+                old_model: _,
                 new_model,
-                reason,
+                reason: _,
             } => {
                 state.borrow_mut().current_model = new_model.clone();
                 self.update_model_badge(&new_model)?;
-                self.show_system_message(&format!("Model switched from {} to {}: {}", old_model, new_model, reason))?;
             }
 
             ServerMessage::TokenUsage {

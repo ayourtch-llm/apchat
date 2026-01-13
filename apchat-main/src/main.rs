@@ -368,15 +368,7 @@ impl APChat {
         let old_model = self.current_model.clone();
         self.current_model = new_model.clone();
 
-        // Add message to conversation history about model switch
-        self.messages.push(Message {
-            role: "system".to_string(),
-            content: format!("Model switched to: {} (reason: {})", new_model.display_name(), reason),
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-            reasoning: None,
-        });
+        // Removed: Model switch message no longer added to conversation history
 
         Ok(format!(
             "Switched from {} to {} - Reason: {}",
