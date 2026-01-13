@@ -9,6 +9,7 @@ async-stream = "0.3"
 async-trait = "0.1"
 clap_complete = "4.5"
 colored = "2.1"
+dirs = "5.0"  # Added dirs crate for home directory resolution
 dotenvy = "0.15"
 futures = "0.3"
 futures-util = "0.3"
