@@ -643,6 +643,22 @@ pub async fn run_repl_mode(
                     logger.log("user", line, None, false).await;
                 }
 
+                // Auto-save history after user message
+                match chat.auto_save_history() {
+                    Ok(_) => {
+                        // Silently save in background (no output to user)
+                        if chat.debug_level > 1 {
+                            println!("{} Auto-saved history to history-{}.json", 
+                                     "💾".bright_blue(), chat.process_id);
+                        }
+                    }
+                    Err(e) => {
+                        if chat.debug_level > 0 {
+                            eprintln!("{} Auto-save failed: {}", "⚠️".yellow(), e);
+                        }
+                    }
+                }
+
                 let response = if chat.use_agents && chat.agent_coordinator.is_some() {
                     // Create cancellation token for this agent request
                     let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -790,6 +806,7 @@ mod repl_compact_tests {
             stream_responses: false,
             verbose: false,
             debug_level: 0,
+            process_id: 12345, // Fixed for testing
         }
     }
 

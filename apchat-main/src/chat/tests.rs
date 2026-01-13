@@ -36,6 +36,7 @@ mod tests {
             stream_responses: false,
             verbose: false,
             debug_level: 0,
+            process_id: 12345, // Fixed for testing
         }
     }
 

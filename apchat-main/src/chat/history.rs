@@ -133,40 +133,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
         return; // Not enough messages to have an issue
     }
     
-    // First, merge consecutive system messages to avoid role alternation issues
-    let mut merged_messages = Vec::new();
     let mut i = 0;
-    
-    while i < messages.len() {
-        if messages[i].role == "system" {
-            // Find all consecutive system messages
-            let mut system_content = String::new();
-            while i < messages.len() && messages[i].role == "system" {
-                if !system_content.is_empty() {
-                    system_content.push('\n');
-                    system_content.push_str("---");
-                    system_content.push('\n');
-                }
-                system_content.push_str(&messages[i].content);
-                i += 1;
-            }
-            // Add the merged system message
-            merged_messages.push(Message {
-                role: "system".to_string(),
-                content: system_content,
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
-            });
-        } else {
-            // Add non-system messages as-is
-            merged_messages.push(messages[i].clone());
-            i += 1;
-        }
-    }
-    
-    *messages = merged_messages;
     
     // Find the first non-system message after system messages
     let mut first_non_system_idx = 0;
