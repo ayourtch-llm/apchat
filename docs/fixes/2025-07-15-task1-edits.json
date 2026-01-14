@@ -1,0 +1,151 @@
+[{"file_path":"apchat-main/src/chat/readline_history.rs","old_content":"/// A single readline entry representing a command from the REPL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadlineEntry {
+    pub line: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+impl ReadlineEntry {
+    /// Create a new ReadlineEntry
+    pub fn new(line: &str) -> Self {
+        Self {
+            line: line.to_string(),
+            timestamp: Utc::now(),
+        }
+    }
+}","new_content":"/// A single readline entry representing a command from the REPL
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadlineEntry {
+    pub command: String,
+    pub timestamp: DateTime<Utc>,
+    pub session_id: Option<String>,
+}
+
+impl ReadlineEntry {
+    /// Create a new ReadlineEntry
+    pub fn new(command: &str, session_id: Option<String>) -> Self {
+        Self {
+            command: command.to_string(),
+            timestamp: Utc::now(),
+            session_id,
+        }
+    }
+}","description":"Update ReadlineEntry to include session_id field"},{"file_path":"apchat-main/src/chat/readline_history.rs","old_content":"    /// Get entries as strings for readline compatibility
+    pub fn get_lines(&self) -> Vec<String> {
+        self.entries.iter().map(|e| e.line.clone()).collect()
+    }","new_content":"    /// Get entries as strings for readline compatibility
+    pub fn get_lines(&self) -> Vec<String> {
+        self.entries.iter().map(|e| e.command.clone()).collect()
+    }","description":"Update get_lines to use command field instead of line"},{"file_path":"apchat-main/src/chat/readline_history.rs","old_content":"/// Load readline history from a file
+pub fn load_history(file_path: Option<&str>) -> Result<ReadlineHistory> {
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => get_default_history_path()?,
+    };
+    
+    if !Path::new(&path).exists() {
+        return Ok(ReadlineHistory::new());
+    }
+    
+    let file = File::open(&path)
+        .map_err(|e| anyhow::anyhow!("Failed to open history file: {}: {}", path, e))?;
+    let reader = BufReader::new(file);
+    
+    let mut history = ReadlineHistory::new();
+    for line in reader.lines() {
+        let line = line.map_err(|e| anyhow::anyhow!("Failed to read line from history file: {}", e))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        
+        let entry: ReadlineEntry = serde_json::from_str(&line)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize ReadlineEntry from line: {}", e))?;
+        history.add_entry(entry);
+    }
+    
+    Ok(history)
+}","new_content":"/// Load readline history from a file
+pub fn load_history(file_path: Option<&str>) -> Result<ReadlineHistory> {
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => get_default_history_path()?,
+    };
+    
+    if !Path::new(&path).exists() {
+        return Ok(ReadlineHistory::new());
+    }
+    
+    let file = File::open(&path)
+        .map_err(|e| anyhow::anyhow!("Failed to open history file: {}: {}", path, e))?;
+    let reader = BufReader::new(file);
+    
+    let mut history = ReadlineHistory::new();
+    for line in reader.lines() {
+        let line = line.map_err(|e| anyhow::anyhow!("Failed to read line from history file: {}", e))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        
+        let entry: ReadlineEntry = serde_json::from_str(&line)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize ReadlineEntry from line: {}", e))?;
+        history.add_entry(entry);
+    }
+    
+    Ok(history)
+}
+
+/// Load history and add to rustyline editor
+pub fn load_and_add_to_editor(rl: &mut rustyline::Editor<rustyline::DefaultHelper>) -> Result<()> {
+    let history = load_history(None)?;
+    
+    for entry in history.get_entries() {
+        rl.add_history_entry(&entry.command)?;
+    }
+    
+    Ok(())
+}
+
+/// Get the history file path
+pub fn get_history_file() -> Result<String> {
+    get_default_history_path()
+}
+
+/// Save a single readline entry to file (append mode)
+pub fn save_to_file(entry: &ReadlineEntry) -> Result<String> {
+    let path = get_history_file()?;
+    
+    let json_line = serde_json::to_string(entry)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize ReadlineEntry: {}", e))?;
+    
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| anyhow::anyhow!("Failed to open history file: {}: {}", path, e))?;
+    
+    writeln!(file, "{}", json_line)
+        .map_err(|e| anyhow::anyhow!("Failed to write to history file: {}: {}", path, e))?;
+    
+    Ok(format!(
+        "Saved readline history to {} (1 entry)",
+        path
+    ))
+}","description":"Add load_and_add_to_editor function and save_to_file function"},{"file_path":"apchat-main/src/chat/mod.rs","old_content":"pub use readline_history:: {
+    ReadlineEntry,
+    ReadlineHistory,
+    save_history,
+    load_history,
+    get_default_history_path,
+    history_file_exists,
+};","new_content":"pub use readline_history:: {
+    ReadlineEntry,
+    ReadlineHistory,
+    save_history,
+    load_history,
+    load_and_add_to_editor,
+    get_history_file,
+    save_to_file,
+    get_default_history_path,
+    history_file_exists,
+};","description":"Update exports to include new functions"}]
