@@ -80,6 +80,11 @@ impl ToolContext {
         self
     }
 
+    pub fn with_current_model_string(mut self, model_string: String) -> Self {
+        self.current_model_string = Some(model_string);
+        self
+    }
+
     /// Check if an action is permitted by the policy
     /// Returns (approved: bool, rejection_reason: Option<String>)
     pub fn check_permission(
