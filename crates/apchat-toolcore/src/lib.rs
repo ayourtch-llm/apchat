@@ -7,6 +7,7 @@ pub mod tool;
 pub mod tool_registry;
 pub mod tool_context;
 pub mod tool_parsing;
+pub mod content_limiter;
 
 pub use tool::*;
 pub use tool_registry::*;

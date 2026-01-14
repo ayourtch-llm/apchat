@@ -6,6 +6,7 @@ use apchat_policy::PolicyManager;
 use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
 use apchat_todo::TodoManager;
+use crate::content_limiter::ContentLimiter;
 
 /// Tool execution context
 ///
@@ -30,6 +31,7 @@ pub struct ToolContext {
     pub todo_manager: Option<Arc<TodoManager>>,
     pub non_interactive: bool,
     pub current_model_string: Option<String>,
+    pub content_limiter: Option<Arc<ContentLimiter>>, // NEW
 }
 
 impl ToolContext {
@@ -44,6 +46,7 @@ impl ToolContext {
             todo_manager: None,
             non_interactive: false,
             current_model_string: None,
+            content_limiter: None,
         }
     }
 
@@ -72,8 +75,8 @@ impl ToolContext {
         self
     }
 
-    pub fn with_current_model_string(mut self, model_string: String) -> Self {
-        self.current_model_string = Some(model_string);
+    pub fn with_content_limiter(mut self, content_limiter: Arc<ContentLimiter>) -> Self {
+        self.content_limiter = Some(content_limiter);
         self
     }
 

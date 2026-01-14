@@ -60,6 +60,8 @@ pub struct ToolResult {
     pub success: bool,
     pub content: String,
     pub error: Option<String>,
+    pub truncated: bool,
+    pub full_path: Option<String>,
 }
 
 impl ToolResult {
@@ -68,6 +70,18 @@ impl ToolResult {
             success: true,
             content,
             error: None,
+            truncated: false,
+            full_path: None,
+        }
+    }
+
+    pub fn success_with_truncation(content: String, full_path: String) -> Self {
+        Self {
+            success: true,
+            content,
+            error: None,
+            truncated: true,
+            full_path: Some(full_path),
         }
     }
 
@@ -76,6 +90,8 @@ impl ToolResult {
             success: false,
             content: String::new(),
             error: Some(error),
+            truncated: false,
+            full_path: None,
         }
     }
 }
