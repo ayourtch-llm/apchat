@@ -17,6 +17,9 @@ Cargo.lock
 # Workspace directory
 /workspace/
 
+# Large file outputs
+.apchat-large-outputs/
+
 # IDE
 .vscode/
 .idea/

@@ -100,7 +100,28 @@ impl ToolRegistry {
                 } else {
                     context.clone()
                 };
-                tool.execute(params, &effective_context).await
+                
+                let mut result = tool.execute(params, &effective_context).await;
+                
+                // Apply content limiting if the tool result was successful and we have a content limiter
+                if result.success && !result.truncated {
+                    if let Some(limiter) = &self.content_limiter {
+                        let (truncated_content, note, was_truncated) = limiter.save_and_truncate(
+                            result.content.clone(), name
+                        );
+                        
+                        if was_truncated {
+                            // Extract file path from the note
+                            let full_path = note.as_ref().and_then(|n| {
+                                n.split("at: ").last().map(|s| s.trim().to_string())
+                            }).unwrap_or_default();
+                            
+                            result = ToolResult::success_with_truncation(truncated_content, full_path);
+                        }
+                    }
+                }
+                
+                result
             },
             None => ToolResult::error(format!("Tool '{}' not found", name)),
         }

@@ -76,10 +76,19 @@ pub(crate) struct APChat {
     pub(crate) process_id: u32,
     // Readline history for REPL
     pub(crate) readline_history: Option<crate::chat::readline_history::ReadlineHistory>,
+    // Content limiter
+    pub(crate) content_limiter: Option<Arc<apchat_toolcore::content_limiter::ContentLimiter>>,
     
 }
 
 impl APChat {
+    
+    /// Create a new APChat with content limiter
+    pub(crate) fn with_content_limiter(mut self, content_limiter: Arc<apchat_toolcore::content_limiter::ContentLimiter>) -> Self {
+        self.content_limiter = Some(content_limiter.clone());
+        self.tool_registry = self.tool_registry.with_content_limiter(content_limiter);
+        self
+    }
     fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
@@ -150,6 +159,11 @@ impl APChat {
         early_superpowers: bool,
     ) -> Self {
         let tool_registry = initialize_tool_registry();
+        
+        // Initialize content limiter
+        let content_limiter_config = apchat_toolcore::content_limiter::ContentLimiterConfig::new(&work_dir);
+        let content_limiter = Some(Arc::new(apchat_toolcore::content_limiter::ContentLimiter::new(content_limiter_config)));
+        let content_limiter_clone = content_limiter.clone();
 
         // Initialize skill registry
         let skills_dir = work_dir.join("skills");
@@ -206,7 +220,7 @@ impl APChat {
             current_model: initial_model,
             total_tokens_used: 0,
             logger: None,
-            tool_registry,
+            tool_registry: tool_registry.with_content_limiter(content_limiter_clone.unwrap()),
             agent_coordinator,
             use_agents,
             client_config,
@@ -220,6 +234,7 @@ impl APChat {
             non_interactive: false, // Default to interactive mode
             process_id: std::process::id(),
             readline_history: None,
+            content_limiter,
         };
 
         chat.messages.push(Message {
@@ -468,6 +483,11 @@ impl APChat {
                     context = context.with_skill_registry(Arc::clone(registry));
                 }
 
+                // Add content limiter if available
+                if let Some(ref limiter) = self.content_limiter {
+                    context = context.with_content_limiter(Arc::clone(limiter));
+                }
+
                 let context = context;
 
                 let result = self.tool_registry.execute_tool(name, params, &context).await;
@@ -648,6 +668,7 @@ mod auto_save_tests {
             debug_level: 0,
             process_id: 12345, // Fixed for testing
             readline_history: None,
+            content_limiter: None,
         }
     }
 
