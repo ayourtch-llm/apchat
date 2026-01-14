@@ -160,6 +160,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
                 fixed_msg.role = "user".to_string();
                 messages[first_non_system_idx] = fixed_msg;
             } else {
+/*
                 // Insert new empty user message before tool call to maintain proper role alternation
                 // Tool calls should follow user messages, not system messages
                 let tool_call_msg = messages[first_non_system_idx].clone();
@@ -177,6 +178,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
                 
                 // Insert the original tool call message after the new user message
                 messages.insert(first_non_system_idx + 1, tool_call_msg);
+*/
             }
         }
     }

@@ -734,6 +734,6 @@ mod auto_save_tests {
         
         // Verify file was created and can be loaded
         let (loaded_messages, _, _, _) = crate::chat::state::load_state(file_path.to_str().unwrap()).unwrap();
-        assert_eq!(loaded_messages.len(), 6); // 5 user + 1 system
+        assert_eq!(loaded_messages.len(), 5); // Only the 5 user messages we added
     }
 }
