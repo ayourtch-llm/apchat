@@ -219,6 +219,7 @@ impl APChat {
             debug_level: 0, // Default debug level is 0 (off)
             non_interactive: false, // Default to interactive mode
             process_id: std::process::id(),
+            readline_history: None,
         };
 
         chat.messages.push(Message {
@@ -646,6 +647,7 @@ mod auto_save_tests {
             verbose: false,
             debug_level: 0,
             process_id: 12345, // Fixed for testing
+            readline_history: None,
         }
     }
 
@@ -697,7 +699,7 @@ mod auto_save_tests {
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         
         assert_eq!(parsed["messages"].as_array().unwrap().len(), 2); // 1 system + 1 user message
-        assert_eq!(parsed["current_model"], "grn_model");
+        assert_eq!(parsed["current_model"], "GrnModel"); // ModelColor uses PascalCase for serialization
     }
 
     #[tokio::test]

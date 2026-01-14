@@ -188,6 +188,22 @@ pub async fn run_repl_mode(
 
     let mut rl = DefaultEditor::new()?;
 
+    // Load readline history from file
+    match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
+        Ok(_) => {
+            if chat.debug_level > 1 {
+                println!("{} Loaded {} readline history entries",
+                         "📖".bright_green(),
+                         crate::chat::readline_history::load_history(None)?.len());
+            }
+        }
+        Err(e) => {
+            if chat.debug_level > 0 {
+                eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
+            }
+        }
+    }
+
     // Validate and process idle timeout configuration
     let idle_config = if let (Some(timeout_secs), Some(input_text)) = (&cli.idle_timeout, &cli.idle_input) {
         // Validate timeout range
@@ -638,6 +654,25 @@ pub async fn run_repl_mode(
 
                 rl.add_history_entry(line)?;
 
+                // Save to persistent history file
+                match crate::chat::readline_history::save_to_file(&
+                    crate::chat::readline_history::ReadlineEntry::with_session(
+                        line,
+                        format!("session_{}", chat.process_id)
+                    )
+                ) {
+                    Ok(_) => {
+                        if chat.debug_level > 2 {
+                            println!("{} Saved to readline history", "✏️".bright_blue());
+                        }
+                    }
+                    Err(e) => {
+                        if chat.debug_level > 0 {
+                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
+                        }
+                    }
+                }
+
                 // Log the user message before sending
                 if let Some(logger) = &mut chat.logger {
                     logger.log("user", line, None, false).await;
@@ -807,6 +842,7 @@ mod repl_compact_tests {
             verbose: false,
             debug_level: 0,
             process_id: 12345, // Fixed for testing
+            readline_history: None,
         }
     }
 

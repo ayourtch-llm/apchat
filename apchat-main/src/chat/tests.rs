@@ -37,6 +37,7 @@ mod tests {
             verbose: false,
             debug_level: 0,
             process_id: 12345, // Fixed for testing
+            readline_history: None,
         }
     }
 

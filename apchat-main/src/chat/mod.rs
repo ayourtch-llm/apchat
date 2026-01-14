@@ -12,7 +12,10 @@ pub use readline_history::{ // Added readline_history exports
     ReadlineHistory,
     save_history,
     load_history,
+    load_and_add_to_editor,
+    save_to_file,
     get_default_history_path,
+    history_file_exists,
 };
 
 // Include test module
