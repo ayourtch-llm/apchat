@@ -18,14 +18,14 @@ impl Tool for OpenFileTool {
     }
 
     fn description(&self) -> &str {
-        "Open a file and display its contents with optional line range"
+        "Open a file and display its contents with optional line range. WARNING: For large files, specify 'read_line_count' (e.g., 30 lines) to avoid truncation. Default reads entire file."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("file_path", "string", "Path to the file relative to the work directory", required),
             param!("start_line", "integer", "Starting line number (1-based)", optional),
-            param!("read_line_count", "integer", "How many lines to read", optional),
+            param!("read_line_count", "integer", "How many lines to read (recommended: 30 for large files)", optional),
         ])
     }
 
@@ -55,7 +55,7 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Read a preview of a file (first 10 lines) with total line count. For reading specific line ranges, use open_file instead."
+        "Read a preview of a file (first 10 lines) with total line count. For reading specific line ranges or more lines, use open_file instead."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
