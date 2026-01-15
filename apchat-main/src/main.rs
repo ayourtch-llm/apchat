@@ -478,6 +478,22 @@ impl APChat {
                 .with_non_interactive(self.non_interactive)
                 .with_current_model_string(current_model_string);
 
+                // Create LLM clients for all model colors and add to context
+                use std::collections::HashMap;
+                use std::sync::Arc;
+                let mut llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>> = HashMap::new();
+
+                for color in ModelColor::iter() {
+                    let client = crate::config::create_client_for_model_color(
+                        &color,
+                        &self.client_config,
+                        &self.api_key,
+                    );
+                    llm_clients.insert(color, client);
+                }
+
+                context = context.with_llm_clients(llm_clients);
+
                 // Add skill registry if available
                 if let Some(ref registry) = self.skill_registry {
                     context = context.with_skill_registry(Arc::clone(registry));
