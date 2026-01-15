@@ -338,9 +338,37 @@ Find relevant skills:
 [Model] Assistant: Found: systematic-debugging, root-cause-tracing...
 ```
 
-## Architecture
+## Documentation
 
-### Technology Stack
+### Tool Documentation
+
+Comprehensive documentation for individual tools is available in the `docs/tools/` directory:
+
+- **[llm_oneshot](docs/tools/llm_oneshot.md)** - One-shot LLM calls for simple tasks without agent overhead
+
+For information on how to add new tools to the system, see [docs/dev/how_to_new_tool.md](docs/dev/how_to_new_tool.md).
+
+### Development Guides
+
+- **Code Review Process**: [docs/dev/CODE_REVIEW_CHECKLIST.md](docs/dev/CODE_REVIEW_CHECKLIST.md)
+- **Customizing Agents**: [docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md](docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md)
+- **Skill System**: [docs/dev/enhanced-superpowers-prompt.md](docs/dev/enhanced-superpowers-prompt.md)
+
+### Architecture Documentation
+
+- **Terminal Backends**: [docs/architecture/PLAN_PLUGGABLE_TERMINAL_BACKENDS.md](docs/architecture/PLAN_PLUGGABLE_TERMINAL_BACKENDS.md)
+- **Refactoring**: [docs/architecture/REFACTORING_MAP.md](docs/architecture/REFACTORING_MAP.md)
+- **Session Design**: [docs/architecture/TERMINAL_SESSIONS_DESIGN.md](docs/architecture/TERMINAL_SESSIONS_DESIGN.md)
+
+### Web Frontend
+
+- **Design**: [docs/project/WEB_FRONTEND_DESIGN.md](docs/project/WEB_FRONTEND_DESIGN.md)
+- **Protocol Examples**: [docs/web_protocol_examples.md](docs/web_protocol_examples.md)
+- **UI Wireframes**: [docs/web_ui_wireframes.md](docs/web_ui_wireframes.md)
+
+---
+
+
 
 **Core**:
 - Rust 2021 Edition
