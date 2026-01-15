@@ -843,6 +843,7 @@ mod repl_compact_tests {
             debug_level: 0,
             process_id: 12345, // Fixed for testing
             readline_history: None,
+            content_limiter: None,
         }
     }
 
