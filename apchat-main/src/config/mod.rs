@@ -109,7 +109,7 @@ impl ClientConfig {
 }
 
 #[cfg(test)]
-mod api_key_tests;
+mod tool_registry_integration_tests;
 
 /// Initialize the tool registry with all available tools
 pub fn initialize_tool_registry() -> ToolRegistry {
@@ -135,6 +135,9 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(SwitchModelTool::new(), vec!["model_management".to_string()]);
     registry.register_with_categories(PlanEditsTool, vec!["model_management".to_string()]);
     registry.register_with_categories(ApplyEditPlanTool, vec!["model_management".to_string()]);
+
+    // Register LLM tools
+    registry.register_with_categories(LlmCallTool, vec!["llm".to_string(), "ai".to_string(), "model".to_string()]);
 
     // Register iteration control tools
     registry.register_with_categories(RequestMoreIterationsTool, vec!["agent_control".to_string()]);
