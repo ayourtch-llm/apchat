@@ -1,0 +1,4 @@
+<tool_call name="llm_oneshot">
+  <parameter name="model_color">grn</parameter>
+  <parameter name="instruction">Hello, this is a test</parameter>
+</tool_call>
