@@ -2,7 +2,9 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use std::collections::HashMap;
 use apchat_models::types::ModelColor;
+use apchat_llm_api::client::ChatMessage;
 use async_trait::async_trait;
+use std::fs;
 
 /// Tool for making one-shot calls to LLM models
 pub struct LlmCallTool;
@@ -26,7 +28,68 @@ impl Tool for LlmCallTool {
     }
 
     async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
-        // Implementation will be added in next steps
-        ToolResult::error("Not implemented yet".to_string())
+        // Parse model_color parameter
+        let model_color_str = match params.get_required::<String>("model_color") {
+            Ok(s) => s,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+        
+        // Parse instruction parameter
+        let instruction = match params.get_required::<String>("instruction") {
+            Ok(s) => s,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+        
+        // Parse optional file_path parameter
+        let file_path = match params.get_optional::<String>("file_path") {
+            Ok(Some(path)) => path,
+            Ok(None) => String::new(),
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+        
+        // Append file contents if file_path is provided
+        let mut full_prompt = instruction;
+        if !file_path.is_empty() {
+            match fs::read_to_string(&file_path) {
+                Ok(content) => {
+                    full_prompt.push_str("\n\nFile contents:\n");
+                    full_prompt.push_str(&content);
+                }
+                Err(e) => {
+                    return ToolResult::error(format!(
+                        "Failed to read file '{}': {}",
+                        file_path, e
+                    ));
+                }
+            }
+        }
+        
+        // Get the appropriate LLM client based on model color
+        let model_color = match model_color_str.to_lowercase().as_str() {
+            "red" => ModelColor::RedModel,
+            "grn" => ModelColor::GrnModel,
+            "blu" => ModelColor::BluModel,
+            _ => return ToolResult::error(format!(
+                "Invalid model color: '{}'. Use 'red', 'grn', or 'blu'",
+                model_color_str
+            )),
+        };
+        
+        // Create chat message
+        let message = ChatMessage {
+            role: "user".to_string(),
+            content: full_prompt,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        };
+        
+        // Try to get the LLM client from context
+        // Note: This will need to be adapted based on how clients are stored/accessed in ToolContext
+        // For now, return an error indicating the feature is not yet connected
+        ToolResult::error(
+            "LLM client access not yet implemented in tool context".to_string()
+        )
     }
 }
