@@ -7,6 +7,7 @@ use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
 use apchat_todo::TodoManager;
 use crate::content_limiter::ContentLimiter;
+use apchat_models::types::ModelColor;
 
 /// Tool execution context
 ///
@@ -20,7 +21,8 @@ use crate::content_limiter::ContentLimiter;
 /// - Todo manager for task tracking
 /// - Non-interactive flag for web/API mode
 /// - Current model string for subagent spawning (formatted as "modname@backend(url)")
-#[derive(Debug, Clone)]
+/// - LLM clients for making API calls
+#[derive(Clone)]
 pub struct ToolContext {
     pub work_dir: PathBuf,
     pub session_id: String,
@@ -32,6 +34,25 @@ pub struct ToolContext {
     pub non_interactive: bool,
     pub current_model_string: Option<String>,
     pub content_limiter: Option<Arc<ContentLimiter>>, // NEW
+    pub llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>>, // NEW
+}
+
+impl std::fmt::Debug for ToolContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolContext")
+            .field("work_dir", &self.work_dir)
+            .field("session_id", &self.session_id)
+            .field("environment", &self.environment)
+            .field("policy_manager", &self.policy_manager)
+            .field("terminal_manager", &self.terminal_manager)
+            .field("skill_registry", &self.skill_registry)
+            .field("todo_manager", &self.todo_manager)
+            .field("non_interactive", &self.non_interactive)
+            .field("current_model_string", &self.current_model_string)
+            .field("content_limiter", &self.content_limiter)
+            .field("llm_clients_count", &self.llm_clients.len())
+            .finish()
+    }
 }
 
 impl ToolContext {
@@ -47,6 +68,7 @@ impl ToolContext {
             non_interactive: false,
             current_model_string: None,
             content_limiter: None,
+            llm_clients: HashMap::new(),
         }
     }
 
@@ -83,6 +105,17 @@ impl ToolContext {
     pub fn with_current_model_string(mut self, model_string: String) -> Self {
         self.current_model_string = Some(model_string);
         self
+    }
+
+    pub fn with_llm_clients(mut self, llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>>) -> Self {
+        self.llm_clients = llm_clients;
+        self
+    }
+
+    /// Get an LLM client for a specific model color
+    /// Returns None if no client is configured for that color
+    pub fn get_llm_client(&self, model_color: &ModelColor) -> Option<Arc<dyn apchat_llm_api::client::LlmClient>> {
+        self.llm_clients.get(model_color).cloned()
     }
 
     /// Check if an action is permitted by the policy

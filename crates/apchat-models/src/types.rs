@@ -33,7 +33,7 @@ impl BackendType {
 }
 
 /// Model colors supported by the system
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ModelColor {
     BluModel = 0,
     GrnModel = 1,

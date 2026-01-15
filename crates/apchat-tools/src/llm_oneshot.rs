@@ -2,9 +2,10 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use std::collections::HashMap;
 use apchat_models::types::ModelColor;
-use apchat_llm_api::client::ChatMessage;
+use apchat_llm_api::client::{LlmClient, ChatMessage};
 use async_trait::async_trait;
 use std::fs;
+use std::sync::Arc;
 
 /// Tool for making one-shot calls to LLM models
 pub struct LlmCallTool;
@@ -86,10 +87,23 @@ impl Tool for LlmCallTool {
         };
         
         // Try to get the LLM client from context
-        // Note: This will need to be adapted based on how clients are stored/accessed in ToolContext
-        // For now, return an error indicating the feature is not yet connected
-        ToolResult::error(
-            "LLM client access not yet implemented in tool context".to_string()
-        )
+        match context.get_llm_client(&model_color) {
+            Some(client) => {
+                match client.chat_completion(&[message]).await {
+                    Ok(response) => {
+                        ToolResult::success(response)
+                    }
+                    Err(e) => {
+                        ToolResult::error(format!("LLM call failed: {}", e))
+                    }
+                }
+            }
+            None => {
+                ToolResult::error(format!(
+                    "No LLM client configured for model color: {:?}",
+                    model_color
+                ))
+            }
+        }
     }
 }

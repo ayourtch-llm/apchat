@@ -13,6 +13,7 @@ html2md = "0.2"
 ignore = "0.4"
 apchat-logging = { path = "../apchat-logging" }
 apchat-models = { path = "../apchat-models" }
+apchat-llm-api = { path = "../apchat-llm-api" }
 apchat-policy = { path = "../apchat-policy" }
 apchat-skills = { path = "../apchat-skills" }
 apchat-terminal = { path = "../apchat-terminal" }
