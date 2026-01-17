@@ -68,12 +68,17 @@ impl ContentLimiter {
         }
 
         // Create truncated content with note
-        let truncated_content = format!("[LARGE OUTPUT TRUNCATED - Full output saved to: {}]",
+        let truncated_content = format!("🚨 LARGE OUTPUT TRUNCATED 🚨
+Output from '{}' exceeds maximum display length ({} chars).
+Full output saved to: {}",
+                                       tool_name,
+                                       self.config.max_content_length,
                                        file_path.display());
         
         // Add note about how to inspect the output
-        let note = Some(format!("\n⚠️  Note: Output exceeds {} characters. Use `open_file` tool to inspect the full output at: {}",
-                               self.config.max_content_length,
+        let note = Some(format!("\n💡 TO INSPECT FULL OUTPUT:
+Use the `open_file` tool with the file path shown above, or manually open:
+  {}",
                                file_path.display()));
 
         (truncated_content, note, true)

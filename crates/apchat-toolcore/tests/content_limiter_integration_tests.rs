@@ -89,7 +89,8 @@ mod content_limiter_integration_tests {
         let result = tool.execute(params, &context).await;
         assert!(result.success);
         assert!(result.truncated);
-        assert!(result.content.contains("[LARGE OUTPUT TRUNCATED"));
+        assert!(result.content.contains("🚨 LARGE OUTPUT TRUNCATED 🚨"));
+        assert!(result.content.contains("content_generating_tool"));
         assert!(result.full_path.is_some());
     }
 

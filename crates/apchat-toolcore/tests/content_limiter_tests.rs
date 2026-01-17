@@ -79,18 +79,18 @@ mod content_limiter_tests {
         let large_content = "a".repeat(25_000);
         let (result_content, note, was_truncated) = limiter.save_and_truncate(large_content.clone(), "test_tool");
         
-        assert!(result_content.contains("[LARGE OUTPUT TRUNCATED"));
+        assert!(result_content.contains("🚨 LARGE OUTPUT TRUNCATED 🚨"));
         assert!(result_content.contains("test_tool"));
         assert!(note.is_some());
         assert!(was_truncated);
         
         // Verify the file was created
         let note_text = note.unwrap();
-        assert!(note_text.contains("Output exceeds"));
+        assert!(note_text.contains("💡 TO INSPECT FULL OUTPUT:"));
         assert!(note_text.contains("open_file"));
         
         // Parse the file path from the note
-        let file_path = note_text.split("inspect the full output at: ").last().unwrap().trim();
+        let file_path = note_text.split("  ").last().unwrap().trim();
         assert!(fs::exists(file_path).unwrap());
         
         // Verify the content was saved correctly
@@ -109,11 +109,12 @@ mod content_limiter_tests {
         let large_content = "a".repeat(25_000);
         let (result_content, note, _) = limiter.save_and_truncate(large_content, "my_tool");
         
-        assert!(result_content.contains("[LARGE OUTPUT TRUNCATED"));
+        assert!(result_content.contains("🚨 LARGE OUTPUT TRUNCATED 🚨"));
         assert!(result_content.contains("my_tool"));
+        assert!(result_content.contains("exceeds maximum display length"));
         
         let note_text = note.unwrap();
-        assert!(note_text.contains("Output exceeds 20000 characters"));
+        assert!(note_text.contains("💡 TO INSPECT FULL OUTPUT:"));
         assert!(note_text.contains("open_file"));
     }
 
