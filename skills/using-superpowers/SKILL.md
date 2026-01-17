@@ -92,6 +92,17 @@ If you catch yourself mixing planning/execution:
 
 2. Execute skills with the Skill tool
 
+### Curly Glance Tool - Drill-Down Pattern
+
+**IMPORTANT**: The curly glance tool is designed for **iterative exploration**, not one-time overviews. See [docs/tools/curly_glance_usage.md](docs/tools/curly_glance_usage.md) for detailed documentation.
+
+**Quick Usage**:
+1. Start broad: `file_curly_glance {"file_path": "src/main.rs"}`
+2. Drill down: `file_curly_glance {"file_path": "src/main.rs", "starting_line": 84}`
+3. Repeat as needed
+
+**Key Insight**: Use `starting_line` at opening curly braces to focus on specific sections.
+
 ## Common Rationalizations That Mean You're About To Fail
 
 If you catch yourself thinking ANY of these thoughts, STOP. You are rationalizing. Check for and use the skill.
