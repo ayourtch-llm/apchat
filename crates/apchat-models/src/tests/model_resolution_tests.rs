@@ -11,7 +11,7 @@ mod model_resolution_tests {
         assert_eq!(ModelColor::GrnModel.as_str_default(), "some-model");
         assert_eq!(
             ModelColor::RedModel.as_str_default(),
-            "meta-llama/llama-3.1-70b-versatile"
+            "some-model"
         );
     }
 
@@ -65,7 +65,7 @@ mod model_resolution_tests {
         );
         assert_eq!(
             ModelColor::RedModel.as_str(no_override, no_override, no_override),
-            "meta-llama/llama-3.1-70b-versatile"
+            "some-model"
         );
     }
 

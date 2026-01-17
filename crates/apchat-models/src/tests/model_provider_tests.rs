@@ -7,16 +7,16 @@ mod tests {
         // Create model providers for each color
         let providers = [
             ModelProvider::with_config(
-                "moonshotai/kimi-k2-instruct-0905".to_string(),
-                Some(BackendType::Groq),
-                Some("https://api.groq.com".to_string()),
-                Some("key1".to_string()),
-            ),
-            ModelProvider::with_config(
                 "some-model".to_string(),
                 Some(BackendType::OpenAI),
                 Some("https://api.openai.com".to_string()),
                 Some("key2".to_string()),
+            ),
+            ModelProvider::with_config(
+                "some-model".to_string(),
+                Some(BackendType::Groq),
+                Some("https://api.groq.com".to_string()),
+                Some("key1".to_string()),
             ),
             ModelProvider::with_config(
                 "meta-llama/llama-3.1-70b-versatile".to_string(),
@@ -32,18 +32,18 @@ mod tests {
         assert_eq!(providers[ModelColor::RedModel as usize].model_name, "meta-llama/llama-3.1-70b-versatile");
 
         // Test backends
-        assert_eq!(providers[ModelColor::BluModel as usize].backend, Some(BackendType::Groq));
-        assert_eq!(providers[ModelColor::GrnModel as usize].backend, Some(BackendType::OpenAI));
+        assert_eq!(providers[ModelColor::BluModel as usize].backend, Some(BackendType::OpenAI));
+        assert_eq!(providers[ModelColor::GrnModel as usize].backend, Some(BackendType::Groq));
         assert_eq!(providers[ModelColor::RedModel as usize].backend, Some(BackendType::Anthropic));
 
         // Test API URLs
-        assert_eq!(providers[ModelColor::BluModel as usize].api_url, Some("https://api.groq.com".to_string()));
-        assert_eq!(providers[ModelColor::GrnModel as usize].api_url, Some("https://api.openai.com".to_string()));
+        assert_eq!(providers[ModelColor::BluModel as usize].api_url, Some("https://api.openai.com".to_string()));
+        assert_eq!(providers[ModelColor::GrnModel as usize].api_url, Some("https://api.groq.com".to_string()));
         assert_eq!(providers[ModelColor::RedModel as usize].api_url, Some("https://api.anthropic.com".to_string()));
 
         // Test API keys
-        assert_eq!(providers[ModelColor::BluModel as usize].api_key, Some("key1".to_string()));
-        assert_eq!(providers[ModelColor::GrnModel as usize].api_key, Some("key2".to_string()));
+        assert_eq!(providers[ModelColor::BluModel as usize].api_key, Some("key2".to_string()));
+        assert_eq!(providers[ModelColor::GrnModel as usize].api_key, Some("key1".to_string()));
         assert_eq!(providers[ModelColor::RedModel as usize].api_key, Some("key3".to_string()));
     }
 
