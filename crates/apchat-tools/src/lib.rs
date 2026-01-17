@@ -19,6 +19,8 @@ pub mod open_file;
 pub mod subagent_tools;
 pub mod web;
 
+pub mod file_curly_glance;
+
 pub use file_ops::*;
 pub use search::*;
 pub use system::*;
@@ -30,5 +32,6 @@ pub use terminal_tools::*;
 pub use subagent_tools::*;
 pub use web::*;
 pub use llm_oneshot::*;
+pub use file_curly_glance::*;
 
 
