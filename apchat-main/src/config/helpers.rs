@@ -8,6 +8,7 @@ use apchat_llm_api::{
     client::{anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient},
 };
 use colored::Colorize;
+use chrono::Local;
 
 /// Generate system prompt based on current model and configured providers
 pub fn get_system_prompt(
@@ -15,6 +16,9 @@ pub fn get_system_prompt(
     skill_registry: Option<&std::sync::Arc<apchat_skills::SkillRegistry>>,
     early_superpowers: bool,
 ) -> String {
+    // Get current date in YYYY-MM-DD format
+    let current_date = Local::now().format("%Y-%m-%d").to_string();
+
     // Helper function to get model name for a color
     fn get_model_name_for_color(color: ModelColor, config: &crate::config::ClientConfig) -> String {
         if let Some(override_model) = config.get_model_override(color) {
@@ -39,8 +43,9 @@ pub fn get_system_prompt(
     When making multiple file edits, use plan_edits to create a complete plan, then apply_edit_plan to execute all changes atomically. \
     This prevents issues where you lose track of file state between sequential edits.\n\n\
     Model switches may happen automatically during the conversation based on tool usage and errors. \
-    The currently active model will be indicated in system messages as the conversation progresses.",
-    grn_model_name, blu_model_name, red_model_name);
+    The currently active model will be indicated in system messages as the conversation progresses.\n    
+    📅 Current Date: {}",
+    grn_model_name, blu_model_name, red_model_name, current_date);
 
     // Add early superpowers section if enabled
     if early_superpowers {
