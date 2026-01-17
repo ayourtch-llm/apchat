@@ -136,6 +136,20 @@ impl ToolContext {
             Decision::Allow => Ok((true, None)),
             Decision::Deny => Ok((false, Some("Denied by policy".to_string()))),
             Decision::Ask => {
+                // Auto-approve for memory-related actions (non-interactive mode for memory ops)
+                // Memory operations are tool operations, not direct user actions
+                if matches!(
+                    action,
+                    apchat_policy::ActionType::MemoryStore
+                        | apchat_policy::ActionType::MemoryQuery
+                        | apchat_policy::ActionType::MemoryUpdate
+                        | apchat_policy::ActionType::MemoryList
+                        | apchat_policy::ActionType::MemoryDelete
+                ) {
+                    println!("{} {}", "✓".green(), "Auto-confirmed (memory operation)".bright_black());
+                    return Ok((true, None));
+                }
+
                 // In non-interactive mode (web/API), auto-approve since confirmation
                 // was already handled via web UI
                 if self.non_interactive {
