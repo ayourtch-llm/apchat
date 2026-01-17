@@ -309,8 +309,8 @@ pub async fn run_repl_mode(
         if line.starts_with("/save ") {
             let file_path = line[6..].trim();
             match chat.save_state(file_path) {
-                Ok(msg) => println!("{} {}, {}", "💾".bright_green(), msg),
-                Err(e) => eprintln!("{} {}, {}", "❌".bright_red(), e),
+                Ok(msg) => println!("{}", "💾",.bright_green(), msg),
+                Err(e) => eprintln!("{}", "❌",.bright_red(), e),
             }
             return ProcessCommandResult::Continue;
         }
@@ -318,8 +318,8 @@ pub async fn run_repl_mode(
         if line.starts_with("/load ") {
             let file_path = line[6..].trim();
             match chat.load_state(file_path) {
-                Ok(msg) => println!("{} {}, {}", "📂".bright_green(), msg),
-                Err(e) => eprintln!("{} {}, {}", "❌".bright_red(), e),
+                Ok(msg) => println!("{}", "📂",.bright_green(), msg),
+                Err(e) => eprintln!("{}", "❌",.bright_red(), e),
             }
             return ProcessCommandResult::Continue;
         }
@@ -328,7 +328,7 @@ pub async fn run_repl_mode(
         if line == "/model" || line.starts_with("/model ") {
             if line == "/model" {
                 // Just display current model
-                println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                println!("{}", "🤖",.bright_cyan(), chat.current_model.display_name());
             } else {
                 // Parse model argument
                 let model_arg = line[7..].trim(); // Remove "/model " prefix
