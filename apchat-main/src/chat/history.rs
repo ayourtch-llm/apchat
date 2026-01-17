@@ -134,6 +134,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
     }
     
     let mut i = 0;
+    let mut last_role = "system".to_string();
     
     // Find the first non-system message after system messages
     let mut first_non_system_idx = 0;
@@ -143,6 +144,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
             first_non_system_idx = i;
             break;
         }
+        last_role = msg.role.clone();
     }
     
     // If the first non-system message is not user, we need to fix it
@@ -180,6 +182,18 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
                 messages.insert(first_non_system_idx + 1, tool_call_msg);
 */
             }
+        }
+        if last_role == "tool" {
+                // need to add the empty assistant message to preserve the order
+                let new_assistant_msg = Message {
+                    role: "assistant".to_string(),
+                    content: String::new(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+                };
+                messages.push(new_assistant_msg);
         }
     }
 }
