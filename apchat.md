@@ -23,6 +23,10 @@ cargo run --release
 cargo run --release -- --stream --interactive --llama-cpp-url http://192.168.0.201:8081
 ```
 
+### Project exploration
+IMPORTANT: you can save a lot of effort by using file_curly_glance tool to look at the *.rs files! It will give you the parentheses spans - and if you
+give the start line inside the span - then you can recursively peek inside the spans too!
+
 ## Project Overview
 
-have a look at CLAUDE.md for more info
+have a look at docs/project/CLAUDE.md for more info
