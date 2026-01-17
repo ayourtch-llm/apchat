@@ -19,10 +19,16 @@ pub enum ActionType {
     CommandExecution,
     /// Planning batch edits
     PlanEdits,
-    /// Applying a batch edit plan
-    ApplyEditPlan,
-    /// Making HTTP network requests
-    NetworkRequest,
+    /// Deleting a memory from persistent storage
+    MemoryDelete,
+    /// Storing a new memory
+    MemoryStore,
+    /// Querying/searching memories
+    MemoryQuery,
+    /// Updating an existing memory
+    MemoryUpdate,
+    /// Listing memories
+    MemoryList,
 }
 
 impl std::fmt::Display for ActionType {
@@ -34,8 +40,11 @@ impl std::fmt::Display for ActionType {
             ActionType::FileDelete => write!(f, "file_delete"),
             ActionType::CommandExecution => write!(f, "command_execution"),
             ActionType::PlanEdits => write!(f, "plan_edits"),
-            ActionType::ApplyEditPlan => write!(f, "apply_edit_plan"),
-            ActionType::NetworkRequest => write!(f, "network_request"),
+            ActionType::MemoryDelete => write!(f, "memory_delete"),
+            ActionType::MemoryStore => write!(f, "memory_store"),
+            ActionType::MemoryQuery => write!(f, "memory_query"),
+            ActionType::MemoryUpdate => write!(f, "memory_update"),
+            ActionType::MemoryList => write!(f, "memory_list"),
         }
     }
 }
@@ -110,11 +119,10 @@ impl PolicyRule {
                 // For commands, use prefix matching or wildcards
                 command_match(&self.pattern, target)
             }
-            ActionType::NetworkRequest => {
-                // For URLs, use pattern matching on domain/path
-                url_match(&self.pattern, target)
-            }
-            ActionType::PlanEdits | ActionType::ApplyEditPlan => {
+            ActionType::PlanEdits | 
+             ActionType::MemoryStore | ActionType::MemoryQuery | 
+             ActionType::MemoryUpdate | ActionType::MemoryList | 
+             ActionType::MemoryDelete => {
                 // These don't have specific targets, match all
                 true
             }

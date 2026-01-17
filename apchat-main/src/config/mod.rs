@@ -169,6 +169,13 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(PtyKillTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtyRequestUserInputTool, vec!["terminal".to_string()]);
 
+    // Register memory tools
+    registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);
+    registry.register_with_categories(QueryMemoryTool, vec!["memory".to_string()]);
+    registry.register_with_categories(UpdateMemoryTool, vec!["memory".to_string()]);
+    registry.register_with_categories(DeleteMemoryTool, vec!["memory".to_string()]);
+    registry.register_with_categories(ListMemoriesTool, vec!["memory".to_string()]);
+
     registry
 }
 
