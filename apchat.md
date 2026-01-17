@@ -6,6 +6,8 @@
 **File Operations**: Use specific patterns like `"src/*.rs"` instead of `"*.rs"` to locate files in the src directory
 **Repeat operations**: If your history already has a file read, do not read it again - as this will overload the history. Likewise, if you are doing an edit - do not attempt to do it multiple times, if something fails, ask the user to verify.
 
+**Tools Documentation**: For best practices on using tools efficiently (especially the `open_file` tool), see [docs/tools/README.md](docs/tools/README.md) for an overview, or [docs/tools/QUICK_REFERENCE.md](docs/tools/QUICK_REFERENCE.md) for immediate guidance.
+
 ## Useful shortcuts
 
 ### Build the project
@@ -25,8 +27,9 @@ cargo run --release -- --stream --interactive --llama-cpp-url http://192.168.0.2
 
 ### Project exploration
 IMPORTANT: you can save a lot of effort by using file_curly_glance tool to look at the *.rs files! It will give you the parentheses spans - and if you
-give the start line inside the span - then you can recursively peek inside the spans too!
+give the start line inside the span - then you can recursively peek inside the spans too! Read [docs/tools/curly_glance_usage.md](docs/tools/curly_glance_usage.md) for more info.
 
 ## Project Overview
 
-have a look at docs/project/CLAUDE.md for more info
+have a look at [docs/project/CLAUDE.md](docs/project/CLAUDE.md) for more info
+
