@@ -19,6 +19,8 @@ pub enum ActionType {
     CommandExecution,
     /// Planning batch edits
     PlanEdits,
+    /// Applying a batch edit plan
+    ApplyEditPlan,
     /// Deleting a memory from persistent storage
     MemoryDelete,
     /// Storing a new memory
@@ -29,6 +31,8 @@ pub enum ActionType {
     MemoryUpdate,
     /// Listing memories
     MemoryList,
+    /// Making network requests
+    NetworkRequest,
 }
 
 impl std::fmt::Display for ActionType {
@@ -40,11 +44,13 @@ impl std::fmt::Display for ActionType {
             ActionType::FileDelete => write!(f, "file_delete"),
             ActionType::CommandExecution => write!(f, "command_execution"),
             ActionType::PlanEdits => write!(f, "plan_edits"),
+            ActionType::ApplyEditPlan => write!(f, "apply_edit_plan"),
             ActionType::MemoryDelete => write!(f, "memory_delete"),
             ActionType::MemoryStore => write!(f, "memory_store"),
             ActionType::MemoryQuery => write!(f, "memory_query"),
             ActionType::MemoryUpdate => write!(f, "memory_update"),
             ActionType::MemoryList => write!(f, "memory_list"),
+            ActionType::NetworkRequest => write!(f, "network_request"),
         }
     }
 }
@@ -119,10 +125,11 @@ impl PolicyRule {
                 // For commands, use prefix matching or wildcards
                 command_match(&self.pattern, target)
             }
-            ActionType::PlanEdits | 
-             ActionType::MemoryStore | ActionType::MemoryQuery | 
-             ActionType::MemoryUpdate | ActionType::MemoryList | 
-             ActionType::MemoryDelete => {
+            ActionType::PlanEdits |
+             ActionType::ApplyEditPlan |
+             ActionType::MemoryStore | ActionType::MemoryQuery |
+             ActionType::MemoryUpdate | ActionType::MemoryList |
+             ActionType::MemoryDelete | ActionType::NetworkRequest => {
                 // These don't have specific targets, match all
                 true
             }

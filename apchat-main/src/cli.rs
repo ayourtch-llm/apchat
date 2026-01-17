@@ -160,6 +160,12 @@ pub struct Cli {
     #[arg(long, default_value = "~/.okaychat/sessions", env = "OKAYCHAT_SESSIONS_DIR")]
     pub sessions_dir: String,
 
+    /// Path to the memory database (SQLite file)
+    /// Can be overridden by APCHAT_MEMORY_DB_PATH environment variable
+    /// If both are set, the command-line flag takes precedence
+    #[arg(long, value_name = "PATH", env = "APCHAT_MEMORY_DB_PATH")]
+    pub memory_db_path: Option<String>,
+
     /// Idle timeout in seconds (1-86400). If no keystrokes for this duration, inject idle_input string
     #[arg(long, value_name = "SECONDS")]
     pub idle_timeout: Option<u32>,

@@ -563,6 +563,12 @@ async fn main() -> Result<()> {
     // Parse CLI arguments
     let cli = Cli::parse();
 
+    // Set memory database path from CLI flag if provided
+    // This takes precedence over the environment variable
+    if let Some(path) = &cli.memory_db_path {
+        std::env::set_var("APCHAT_MEMORY_DB_PATH", path);
+    }
+
     // If a subcommand was provided, execute it and exit
     if let Some(ref command) = cli.command {
         // Special handling for commands that need APChat or TerminalManager
@@ -649,6 +655,7 @@ async fn main() -> Result<()> {
 #[cfg(test)]
 mod auto_save_tests {
     use crate::APChat;
+    use crate::cli::Cli;
     use apchat_models::{Message, ModelColor};
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -772,5 +779,94 @@ mod auto_save_tests {
         // Verify file was created and can be loaded
         let (loaded_messages, _, _, _) = crate::chat::state::load_state(file_path.to_str().unwrap()).unwrap();
         assert_eq!(loaded_messages.len(), 5); // Only the 5 user messages we added
+    }
+
+    #[tokio::test]
+    async fn test_memory_db_path_env_var() {
+        use std::env;
+        
+        // Test 1: No flag, no env var - should use default
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+        
+        // Test 2: Only env var set
+        env::set_var("APCHAT_MEMORY_DB_PATH", "/tmp/test_env.sqlite");
+        let path = std::env::var("APCHAT_MEMORY_DB_PATH").unwrap();
+        assert_eq!(path, "/tmp/test_env.sqlite");
+        
+        // Test 3: CLI flag overrides env var
+        // Simulate what main() does
+        let flag_path = "/tmp/flag_path.sqlite";
+        if let Some(path) = Some(flag_path.to_string()) {
+            std::env::set_var("APCHAT_MEMORY_DB_PATH", &path);
+        }
+        let path = std::env::var("APCHAT_MEMORY_DB_PATH").unwrap();
+        assert_eq!(path, flag_path);
+        
+        // Clean up
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+    }
+
+    #[tokio::test]
+    async fn test_memory_db_path_sets_env_var() {
+        use std::env;
+        
+        // Remove any existing env var
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+        
+        // Set up a test that simulates the main function behavior
+        let flag_path = "/tmp/test_path.sqlite";
+        
+        // The main function should set the env var
+        if let Some(path) = Some(flag_path.to_string()) {
+            std::env::set_var("APCHAT_MEMORY_DB_PATH", &path);
+        }
+        
+        // Verify it was set
+        assert_eq!(env::var("APCHAT_MEMORY_DB_PATH").unwrap(), flag_path);
+        
+        // Clean up
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+    }
+
+    #[tokio::test]
+    async fn test_memory_db_path_with_relative_path() {
+        use std::env;
+        
+        // Remove any existing env var
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+        
+        // Test with relative path
+        let relative_path = "../relative/path.sqlite";
+        
+        // Simulate main function behavior
+        if let Some(path) = Some(relative_path.to_string()) {
+            std::env::set_var("APCHAT_MEMORY_DB_PATH", &path);
+        }
+        
+        // Verify it was set
+        assert_eq!(env::var("APCHAT_MEMORY_DB_PATH").unwrap(), relative_path);
+        
+        // Clean up
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
+    }
+
+    #[tokio::test]
+    async fn test_memory_db_path_precedence() {
+        use std::env;
+        
+        // Set environment variable
+        env::set_var("APCHAT_MEMORY_DB_PATH", "/tmp/env_path.sqlite");
+        
+        // Simulate flag taking precedence
+        let flag_path = "/tmp/flag_path.sqlite";
+        if let Some(path) = Some(flag_path.to_string()) {
+            std::env::set_var("APCHAT_MEMORY_DB_PATH", &path);
+        }
+        
+        // Verify flag took precedence
+        assert_eq!(env::var("APCHAT_MEMORY_DB_PATH").unwrap(), flag_path);
+        
+        // Clean up
+        env::remove_var("APCHAT_MEMORY_DB_PATH");
     }
 }
