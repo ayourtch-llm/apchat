@@ -23,7 +23,6 @@ impl Tool for LaunchSubagentTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("task", "string", "The task description for the subagent to execute", required),
-            param!("working_directory", "string", "Optional working directory for the subagent (defaults to current directory)", optional),
             param!("timeout_seconds", "integer", "Optional timeout in seconds (defaults to 300)", optional),
             param!("auto_confirm", "boolean", "Whether to auto-confirm all actions without prompting (defaults to true)", optional),
         ])
@@ -34,10 +33,6 @@ impl Tool for LaunchSubagentTool {
             Ok(task) => task,
             Err(e) => return ToolResult::error(e.to_string()),
         };
-
-        let working_directory = params.get_optional::<String>("working_directory")
-            .unwrap_or_else(|_| Some(context.work_dir.to_string_lossy().to_string()))
-            .unwrap_or_else(|| context.work_dir.to_string_lossy().to_string());
 
         let timeout_seconds = params.get_optional::<i64>("timeout_seconds")
             .unwrap_or_else(|_| Some(300))
@@ -57,9 +52,8 @@ impl Tool for LaunchSubagentTool {
             cmd.arg("--model").arg(model_string);
         }
 
-        if working_directory != context.work_dir.to_string_lossy() {
-            cmd.current_dir(&working_directory);
-        }
+        // Use the same working directory as the main agent
+        cmd.current_dir(&context.work_dir);
 
         // Set environment variables for timeout if needed
         if timeout_seconds != 300 {
@@ -172,7 +166,6 @@ impl Tool for LaunchSubagentPrettyTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("task", "string", "The task description for the subagent to execute", required),
-            param!("working_directory", "string", "Optional working directory for the subagent (defaults to current directory)", optional),
             param!("timeout_seconds", "integer", "Optional timeout in seconds (defaults to 300)", optional),
             param!("auto_confirm", "boolean", "Whether to auto-confirm all actions without prompting (defaults to true)", optional),
         ])
@@ -183,10 +176,6 @@ impl Tool for LaunchSubagentPrettyTool {
             Ok(task) => task,
             Err(e) => return ToolResult::error(e.to_string()),
         };
-
-        let working_directory = params.get_optional::<String>("working_directory")
-            .unwrap_or_else(|_| Some(context.work_dir.to_string_lossy().to_string()))
-            .unwrap_or_else(|| context.work_dir.to_string_lossy().to_string());
 
         let timeout_seconds = params.get_optional::<i64>("timeout_seconds")
             .unwrap_or_else(|_| Some(300))
@@ -207,9 +196,8 @@ impl Tool for LaunchSubagentPrettyTool {
             cmd.arg("--model").arg(model_string);
         }
 
-        if working_directory != context.work_dir.to_string_lossy() {
-            cmd.current_dir(&working_directory);
-        }
+        // Use the same working directory as the main agent
+        cmd.current_dir(&context.work_dir);
 
         // Set environment variables for timeout if needed
         if timeout_seconds != 300 {
