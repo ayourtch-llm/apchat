@@ -152,7 +152,7 @@ mod tests {
         // But not for RedModel (600KB threshold)
         assert!(!should_compact_session(&chat, &ModelColor::RedModel));
     }
-
+/******* THIS TEST REQUIRES GROQ KEY - DO NOT ENABLE IT.
     #[tokio::test]
     async fn test_intelligent_compaction_preserves_recent_tool_calls() {
         let mut chat = create_test_apchat();
@@ -216,6 +216,7 @@ mod tests {
         assert_eq!(chat.messages.last().unwrap().role, "user");
         assert!(chat.messages.last().unwrap().content.contains("Continue with the task"));
     }
+*******/
 
     #[tokio::test]
     async fn test_intelligent_compaction_preserves_very_recent_context() {
