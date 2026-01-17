@@ -19,6 +19,7 @@ pub mod open_file;
 pub mod subagent_tools;
 pub mod web;
 
+pub mod memory;
 pub mod file_curly_glance;
 
 pub use file_ops::*;
@@ -33,5 +34,6 @@ pub use subagent_tools::*;
 pub use web::*;
 pub use llm_oneshot::*;
 pub use file_curly_glance::*;
+pub use memory::*;
 
 
