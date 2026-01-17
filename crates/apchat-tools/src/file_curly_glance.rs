@@ -4,6 +4,38 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
 
+/// Data structure representing a curly bracket pair
+/// Stores information about opening and closing brackets, their content, and preceding whitespace
+#[derive(Debug, Clone)]
+pub struct BracketPair {
+    /// Line number of the opening curly bracket
+    pub opening_line: usize,
+    
+    /// Line number of the closing curly bracket  
+    pub closing_line: usize,
+    
+    /// Content or description (e.g., function name, context)
+    pub content: String,
+    
+    /// Line number of the preceding empty or whitespace-only line (if found)
+    pub preceding_whitespace_line: Option<usize>,
+}
+
+impl BracketPair {
+    /// Create a new BracketPair instance
+    pub fn new(opening_line: usize, closing_line: usize, content: String, preceding_whitespace_line: Option<usize>) -> Self {
+        BracketPair {
+            opening_line,
+            closing_line,
+            content,
+            preceding_whitespace_line,
+        }
+    }
+}
+
+/// Helper function to find the matching closing bracket for a given opening bracket position
+/// Returns the line number and character position of the closing bracket, or None if not found
+
 /// Tool for analyzing file curly bracket structures
 pub struct FileCurlyGlanceTool;
 
@@ -63,73 +95,152 @@ pub fn find_starting_line(content: &str, opening_pos: usize) -> usize {
 }
 
 /// Helper function to analyze file content and find curly bracket structures
-/// Returns a formatted string showing bracket pairs with line information
-pub fn analyze_file_content(content: &str, starting_line: Option<usize>) -> String {
+/// Returns a vector of BracketPair instances representing top-level bracket pairs
+pub fn analyze_file_content(content: &str, starting_line: Option<usize>) -> Vec<BracketPair> {
     let lines: Vec<&str> = content.lines().collect();
-    let mut result = String::new();
-    let _current_line = 1;
-    let mut depth = 0;
     let mut bracket_pairs = Vec::new();
-    
-    // Track opening bracket positions
-    let mut opening_brackets = Vec::new();
-    
-    // First pass: find all opening brackets and their positions
+    let mut current_depth = 0;
+    let mut current_opening_line: Option<usize> = None;
+    let mut current_opening_pos: Option<usize> = None;
+
     for (line_idx, line) in lines.iter().enumerate() {
         let line_num = line_idx + 1;
         
-        // Skip lines before starting_line if provided
+        // Skip lines before starting_line if specified
         if let Some(start_line) = starting_line {
             if line_num < start_line {
                 continue;
             }
+            // When we reach starting_line, reset depth to 0 (start fresh)
+            if line_num == start_line {
+                current_depth = 0;
+            }
         }
+        
+        // Check for unmatched closing bracket - this should stop processing
+        let mut found_unmatched_closing = false;
         
         let mut char_pos = 0;
         for c in line.chars() {
             match c {
                 '{' => {
-                    opening_brackets.push((line_num, char_pos, line_idx));
+                    if current_depth == 0 {
+                        // This is a top-level opening bracket
+                        current_opening_line = Some(line_num);
+                        current_opening_pos = Some(char_pos);
+                    }
+                    current_depth += 1;
                 }
                 '}' => {
-                    if let Some((open_line, open_pos, open_idx)) = opening_brackets.pop() {
-                        // Found a matching pair
-                        bracket_pairs.push((open_line, open_pos, line_num, char_pos, open_idx, line_idx));
+                    if current_depth == 0 {
+                        // Unmatched closing bracket - stop processing according to spec
+                        found_unmatched_closing = true;
+                        break;
+                    }
+                    
+                    current_depth -= 1;
+                    
+                    if current_depth == 0 && current_opening_line.is_some() {
+                        // This is a top-level closing bracket matching our opening
+                        let opening_line = current_opening_line.unwrap();
+                        let opening_pos = current_opening_pos.unwrap();
+                        
+                        // Find preceding empty/whitespace-only line
+                        let preceding_whitespace = find_preceding_whitespace_line(&lines, opening_line);
+                        
+                        // Extract context/content from the opening line
+                        let content = extract_context(lines[opening_line - 1], opening_pos);
+                        
+                        // Create BracketPair
+                        let pair = BracketPair::new(
+                            opening_line,
+                            line_num,
+                            content,
+                            preceding_whitespace,
+                        );
+                        
+                        bracket_pairs.push(pair);
+                        current_opening_line = None;
+                        current_opening_pos = None;
                     }
                 }
                 _ => {}
             }
             char_pos += 1;
         }
+        
+        // If we found an unmatched closing bracket, stop processing
+        if found_unmatched_closing {
+            break;
+        }
     }
     
-    // Check if we found any bracket pairs
+    bracket_pairs
+}
+
+/// Format BracketPair instances into a readable string output
+/// Format: "start..end: context" for each pair, separated by commas (single line)
+pub fn format_bracket_pairs(bracket_pairs: &[BracketPair]) -> String {
     if bracket_pairs.is_empty() {
         return "No bracket pairs found.".to_string();
     }
     
-    // Second pass: output the bracket structures with content
-    for (open_line, open_pos, close_line, close_pos, open_idx, close_idx) in &bracket_pairs {
-        result.push_str(&format!("Bracket pair {} - {}: Line {} (col {}) to Line {} (col {})\n",
-                                 depth, depth, open_line, open_pos, close_line, close_pos));
+    let mut result_parts = Vec::new();
+    
+    for pair in bracket_pairs {
+        let line_range = format!("{}..{}", pair.opening_line, pair.closing_line);
         
-        // Show content between brackets (excluding outer brackets themselves)
-        if open_idx + 1 <= close_idx - 1 {
-            result.push_str("Content:\n");
-            for line_num in open_idx + 1..=close_idx - 1 {
-                if line_num < lines.len() {
-                    result.push_str(&format!("  {}: {}\n", line_num + 1, lines[line_num]));
-                }
-            }
+        // Add preceding whitespace information if available
+        if let Some(whitespace_line) = pair.preceding_whitespace_line {
+            result_parts.push(format!("{}..{}: {} (preceded by whitespace at line {})",
+                                    pair.opening_line, pair.closing_line, pair.content, whitespace_line));
         } else {
-            result.push_str("  (empty block)\n");
+            result_parts.push(format!("{}..{}: {}",
+                                    pair.opening_line, pair.closing_line, pair.content));
         }
-        
-        result.push_str("\n");
-        depth += 1;
     }
     
-    result
+    // Join all parts with commas for single-line output
+    result_parts.join(", ")
+}
+
+/// Helper function to find the preceding empty or whitespace-only line
+/// Searches backwards from the given line number
+fn find_preceding_whitespace_line(lines: &[&str], from_line: usize) -> Option<usize> {
+    // Start from the line before the opening bracket
+    for line_num in (1..from_line).rev() {
+        if line_num > 0 && line_num <= lines.len() {
+            let line = lines[line_num - 1];
+            if line.trim().is_empty() {
+                return Some(line_num);
+            }
+        }
+    }
+    
+    None
+}
+
+/// Helper function to extract context/content from a line near the opening bracket
+/// Returns the function name or nearby text
+fn extract_context(line: &str, bracket_pos: usize) -> String {
+    // Try to extract function name pattern (e.g., "fn main()")
+    let trimmed = line.trim();
+    
+    // Check if this looks like a function declaration
+    if let Some(fn_pos) = trimmed.find("fn ") {
+        let rest = &trimmed[fn_pos + 3..];
+        if let Some(paren_pos) = rest.find('(') {
+            let func_name = &rest[..paren_pos];
+            return func_name.to_string();
+        }
+    }
+    
+    // If not a function, return some text near the bracket
+    let max_len = 30; // Maximum length to extract
+    let start_pos = if bracket_pos > max_len / 2 { bracket_pos - max_len / 2 } else { 0 };
+    let end_pos = std::cmp::min(start_pos + max_len, line.len());
+    
+    line[start_pos..end_pos].trim().to_string()
 }
 
 #[async_trait]
@@ -180,7 +291,10 @@ impl Tool for FileCurlyGlanceTool {
         };
         
         // Analyze the file content
-        let result = analyze_file_content(&content, starting_line);
+        let bracket_pairs = analyze_file_content(&content, starting_line);
+        
+        // Format the output
+        let result = format_bracket_pairs(&bracket_pairs);
         
         ToolResult::success(result)
     }
@@ -208,15 +322,31 @@ fn test() {
 }
 "#;
 
-        let result = analyze_file_content(test_content, None);
+        let pairs = analyze_file_content(test_content, None);
         
         // Should find at least some bracket pairs
-        assert!(!result.contains("No bracket pairs found."));
+        assert!(!pairs.is_empty());
         
-        // Should contain line information
-        assert!(result.contains("Line"));
+        // Should find top-level functions
+        let has_main = pairs.iter().any(|p| p.content == "main");
+        let has_test = pairs.iter().any(|p| p.content == "test");
         
-        println!("Test result:\n{}", result);
+        assert!(has_main, "Should find main function");
+        assert!(has_test, "Should find test function");
+        
+        // Main function should have correct line range
+        if let Some(main_pair) = pairs.iter().find(|p| p.content == "main") {
+            assert_eq!(main_pair.opening_line, 2);
+            assert!(main_pair.closing_line >= main_pair.opening_line);
+        }
+        
+        println!("Test result: Found {} bracket pairs", pairs.len());
+        for pair in &pairs {
+            println!("  {}..{}: {} (preceding: {:?})", 
+                     pair.opening_line, pair.closing_line, 
+                     pair.content, 
+                     pair.preceding_whitespace_line);
+        }
     }
     
     #[test]
@@ -236,22 +366,51 @@ fn test() {
 }
 "#;
 
-        // Start from line 4 (fn main)
-        let result = analyze_file_content(test_content, Some(4));
+        // Start from line 3 (fn main)
+        let pairs = analyze_file_content(test_content, Some(3));
         
-        println!("Test result with starting line 4:\n{}", result);
+        println!("Test result with starting line 3:");
+        for pair in &pairs {
+            println!("  {}..{}: {}", pair.opening_line, pair.closing_line, pair.content);
+        }
+        
+        // Should find main function starting at line 3
+        assert!(!pairs.is_empty());
+        let has_main = pairs.iter().any(|p| p.content == "main");
+        assert!(has_main, "Should find main function when starting from line 3");
     }
     
     #[test]
     fn test_analyze_empty_content() {
-        let result = analyze_file_content("", None);
-        assert_eq!(result, "No bracket pairs found.");
+        let pairs = analyze_file_content("", None);
+        assert!(pairs.is_empty());
     }
     
     #[test]
-    fn test_analyze_no_brackets() {
-        let result = analyze_file_content("just some text", None);
-        assert_eq!(result, "No bracket pairs found.");
+    fn test_preceding_whitespace_detection() {
+        let test_content = r#"fn first() {
+    // content
+}
+
+fn second() {
+    // content
+}
+"#;
+
+        let pairs = analyze_file_content(test_content, None);
+        
+        // Should find at least one pair
+        assert!(!pairs.is_empty());
+        
+        // The blank line between first() and second() should be detected
+        // as preceding whitespace for second()
+        let second_pair = pairs.iter().find(|p| p.content == "second");
+        
+        if let Some(pair) = second_pair {
+            // second() should have a preceding whitespace line
+            assert!(pair.preceding_whitespace_line.is_some());
+            assert_eq!(pair.preceding_whitespace_line.unwrap(), 4); // Line 4 is the blank line
+        }
     }
 }
 
