@@ -1,0 +1,10 @@
+mod api;
+mod app;
+mod chat;
+mod cli;
+mod config;
+mod mspc;
+mod preview;
+mod terminal;
+mod tools_execution;
+mod web;
