@@ -20,6 +20,8 @@ Cargo.lock
 # Large file outputs
 .apchat-large-outputs/
 
+current_instruction.md
+
 # IDE
 .vscode/
 .idea/
