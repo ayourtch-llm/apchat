@@ -11,8 +11,9 @@ use crate::chat::history::intelligent_compaction;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
-use crate::mspc::{MspcChannel, MspcMessage};
-use crate::input_router::TerminalInputRouter;
+// TODO: Re-enable MSPC when basic readline is working
+// use crate::mspc::{MspcChannel, MspcMessage};
+// use crate::input_router::TerminalInputRouter;
 
 /// Run interactive REPL mode
 pub async fn run_repl_mode(
@@ -271,16 +272,9 @@ pub async fn run_repl_mode(
         }
     });
 
-    // Initialize MSPC channel for multi-stream input processing
-    let mspc_channel = Arc::new(MspcChannel::new(100)); // Capacity of 100 messages
-    chat = chat.with_mspc_channel(mspc_channel.clone());
-
-    // Initialize terminal input router
-    let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
-
-    // NOTE: The background async stdin reader has been removed to prevent race conditions.
-    // Rustyline's blocking readline() is now the sole stdin reader.
-    // The MSPC channel is used for inter-process communication, not stdin reading.
+    // TODO: MSPC channel and terminal input router temporarily disabled for debugging
+    // Will be re-enabled once basic readline functionality is working
+    // NOTE: Rustyline's blocking readline() is now the sole stdin reader.
 
     // Helper function to get model name for a color from client config
     fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
@@ -297,54 +291,16 @@ pub async fn run_repl_mode(
         let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
         let prompt = format!("{} {}", model_indicator, "You:".bright_green().bold());
 
-        // Read input using synchronized readline (exclusive access)
-        let line = loop {
-            // Check for MSPC messages first (non-blocking)
-            match mspc_channel.try_recv().await {
-                Ok(Some(message)) => {
-                    // Handle MSPC message
-                    if mspc_channel.is_interrupt(&message) {
-                        if let MspcMessage::InterruptSignal(content) = message {
-                            eprintln!("{} Interrupt received: {}", "⚠️".yellow(), content);
-                            println!("{} ^C - Interrupting...", "".bright_yellow());
-                            // Cancel any ongoing operation
-                            if let Ok(guard) = current_token.lock() {
-                                if let Some(ref token) = *guard {
-                                    token.cancel();
-                                }
-                            }
-                            // Continue to next iteration, prompt will be redrawn
-                            continue;
-                        }
-                    } else if mspc_channel.is_command(&message) {
-                        if let MspcMessage::Command(content) = message {
-                            eprintln!("{} Command received: {}", "🔧".cyan(), content);
-                            // Process the command immediately
-                            break Some(content);
-                        }
-                    } else if let MspcMessage::UserInput(content) = message {
-                        // Process the user input from MSPC
-                        break Some(content);
-                    } else {
-                        // Other message types - continue to check
-                        eprintln!("{} Received message: {:?}", "ℹ️".blue(), message);
-                        continue;
-                    }
-                }
-                Ok(None) | Err(_) => {
-                    // No MSPC message available, read from stdin using synchronized readline
-                    match crate::chat::ReadlineInstance::readline(&prompt) {
-                        Ok(Some(line)) => break Some(line),
-                        Ok(None) => {
-                            // Empty line
-                            continue;
-                        }
-                        Err(e) => {
-                            eprintln!("{} {}", "Error:".bright_red().bold(), e);
-                            break None;
-                        }
-                    }
-                }
+        // Read input directly from readline (MSPC channel support temporarily disabled for debugging)
+        let line = match crate::chat::ReadlineInstance::readline(&prompt) {
+            Ok(Some(line)) => Some(line),
+            Ok(None) => {
+                // Empty line - skip and prompt again
+                continue;
+            }
+            Err(e) => {
+                eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
+                None
             }
         };
 
