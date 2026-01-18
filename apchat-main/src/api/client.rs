@@ -4,12 +4,12 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 use crate::APChat;
-use apchat_models::{ModelColor, Message, Usage, ChatRequest, ChatResponse};
+use crate::MAX_RETRIES;
+use apchat_models::{ModelColor, Message, Usage, ChatRequest, ChatResponse, ToolCall, FunctionCall};
 use apchat_agents::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
 use apchat_logging::safe_truncate;
 use apchat_toolcore::parse_xml_tool_calls;
-use crate::MAX_RETRIES;
 
 /// Non-streaming API call for Groq-style APIs
 pub(crate) async fn call_api(
@@ -264,10 +264,10 @@ pub(crate) async fn call_api_with_llm_client(
         role: response.message.role,
         content: response.message.content,
         tool_calls: response.message.tool_calls.map(|calls| {
-            calls.into_iter().map(|call| crate::ToolCall {
+            calls.into_iter().map(|call| ToolCall {
                 id: call.id,
                 tool_type: "function".to_string(),
-                function: crate::FunctionCall {
+                function: FunctionCall {
                     name: call.function.name,
                     arguments: call.function.arguments,
                 },

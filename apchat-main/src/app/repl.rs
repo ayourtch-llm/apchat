@@ -11,8 +11,8 @@ use crate::chat::history::intelligent_compaction;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
-use apchat::mspc::{MspcChannel, MspcMessage};
-use apchat::input_router::TerminalInputRouter;
+use crate::mspc::{MspcChannel, MspcMessage};
+use crate::input_router::TerminalInputRouter;
 
 /// Run interactive REPL mode
 pub async fn run_repl_mode(

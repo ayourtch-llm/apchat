@@ -3,12 +3,11 @@ use colored::Colorize;
 use std::time::{Instant, Duration};
 
 use crate::APChat;
-use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk};
+use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk, ToolCall, FunctionCall};
 use apchat_agents::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
-use crate::{ToolCall, FunctionCall};
 
 /// Metrics for token generation rate tracking
 #[derive(Debug, Clone)]
@@ -556,10 +555,10 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                         // Finalize tool calls
                         for (index, (id, name, arguments)) in &tool_calls_in_progress {
                             if !id.is_empty() && !name.is_empty() {
-                                accumulated_tool_calls.push(crate::ToolCall {
+                                accumulated_tool_calls.push(ToolCall {
                                     id: id.clone(),
                                     tool_type: "function".to_string(),
-                                    function: crate::FunctionCall {
+                                    function: FunctionCall {
                                         name: name.clone(),
                                         arguments: arguments.clone(),
                                     },

@@ -7,8 +7,8 @@ use tokio::sync::Mutex;
 use crate::APChat;
 use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
-use apchat::mspc::{MspcChannel, MspcMessage};
-use apchat::input_router::TerminalInputRouter;
+use crate::mspc::{MspcChannel, MspcMessage};
+use crate::input_router::TerminalInputRouter;
 
 /// New chat loop with MSPC integration
 /// This function implements a continuous loop that:
