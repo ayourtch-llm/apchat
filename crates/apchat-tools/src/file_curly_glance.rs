@@ -217,30 +217,33 @@ pub fn analyze_file_content(content: &str, starting_line: Option<usize>) -> Vec<
 }
 
 /// Format BracketPair instances into a readable string output
-/// Format: "start..end: context" for each pair, separated by commas (single line)
-/// If there are unmatched opening brackets at EOF, adds a warning message
+/// Format: multi-line with clear structure showing line ranges and context
 pub fn format_bracket_pairs(bracket_pairs: &[BracketPair]) -> String {
     if bracket_pairs.is_empty() {
         return "No bracket pairs found.".to_string();
     }
     
-    let mut result_parts = Vec::new();
+    let mut result = String::new();
     
     for pair in bracket_pairs {
-        let line_range = format!("{}..{}", pair.opening_line, pair.closing_line);
+        let line_range = format!("{}-{}", pair.opening_line, pair.closing_line);
+        
+        // Add context line with proper spacing
+        result.push_str(&format!("  {}", line_range));
+        result.push_str(&" ".repeat(12 - line_range.len().min(12))); // Align for readability
+        
+        // Add content with type prefix for clarity
+        result.push_str(&format!(" {}", pair.content));
         
         // Add preceding whitespace information if available
         if let Some(whitespace_line) = pair.preceding_whitespace_line {
-            result_parts.push(format!("{}..{}: {} (preceded by whitespace at line {})",
-                                    pair.opening_line, pair.closing_line, pair.content, whitespace_line));
-        } else {
-            result_parts.push(format!("{}..{}: {}",
-                                    pair.opening_line, pair.closing_line, pair.content));
+            result.push_str(&format!("  \n    preceded by whitespace at line {}", whitespace_line));
         }
+        
+        result.push_str("\n");
     }
     
-    // Join all parts with commas for single-line output
-    result_parts.join(", ")
+    result.trim_end().to_string()
 }
 
 /// Helper function to find the preceding empty or whitespace-only line
@@ -260,9 +263,8 @@ fn find_preceding_whitespace_line(lines: &[&str], from_line: usize) -> Option<us
 }
 
 /// Helper function to extract context/content from a line near the opening bracket
-/// Returns the function name or nearby text
+/// Returns the function name or nearby text with more detailed information
 fn extract_context(line: &str, bracket_pos: usize) -> String {
-    // Try to extract function name pattern (e.g., "fn main()")
     let trimmed = line.trim();
     
     // Check if this looks like a function declaration
@@ -274,12 +276,12 @@ fn extract_context(line: &str, bracket_pos: usize) -> String {
         }
     }
     
-    // Check for other patterns like struct, impl, enum, etc.
+    // Check for other patterns
     if let Some(struct_pos) = trimmed.find("struct ") {
         let rest = &trimmed[struct_pos + 7..];
         if let Some(paren_pos) = rest.find('{') {
             let struct_name = &rest[..paren_pos];
-            return struct_name.to_string();
+            return format!("struct {}", struct_name);
         }
     }
     
@@ -287,7 +289,7 @@ fn extract_context(line: &str, bracket_pos: usize) -> String {
         let rest = &trimmed[impl_pos + 5..];
         if let Some(paren_pos) = rest.find('{') {
             let impl_name = &rest[..paren_pos];
-            return impl_name.to_string();
+            return format!("impl {}", impl_name);
         }
     }
     
@@ -295,7 +297,7 @@ fn extract_context(line: &str, bracket_pos: usize) -> String {
         let rest = &trimmed[enum_pos + 5..];
         if let Some(paren_pos) = rest.find('{') {
             let enum_name = &rest[..paren_pos];
-            return enum_name.to_string();
+            return format!("enum {}", enum_name);
         }
     }
     
@@ -303,16 +305,64 @@ fn extract_context(line: &str, bracket_pos: usize) -> String {
         let rest = &trimmed[match_pos + 6..];
         if let Some(paren_pos) = rest.find('{') {
             let match_expr = &rest[..paren_pos];
-            return match_expr.to_string();
+            return format!("match {}", match_expr);
         }
     }
     
-    // If not a special pattern, return some text near the bracket
-    let max_len = 30; // Maximum length to extract
+    // For if/else/while/for loops, extract the condition
+    if let Some(if_pos) = trimmed.find("if ") {
+        let rest = &trimmed[if_pos + 3..];
+        if let Some(brace_pos) = rest.find('{') {
+            let condition = &rest[..brace_pos];
+            return format!("if {}", condition.trim());
+        }
+    }
+    
+    if let Some(else_pos) = trimmed.find("else ") {
+        let rest = &trimmed[else_pos + 5..];
+        if let Some(brace_pos) = rest.find('{') {
+            let condition = &rest[..brace_pos];
+            return format!("else {}", condition.trim());
+        }
+    }
+    
+    if let Some(while_pos) = trimmed.find("while ") {
+        let rest = &trimmed[while_pos + 6..];
+        if let Some(brace_pos) = rest.find('{') {
+            let condition = &rest[..brace_pos];
+            return format!("while {}", condition.trim());
+        }
+    }
+    
+    if let Some(for_pos) = trimmed.find("for ") {
+        let rest = &trimmed[for_pos + 4..];
+        if let Some(brace_pos) = rest.find('{') {
+            let range = &rest[..brace_pos];
+            return format!("for {}", range.trim());
+        }
+    }
+    
+    // For closure, extract closure parameters
+    if let Some(pipe_pos) = trimmed.find('|') {
+        let before_pipe = &trimmed[..pipe_pos];
+        let after_pipe = &trimmed[pipe_pos..];
+        if after_pipe.contains('{') {
+            return format!("closure: {}", before_pipe.trim());
+        }
+    }
+    
+    // If not a special pattern, return more context
+    let max_len = 60; // Increased from 30 to provide more context
     let start_pos = if bracket_pos > max_len / 2 { bracket_pos - max_len / 2 } else { 0 };
     let end_pos = std::cmp::min(start_pos + max_len, line.len());
     
-    line[start_pos..end_pos].trim().to_string()
+    let snippet = &line[start_pos..end_pos];
+    let snippet = snippet.trim();
+    
+    // Remove trailing braces and semicolons for cleaner output
+    let snippet = snippet.trim_end_matches('}').trim_end_matches(';').trim().to_string();
+    
+    snippet
 }
 
 #[async_trait]
@@ -322,7 +372,7 @@ impl Tool for FileCurlyGlanceTool {
     }
 
     fn description(&self) -> &str {
-        "Analyze file curly bracket structures. Finds top-level curly brackets, matches pairs, and outputs content between them with line information."
+        "Analyze file curly bracket structures with actionable context. Shows line ranges, function names, and code blocks for quick navigation and understanding."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
@@ -646,13 +696,13 @@ fn second() {
         let pairs = analyze_file_content(test_content, None);
         let output = format_bracket_pairs(&pairs);
         
-        // Output should be single-line
-        assert!(output.contains(","));
+        // Output should be multi-line now
+        assert!(output.contains("\n"));
         
         // Should contain line ranges
-        assert!(output.contains(".."));
+        assert!(output.contains("-"));
         
-        println!("Output format test: {}", output);
+        println!("Output format test:\n{}", output);
     }
     
     #[test]
