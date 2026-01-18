@@ -188,23 +188,24 @@ pub async fn run_repl_mode(
         }
     }
 
-    // Get the singleton readline instance
-    let mut rl = crate::chat::ReadlineInstance::get()?;
-
-    // Load readline history from file
-    match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
-        Ok(_) => {
-            if chat.debug_level > 1 {
-                println!("{} Loaded {} readline history entries",
-                         "📖".bright_green(),
-                         crate::chat::readline_history::load_history(None)?.len());
+    // Load readline history (in a scope to ensure guard is dropped)
+    {
+        let mut rl = crate::chat::ReadlineInstance::get()?;
+        match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
+            Ok(_) => {
+                if chat.debug_level > 1 {
+                    println!("{} Loaded {} readline history entries",
+                             "📖".bright_green(),
+                             crate::chat::readline_history::load_history(None)?.len());
+                }
+            }
+            Err(e) => {
+                if chat.debug_level > 0 {
+                    eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
+                }
             }
         }
-        Err(e) => {
-            if chat.debug_level > 0 {
-                eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
-            }
-        }
+        // Guard is automatically dropped here when scope ends
     }
 
     // Validate and process idle timeout configuration
