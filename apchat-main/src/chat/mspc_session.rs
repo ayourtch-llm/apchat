@@ -7,8 +7,8 @@ use tokio::sync::Mutex;
 use crate::APChat;
 use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
-use crate::mspc::{MspcChannel, MspcMessage};
-use crate::input_router::TerminalInputRouter;
+use apchat::mspc::{MspcChannel, MspcMessage};
+use apchat::input_router::TerminalInputRouter;
 
 /// New chat loop with MSPC integration
 /// This function implements a continuous loop that:
@@ -23,12 +23,11 @@ pub(crate) async fn chat_with_mspc(
 ) -> Result<()> {
     // Initialize terminal input router
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+    let terminal_router_clone = TerminalInputRouter::new(mspc_channel.clone());
     
-    // Spawn terminal input router in background
+    // Spawn terminal input reader in background
     tokio::spawn(async move {
-        if let Err(e) = terminal_router.run().await {
-            eprintln!("Terminal input router error: {}", e);
-        }
+        read_terminal_input(terminal_router_clone).await;
     });
     
     // Main interaction loop
@@ -115,29 +114,35 @@ pub(crate) async fn chat_with_mspc(
                         continue;
                     }
                 } else if let MspcMessage::UserInput(content) = message {
-                    // Queue regular input for processing at turn end
-                    // Store in a temporary buffer or process immediately
-                    eprintln!("{} Queued input: {}", "📝".bright_black(), safe_truncate(&content, 50));
-                    
                     // Process the user input
                     process_user_input(chat, &content, &mspc_channel).await?;
                 }
             }
             Ok(None) => {
                 // No pending messages, continue with normal flow
-                // Check if we need to process queued inputs
-                if should_process_turn_end(chat) {
-                    // Process any accumulated inputs at turn end
-                    eprintln!("{} Processing turn end", "🔄".blue());
-                }
+                // Small delay to prevent busy waiting
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
             Err(e) => {
                 eprintln!("{} Channel error: {}", "⚠️".yellow(), e);
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
-        
-        // Small delay to prevent busy waiting
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }
+}
+
+/// Read input from terminal and send to MSPC channel
+async fn read_terminal_input(router: TerminalInputRouter) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::sync::mpsc;
+    
+    let stdin = tokio::io::stdin();
+    let reader = BufReader::new(stdin);
+    let mut lines = reader.lines();
+    
+    while let Ok(Some(line)) = lines.next_line().await {
+        let message = router.parse_input(&line);
+        router.send_to_channel(message).await;
     }
 }
 
@@ -189,20 +194,3 @@ fn parse_model_command(command: &str) -> Option<ModelColor> {
     }
 }
 
-/// Check if we should process inputs at turn end
-fn should_process_turn_end(chat: &APChat) -> bool {
-    // Check if we're at a natural break point
-    // (e.g., after tool execution, after LLM response)
-    if chat.messages.is_empty() {
-        return false;
-    }
-    
-    // Check if last message was from assistant
-    if let Some(last) = chat.messages.last() {
-        if last.role == "assistant" {
-            return true;
-        }
-    }
-    
-    false
-}

@@ -4,6 +4,7 @@ use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::APChat;
 use crate::cli::Cli;
@@ -12,6 +13,8 @@ use crate::chat::history::intelligent_compaction;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
+use apchat::mspc::{MspcChannel, MspcMessage};
+use apchat::input_router::TerminalInputRouter;
 
 /// Run interactive REPL mode
 pub async fn run_repl_mode(
@@ -269,6 +272,28 @@ pub async fn run_repl_mode(
         }
     });
 
+    // Initialize MSPC channel for multi-stream input processing
+    let mspc_channel = Arc::new(MspcChannel::new(100)); // Capacity of 100 messages
+    chat = chat.with_mspc_channel(mspc_channel.clone());
+
+    // Initialize terminal input router
+    let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+
+    // Launch terminal input router in background
+    tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        use tokio::sync::mpsc;
+        
+        let stdin = tokio::io::stdin();
+        let reader = BufReader::new(stdin);
+        let mut lines = reader.lines();
+        
+        while let Ok(Some(line)) = lines.next_line().await {
+            let message = terminal_router.parse_input(&line);
+            terminal_router.send_to_channel(message).await;
+        }
+    });
+
     // Helper function to get model name for a color from client config
     fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
         if let Some(override_model) = client_config.get_model_override(*color) {
@@ -282,44 +307,71 @@ pub async fn run_repl_mode(
     loop {
         let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
         let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
-        let prompt = format!("{} {} ", model_indicator, "You:".bright_green().bold());
+        let prompt = format!("{} {}", model_indicator, "You:".bright_green().bold());
 
-        // Read input with optional timeout support
-        let readline = if let Some((timeout_secs, ref idle_input_text)) = idle_config {
-            // Use tokio::select to wait for either user input or timeout
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<String, ReadlineError>>(1);
-            let prompt_clone = prompt.clone();
-
-            // Spawn readline in a blocking task
-            tokio::task::spawn_blocking(move || {
-                let mut rl_temp = DefaultEditor::new().unwrap();
-                let result = rl_temp.readline(&prompt_clone);
-                let _ = tx.blocking_send(result);
-            });
-
-            // Wait for either readline or timeout
-            let timeout_duration = std::time::Duration::from_secs(timeout_secs as u64);
-            tokio::select! {
-                Some(result) = rx.recv() => {
-                    // User provided input before timeout
-                    result
+        // Display prompt using rustyline (for display only)
+        // Check for MSPC messages (non-blocking)
+        let line = loop {
+            // Display prompt
+            let readline_result = rl.readline(&prompt);
+            
+            // Check for MSPC messages before processing readline result
+            match mspc_channel.try_recv().await {
+                Ok(Some(message)) => {
+                    // Handle MSPC message
+                    if mspc_channel.is_interrupt(&message) {
+                        if let MspcMessage::InterruptSignal(content) = message {
+                            eprintln!("{} Interrupt received: {}", "⚠️".yellow(), content);
+                            println!("{} ^C - Interrupting...", "".bright_yellow());
+                            // Cancel any ongoing operation
+                            if let Ok(guard) = current_token.lock() {
+                                if let Some(ref token) = *guard {
+                                    token.cancel();
+                                }
+                            }
+                            // Continue to next iteration, prompt will be redrawn
+                            continue;
+                        }
+                    } else if mspc_channel.is_command(&message) {
+                        if let MspcMessage::Command(content) = message {
+                            eprintln!("{} Command received: {}", "🔧".cyan(), content);
+                            // Process the command immediately
+                            break Some(content);
+                        }
+                    } else if let MspcMessage::UserInput(content) = message {
+                        // Process the user input from MSPC
+                        break Some(content);
+                    } else {
+                        // Other message types - continue to check
+                        eprintln!("{} Received message: {:?}", "ℹ️".blue(), message);
+                        continue;
+                    }
                 }
-                _ = tokio::time::sleep(timeout_duration) => {
-                    // Timeout occurred - inject the configured input
-                    println!("{} Idle timeout reached, injecting: \"{}\"",
-                        "⏱️".bright_yellow(),
-                        idle_input_text.bright_cyan()
-                    );
-                    Ok(idle_input_text.clone())
+                Ok(None) | Err(_) => {
+                    // No MSPC message available
+                    // Check readline result
+                    match readline_result {
+                        Ok(line) => break Some(line),
+                        Err(ReadlineError::Interrupted) => {
+                            println!("{} ^C", "".bright_black());
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                            continue;
+                        }
+                        Err(ReadlineError::Eof) => {
+                            println!("{} Goodbye!", "".bright_cyan());
+                            break None;
+                        }
+                        Err(err) => {
+                            eprintln!("{} {}", "Error:".bright_red().bold(), err);
+                            break None;
+                        }
+                    }
                 }
             }
-        } else {
-            // No timeout - use regular readline with persistent instance
-            rl.readline(&prompt)
         };
 
-        match readline {
-            Ok(line) => {
+        match line {
+            Some(line) => {
                 let line = line.trim();
 
                 if line.is_empty() {
@@ -782,17 +834,10 @@ pub async fn run_repl_mode(
                     println!();
                 }
             }
-            Err(ReadlineError::Interrupted) => {
-                println!("{}", "^C".bright_black());
+            None => {
+                // No input available
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                 continue;
-            }
-            Err(ReadlineError::Eof) => {
-                println!("{}", "Goodbye!".bright_cyan());
-                break;
-            }
-            Err(err) => {
-                eprintln!("{} {}", "Error:".bright_red().bold(), err);
-                break;
             }
         }
     }
@@ -844,6 +889,7 @@ mod repl_compact_tests {
             process_id: 12345, // Fixed for testing
             readline_history: None,
             content_limiter: None,
+            mspc_channel: None,
         }
     }
 

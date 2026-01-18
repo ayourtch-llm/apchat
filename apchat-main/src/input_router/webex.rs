@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use anyhow::Result;
-use crate::mspc::{MspcChannel, MspcMessage};
+use crate::mspc::MspcChannel;
 
 /// WebexInputRouter - Stub implementation for future Webex bot integration
 /// 

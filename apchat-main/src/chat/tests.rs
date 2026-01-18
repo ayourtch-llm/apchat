@@ -39,6 +39,7 @@ mod tests {
             process_id: 12345, // Fixed for testing
             readline_history: None,
             content_limiter: None,
+            mspc_channel: None,
         }
     }
 

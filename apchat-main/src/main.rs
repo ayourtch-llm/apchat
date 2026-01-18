@@ -19,6 +19,7 @@ mod app;
 mod terminal;
 mod web;
 
+
 use apchat_agents::{
     PlanningCoordinator, GroqLlmClient,
     ChatMessage, ExecutionContext,
@@ -78,6 +79,8 @@ pub(crate) struct APChat {
     pub(crate) readline_history: Option<crate::chat::readline_history::ReadlineHistory>,
     // Content limiter
     pub(crate) content_limiter: Option<Arc<apchat_toolcore::content_limiter::ContentLimiter>>,
+    // MSPC channel for multi-stream input processing
+    pub(crate) mspc_channel: Option<Arc<apchat::mspc::MspcChannel>>,
     
 }
 
@@ -87,6 +90,12 @@ impl APChat {
     pub(crate) fn with_content_limiter(mut self, content_limiter: Arc<apchat_toolcore::content_limiter::ContentLimiter>) -> Self {
         self.content_limiter = Some(content_limiter.clone());
         self.tool_registry = self.tool_registry.with_content_limiter(content_limiter);
+        self
+    }
+    
+    /// Create a new APChat with MSPC channel
+    pub(crate) fn with_mspc_channel(mut self, channel: Arc<apchat::mspc::MspcChannel>) -> Self {
+        self.mspc_channel = Some(channel);
         self
     }
     fn new(api_key: String, work_dir: PathBuf) -> Self {
@@ -235,6 +244,7 @@ impl APChat {
             process_id: std::process::id(),
             readline_history: None,
             content_limiter,
+            mspc_channel: None,
         };
 
         chat.messages.push(Message {
@@ -692,6 +702,7 @@ mod auto_save_tests {
             process_id: 12345, // Fixed for testing
             readline_history: None,
             content_limiter: None,
+            mspc_channel: None,
         }
     }
 
