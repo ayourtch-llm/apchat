@@ -446,62 +446,16 @@ impl Tool for PlanEditsTool {
                     // Escape-specific guidance
                     error_msg.push_str(&format!("{}\n", "🔍 This is a JSON escaping issue!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "Common causes:".bright_cyan()));
-                    error_msg.push_str(&format!("  {} Backslashes in the content (e.g., sed commands, regex patterns)\n", "•".bright_blue()));
-                    error_msg.push_str(&format!("  {} Double quotes that need escaping\n", "•".bright_blue()));
-                    error_msg.push_str(&format!("  {} Multiple levels of escaping getting confused\n", "•".bright_blue()));
-                    error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "💡 JSON Escaping Rules:".bright_cyan()));
-                    error_msg.push_str(&format!("  {} In JSON strings: backslash must be \\\\\n", "1.".bright_green()));
-                    error_msg.push_str(&format!("  {} In JSON strings: double quote must be \\\"\n", "2.".bright_green()));
-                    error_msg.push_str(&format!("  {} To represent \\\" you need: \\\\\\\"\n", "3.".bright_green()));
-                    error_msg.push_str(&format!("  {} To represent \\\\ you need: \\\\\\\\\n", "4.".bright_green()));
-                    error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "Example - Makefile content with sed:".bright_cyan()));
-                    error_msg.push_str("  Actual content:    sed -e 's/\\\"//g'\n");
-                    error_msg.push_str("  In JSON it becomes: sed -e 's/\\\\\\\"//g'\n");
-                    error_msg.push_str("                         ↑↑↑↑ Each \\ becomes \\\\\n");
                 } else if error_str.contains("expected") {
                     // Syntax error guidance
                     error_msg.push_str(&format!("{}\n", "🔍 This is a JSON syntax error!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "Common causes:".bright_cyan()));
-                    error_msg.push_str(&format!("  {} Unescaped backslash causing the next character to be treated as escape\n", "•".bright_blue()));
-                    error_msg.push_str(&format!("  {} Incorrect escaping breaking the JSON structure\n", "•".bright_blue()));
-                    error_msg.push_str(&format!("  {} Missing quotes, commas, or brackets\n", "•".bright_blue()));
-                    error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "💡 Quick Debug Steps:".bright_cyan()));
-                    error_msg.push_str(&format!("  {} Look at the character marked with ↑ above\n", "1.".bright_green()));
-                    error_msg.push_str(&format!("  {} Check if there's a backslash before it that should be doubled: \\ → \\\\\n", "2.".bright_green()));
-                    error_msg.push_str(&format!("  {} Verify all backslashes in shell commands are doubled\n", "3.".bright_green()));
-                    error_msg.push_str(&format!("  {} Count opening and closing quotes/brackets\n", "4.".bright_green()));
                 } else {
                     // Generic JSON error
                     error_msg.push_str(&format!("{}\n", "🔍 This is a JSON parsing error!".bright_yellow().bold()));
                     error_msg.push_str("\n");
-                    error_msg.push_str(&format!("{}\n", "💡 Debugging tips:".bright_cyan()));
-                    error_msg.push_str(&format!("  {} Check the character marked with ↑ above\n", "1.".bright_green()));
-                    error_msg.push_str(&format!("  {} Verify JSON structure (quotes, commas, brackets)\n", "2.".bright_green()));
-                    error_msg.push_str(&format!("  {} For shell/Makefile content, ensure backslashes are doubled: \\ → \\\\\n", "3.".bright_green()));
                 }
 
-                error_msg.push_str("\n");
-                error_msg.push_str(&format!("{}\n", "✨ RECOMMENDED APPROACH:".bright_green().bold()));
-                error_msg.push_str(&format!("  {} Instead of guessing escaping, READ THE FILE FIRST:\n", "1.".bright_yellow()));
-                error_msg.push_str("     - Use the Read tool to see the exact file content\n");
-                error_msg.push_str("     - Copy the exact lines you want to replace\n");
-                error_msg.push_str("     - The Read tool output shows content correctly escaped\n");
-                error_msg.push_str("\n");
-                error_msg.push_str(&format!("  {} For Makefile/shell content:\n", "2.".bright_yellow()));
-                error_msg.push_str("     - Read the file to get exact content\n");
-                error_msg.push_str("     - When you see backslashes, double them: \\ → \\\\\n");
-                error_msg.push_str("     - When you see quotes, escape them: \" → \\\"\n");
-                error_msg.push_str("     - Combine both rules: \\\" → \\\\\\\"\n");
-                error_msg.push_str("\n");
-                error_msg.push_str(&format!("  {} Alternative approach - use normalized matching:\n", "3.".bright_yellow()));
-                error_msg.push_str("     - The tool supports normalized whitespace matching\n");
-                error_msg.push_str("     - Get close enough and let normalization handle small differences\n");
-                error_msg.push_str("\n");
 
                 return ToolResult::error(error_msg);
             }
