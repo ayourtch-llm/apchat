@@ -5,7 +5,6 @@ use apchat_models::types::ModelColor;
 use apchat_llm_api::client::{LlmClient, ChatMessage};
 use async_trait::async_trait;
 use std::fs;
-use std::sync::Arc;
 
 /// Tool for making one-shot calls to LLM models
 pub struct LlmCallTool;

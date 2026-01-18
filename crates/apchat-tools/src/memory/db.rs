@@ -1,7 +1,6 @@
 // Database connection and operations
 
 use anyhow::{Context, Result};
-use serde_json::Value;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{SqlitePool, Row};
 use std::path::PathBuf;
@@ -15,7 +14,7 @@ pub fn get_memory_db_path() -> PathBuf {
         return PathBuf::from(custom_path);
     }
     
-    let mut path = if let Some(mut base) = dirs::home_dir() {
+    let path = if let Some(mut base) = dirs::home_dir() {
         base.push(".okaychat");
         base.push("memory.sqlite");
         base
@@ -161,7 +160,7 @@ pub async fn list_memories(
 
     let query = sqlx::query(&query_builder);
 
-    let mut query = binds.into_iter().fold(query, |q, bind| q.bind(bind));
+    let query = binds.into_iter().fold(query, |q, bind| q.bind(bind));
 
     let rows = query.fetch_all(pool).await?;
 

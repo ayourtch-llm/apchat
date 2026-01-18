@@ -4,7 +4,7 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use chrono::{Utc, DateTime};
+use chrono::Utc;
 use sqlx::Row;
 
 use crate::memory::{Memory, connect_pool, init_db, get_memory_db_path, search_memories, delete_memory, list_memories};

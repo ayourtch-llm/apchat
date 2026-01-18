@@ -1,9 +1,7 @@
 use apchat_toolcore::tool_registry::ToolRegistry;
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use async_trait::async_trait;
-use futures::Stream;
 
 // Re-export types from apchat-llm-api
 pub use apchat_llm_api::{

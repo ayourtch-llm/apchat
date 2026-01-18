@@ -12,6 +12,16 @@ use rustyline::history::FileHistory;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
 
+// Trait to provide `is_some` method for FileHistory, mirroring older API expectations
+pub trait HistoryExt {
+    fn is_some(&self) -> bool;
+}
+
+impl HistoryExt for FileHistory {
+    fn is_some(&self) -> bool { true }
+}
+
+
 use crate::chat::readline_history;
 
 
@@ -155,6 +165,7 @@ impl ReadlineInstance {
 
 #[cfg(test)]
 mod tests {
+    use crate::chat::readline_instance::HistoryExt;
     use super::*;
     use std::thread;
     use std::time::Duration;

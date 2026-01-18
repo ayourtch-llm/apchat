@@ -1,6 +1,5 @@
 use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefinition};
 use apchat_toolcore::tool_context::ToolContext;
-use apchat_logging::get_logs_dir;
 use crate::open_file;
 use async_trait::async_trait;
 use std::collections::HashMap;

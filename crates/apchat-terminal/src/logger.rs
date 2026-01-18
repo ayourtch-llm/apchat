@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use anyhow::{Result, Context};
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use apchat_logging::get_logs_dir;
 
 use super::session::SessionId;
 
