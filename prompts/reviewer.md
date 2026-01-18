@@ -1,0 +1,3 @@
+Have a look at docs/issues/resolved, and verify that the code as is does take care of them - if not, then create a new issue referencing the old one, and put it into docs/issues/open. Use the same general format - detailed, with the suggested solution where the low-skilled developer can implement the solution. Then perform the general audit of the code and its conformance to the plans - and create issues as needed, if something does not conform. 
+It should be possible to run the apchat, use the /-commands, check that the commands can be confirmed, etc. This can be tested using pty tools.
+If something prevents this - open an issue. Open as many issues as possible, be very deep in your analysis. Uberthink it.
