@@ -31,8 +31,8 @@ impl TerminalInputRouter {
     }
     
     /// Send a message to the MSPC channel
-    pub fn send_to_channel(&self, message: MspcMessage) {
-        let _ = self.channel.send(message);
+    pub async fn send_to_channel(&self, message: MspcMessage) {
+        let _ = self.channel.send(message).await;
     }
     
     /// Handle confirmation prompts by reading from stdin

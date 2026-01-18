@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use anyhow::Result;
 use crate::mspc::{MspcChannel, MspcMessage};
 
 /// WebexInputRouter - Stub implementation for future Webex bot integration
@@ -22,10 +23,11 @@ impl WebexInputRouter {
     /// 2. Listen for messages in a Webex space
     /// 3. Route messages to the MSPC channel
     /// 4. Handle Webex-specific formatting and commands
-    pub fn run(&self) {
+    pub async fn run(&self) -> Result<()> {
         // Stub implementation - no-op for now
         // Actual implementation will connect to Webex API
         
         println!("WebexInputRouter: Stub implementation - Webex integration not yet implemented");
+        Ok(())
     }
 }

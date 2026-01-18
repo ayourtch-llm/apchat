@@ -3,6 +3,7 @@ pub mod state;
 pub mod history;
 pub mod session;
 pub mod readline_history; // Added readline_history module
+pub mod mspc_session; // MSPC-integrated session module
 
 // Re-export commonly used items
 pub use state::{save_state, load_state};
@@ -18,6 +19,7 @@ pub use readline_history::{ // Added readline_history exports
     history_file_exists,
 };
 
-// Include test module
-#[cfg(test)]
+// Include test module only for lib tests
+#[cfg(all(test, not(miri)))]
 mod tests;
+
