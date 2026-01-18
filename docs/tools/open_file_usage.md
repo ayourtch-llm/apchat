@@ -1,13 +1,16 @@
 # Tool Usage Best Practices
 
+### IMPORTANT: Avoid large outputs with the tools if you can. Be more specific.
+
+Built-in content limiter will redirect the output to the file if it exceeds 20000 characters.
+Be strategic about what you request.
+
 ## open_file Tool
 
-### IMPORTANT: Use 20-line chunks for large files!
+### IMPORTANT: Use 40-line chunks for large files!
 
-**Do NOT read entire large files at once.** The `open_file` tool has a default behavior of reading the entire file, which can cause:
-1. **Output truncation** - Very large files may be cut off
-2. **Tool call overhead** - Reading full files costs extra iterations
-3. **Context bloat** - Unnecessary content competes with conversation history limits
+**Do NOT read entire large files at once.** The `open_file` tool 
+WILL refuse to give you the output if it exceeds 20000 bytes. Same thing for all the other tools.
 
 ### Recommended Usage Pattern
 
@@ -17,17 +20,17 @@ open_file {
   "file_path": "src/main.rs"
 }
 
-// ✅ GOOD - Read in 20-line chunks
+// ✅ GOOD - Read in 40-line chunks
 open_file {
   "file_path": "src/main.rs",
-  "read_line_count": 20
+  "read_line_count": 40
 }
 
 // ✅ GOOD - Read specific range
 open_file {
   "file_path": "src/main.rs",
   "start_line": 101,
-  "read_line_count": 30
+  "read_line_count": 20
 }
 ```
 
