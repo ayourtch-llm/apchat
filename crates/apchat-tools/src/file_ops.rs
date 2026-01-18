@@ -252,8 +252,7 @@ impl Tool for EditFileTool {
 
             // Return the JSON data directly to the LLM - it's better at parsing JSON than reading formatted text
             let error_message = format!(
-                "Edit failed: old_content not found in file. Analysis data:\n{}",
-                serde_json::to_string_pretty(&log_entry).unwrap_or_else(|_| log_entry.to_string())
+                "Edit failed: old_content not found in file. Re-read the original file, or be more targeted about old_content."
             );
 
             return ToolResult::error(error_message);
