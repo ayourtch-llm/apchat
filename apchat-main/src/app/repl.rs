@@ -1,7 +1,5 @@
 use anyhow::Result;
 use colored::Colorize;
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -189,7 +187,8 @@ pub async fn run_repl_mode(
         }
     }
 
-    let mut rl = DefaultEditor::new()?;
+    // Get the singleton readline instance
+    let mut rl = crate::chat::ReadlineInstance::get()?;
 
     // Load readline history from file
     match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
@@ -279,20 +278,9 @@ pub async fn run_repl_mode(
     // Initialize terminal input router
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
 
-    // Launch terminal input router in background
-    tokio::spawn(async move {
-        use tokio::io::{AsyncBufReadExt, BufReader};
-        use tokio::sync::mpsc;
-        
-        let stdin = tokio::io::stdin();
-        let reader = BufReader::new(stdin);
-        let mut lines = reader.lines();
-        
-        while let Ok(Some(line)) = lines.next_line().await {
-            let message = terminal_router.parse_input(&line);
-            terminal_router.send_to_channel(message).await;
-        }
-    });
+    // NOTE: The background async stdin reader has been removed to prevent race conditions.
+    // Rustyline's blocking readline() is now the sole stdin reader.
+    // The MSPC channel is used for inter-process communication, not stdin reading.
 
     // Helper function to get model name for a color from client config
     fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
@@ -309,13 +297,9 @@ pub async fn run_repl_mode(
         let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
         let prompt = format!("{} {}", model_indicator, "You:".bright_green().bold());
 
-        // Display prompt using rustyline (for display only)
-        // Check for MSPC messages (non-blocking)
+        // Read input using synchronized readline (exclusive access)
         let line = loop {
-            // Display prompt
-            let readline_result = rl.readline(&prompt);
-            
-            // Check for MSPC messages before processing readline result
+            // Check for MSPC messages first (non-blocking)
             match mspc_channel.try_recv().await {
                 Ok(Some(message)) => {
                     // Handle MSPC message
@@ -348,21 +332,15 @@ pub async fn run_repl_mode(
                     }
                 }
                 Ok(None) | Err(_) => {
-                    // No MSPC message available
-                    // Check readline result
-                    match readline_result {
-                        Ok(line) => break Some(line),
-                        Err(ReadlineError::Interrupted) => {
-                            println!("{} ^C", "".bright_black());
-                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    // No MSPC message available, read from stdin using synchronized readline
+                    match crate::chat::ReadlineInstance::readline(&prompt) {
+                        Ok(Some(line)) => break Some(line),
+                        Ok(None) => {
+                            // Empty line
                             continue;
                         }
-                        Err(ReadlineError::Eof) => {
-                            println!("{} Goodbye!", "".bright_cyan());
-                            break None;
-                        }
-                        Err(err) => {
-                            eprintln!("{} {}", "Error:".bright_red().bold(), err);
+                        Err(e) => {
+                            eprintln!("{} {}", "Error:".bright_red().bold(), e);
                             break None;
                         }
                     }
@@ -380,6 +358,14 @@ pub async fn run_repl_mode(
 
                 if line == "exit" || line == "quit" {
                     println!("{}", "Goodbye!".bright_cyan());
+                    
+                    // Save readline history before exiting
+                    if let Err(e) = crate::chat::ReadlineInstance::save_history() {
+                        if chat.debug_level > 0 {
+                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
+                        }
+                    }
+                    
                     break;
                 }
 
@@ -704,7 +690,7 @@ pub async fn run_repl_mode(
                     continue;
                 }
 
-                rl.add_history_entry(line)?;
+                crate::chat::ReadlineInstance::add_history(line)?;
 
                 // Save to persistent history file
                 match crate::chat::readline_history::save_to_file(&
@@ -845,6 +831,13 @@ pub async fn run_repl_mode(
     // Graceful shutdown of logger (flush & close)
     if let Some(logger) = &mut chat.logger {
         logger.shutdown().await;
+    }
+
+    // Cleanup readline instance (save history and release resources)
+    if let Err(e) = crate::chat::ReadlineInstance::cleanup() {
+        if chat.debug_level > 0 {
+            eprintln!("{} Failed to cleanup readline instance: {}", "⚠️".yellow(), e);
+        }
     }
 
     Ok(())

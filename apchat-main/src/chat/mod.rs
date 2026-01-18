@@ -3,6 +3,7 @@ pub mod state;
 pub mod history;
 pub mod session;
 pub mod readline_history; // Added readline_history module
+pub mod readline_instance; // Singleton readline instance management
 pub mod mspc_session; // MSPC-integrated session module
 
 // Re-export commonly used items
@@ -18,8 +19,10 @@ pub use readline_history::{ // Added readline_history exports
     get_default_history_path,
     history_file_exists,
 };
+pub use readline_instance::ReadlineInstance;
 
 // Include test module only for lib tests
 #[cfg(all(test, not(miri)))]
 mod tests;
+
 
