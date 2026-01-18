@@ -300,8 +300,29 @@ pub async fn run_repl_mode(
                 continue;
             }
             Err(e) => {
-                eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
-                None
+                // Handle specific readline errors
+                let err_str = e.to_string();
+                if err_str.contains("EOF") {
+                    // Ctrl-D pressed - exit gracefully
+                    println!("\n{}", "Goodbye!".bright_cyan());
+
+                    // Save readline history before exiting
+                    if let Err(save_err) = crate::chat::ReadlineInstance::save_history() {
+                        if chat.debug_level > 0 {
+                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err);
+                        }
+                    }
+
+                    break;
+                } else if err_str.contains("Interrupted") {
+                    // Ctrl-C pressed - just continue to next prompt
+                    println!();  // New line after ^C
+                    continue;
+                } else {
+                    // Other errors - print and exit
+                    eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
+                    break;
+                }
             }
         };
 
