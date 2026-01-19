@@ -291,4 +291,9 @@ impl WebexWebSocketRouter {
     pub fn client(&self) -> Arc<WebexClient> {
         Arc::clone(&self.client)
     }
+
+    /// Get the room ID for this router
+    pub fn room_id(&self) -> &str {
+        &self.room_id
+    }
 }

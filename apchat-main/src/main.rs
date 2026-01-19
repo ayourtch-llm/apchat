@@ -118,6 +118,7 @@ async fn main() -> Result<()> {
                         mspc_channel.clone(),
                     ).await {
                         Ok(router) => {
+                            let room_id = router.room_id().to_string();
                             let client = router.client();
 
                             // Spawn WebSocket router as background task
@@ -127,10 +128,7 @@ async fn main() -> Result<()> {
                                 }
                             });
 
-                            // Note: WebSocket doesn't have a room_id readily available
-                            // We'll need to get it from the first message or store it
-                            // For now, create output sink without room_id (will be fixed in next commit)
-                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, String::new()));
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
                             println!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green());
                             (Some(sink), Some(mspc_channel))
                         }
