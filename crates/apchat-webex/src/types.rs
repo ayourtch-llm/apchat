@@ -56,3 +56,27 @@ pub struct Message {
 pub struct MessagesResponse {
     pub items: Vec<Message>,
 }
+
+// Device registration for Mercury WebSocket connection
+#[derive(Debug, Serialize)]
+pub struct DeviceRegistrationRequest {
+    #[serde(rename = "deviceName")]
+    pub device_name: String,
+    #[serde(rename = "deviceType")]
+    pub device_type: String,
+    #[serde(rename = "localizedModel")]
+    pub localized_model: String,
+    pub model: String,
+    #[serde(rename = "systemName")]
+    pub system_name: String,
+    #[serde(rename = "systemVersion")]
+    pub system_version: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeviceRegistration {
+    pub url: String,
+    #[serde(rename = "webSocketUrl")]
+    pub web_socket_url: String,
+    pub id: String,
+}
