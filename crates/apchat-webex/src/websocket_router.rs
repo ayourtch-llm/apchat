@@ -17,6 +17,7 @@ pub struct WebexWebSocketRouter {
     mspc_channel: Arc<MspcChannel>,
     device_id: String,
     websocket_url: String,
+    room_id: String,
     seen_message_ids: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -74,6 +75,7 @@ impl WebexWebSocketRouter {
             mspc_channel,
             device_id: registration.id,
             websocket_url: registration.web_socket_url,
+            room_id,
             seen_message_ids: Arc::new(Mutex::new(seen_ids)),
         })
     }
@@ -145,6 +147,57 @@ impl WebexWebSocketRouter {
         Ok(())
     }
 
+    /// Poll for missed messages after reconnection
+    async fn recover_message_gap(&self, room_id: &str) -> Result<()> {
+        eprintln!("🔍 DEBUG: Checking for missed messages during disconnect...");
+
+        let messages = self.client
+            .get_messages(room_id)
+            .await
+            .context("Failed to poll for missed messages")?;
+
+        let mut new_count = 0;
+
+        for msg in messages {
+            let mut seen = self.seen_message_ids.lock().await;
+            if seen.contains(&msg.id) {
+                // Hit already-seen message, stop
+                break;
+            }
+
+            seen.insert(msg.id.clone());
+            drop(seen); // Release lock before processing
+
+            // Filter and route message
+            if msg.person_email == self.authorized_user_email
+                && msg.person_email != self.bot_email
+            {
+                if let Some(text) = msg.text {
+                    println!("📨 Recovered missed message from {}: {}", msg.person_email, text);
+
+                    let message = MspcMessage::UserInput(
+                        text,
+                        Some(format!("webex:{}", msg.person_email)),
+                    );
+
+                    if let Err(e) = self.mspc_channel.send(message).await {
+                        eprintln!("⚠️ Failed to send recovered message to MSPC: {}", e);
+                    }
+
+                    new_count += 1;
+                }
+            }
+        }
+
+        if new_count > 0 {
+            eprintln!("🔍 DEBUG: Recovered {} missed messages", new_count);
+        } else {
+            eprintln!("🔍 DEBUG: No missed messages during disconnect");
+        }
+
+        Ok(())
+    }
+
     /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email);
@@ -157,6 +210,11 @@ impl WebexWebSocketRouter {
             if reconnect_delay > 0 {
                 eprintln!("🔍 DEBUG: Reconnecting in {}s...", reconnect_delay);
                 sleep(Duration::from_secs(reconnect_delay)).await;
+
+                // Recover any messages missed during disconnect
+                if let Err(e) = self.recover_message_gap(&self.room_id).await {
+                    eprintln!("⚠️ Failed to recover message gap: {}", e);
+                }
             }
 
             // Try to connect
