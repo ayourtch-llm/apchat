@@ -23,30 +23,31 @@ async fn test_mspc_integration_comprehensive() {
     
     // Test interrupt
     let msg = router.parse_input("!cancel");
-    assert!(matches!(msg, MspcMessage::InterruptSignal(s) if s == "cancel"));
+    assert!(matches!(msg, MspcMessage::InterruptSignal(s, sender) if s == "cancel" && sender == Some("terminal".to_string())));
     println!("   ✓ Interrupt parsing works");
     
     // Test command
     let msg = router.parse_input("/model blu");
-    assert!(matches!(msg, MspcMessage::Command(s) if s == "/model blu"));
+    assert!(matches!(msg, MspcMessage::Command(s, sender) if s == "/model blu" && sender == Some("terminal".to_string())));
     println!("   ✓ Command parsing works");
     
     // Test regular input
     let msg = router.parse_input("Hello world");
-    assert!(matches!(msg, MspcMessage::UserInput(s) if s == "Hello world"));
+    assert!(matches!(msg, MspcMessage::UserInput(s, sender) if s == "Hello world" && sender == Some("terminal".to_string())));
     println!("   ✓ User input parsing works");
     
     // 4. Test message sending
     println!("\n4. Testing message sending...");
-    let send_result = channel.send(MspcMessage::UserInput("Test message".to_string())).await;
+    let send_result = channel.send(MspcMessage::UserInput("Test message".to_string(), Some("terminal".to_string()))).await;
     assert!(send_result.is_ok());
     println!("   ✓ Message sent successfully");
     
     // 5. Test non-blocking receiving
     println!("\n5. Testing non-blocking message reception...");
     match channel.try_recv().await {
-        Ok(Some(MspcMessage::UserInput(content))) => {
+        Ok(Some(MspcMessage::UserInput(content, sender))) => {
             assert_eq!(content, "Test message");
+            assert_eq!(sender, Some("terminal".to_string()));
             println!("   ✓ Message received non-blockingly");
         }
         _ => panic!("Failed to receive message"),
@@ -63,15 +64,15 @@ async fn test_mspc_integration_comprehensive() {
     // 7. Test message type detection
     println!("\n7. Testing message type detection...");
     
-    let interrupt_msg = MspcMessage::InterruptSignal("test".to_string());
+    let interrupt_msg = MspcMessage::InterruptSignal("test".to_string(), Some("terminal".to_string()));
     assert!(channel.is_interrupt(&interrupt_msg));
     println!("   ✓ Interrupt detection works");
     
-    let command_msg = MspcMessage::Command("/test".to_string());
+    let command_msg = MspcMessage::Command("/test".to_string(), Some("terminal".to_string()));
     assert!(channel.is_command(&command_msg));
     println!("   ✓ Command detection works");
     
-    let user_msg = MspcMessage::UserInput("test".to_string());
+    let user_msg = MspcMessage::UserInput("test".to_string(), Some("terminal".to_string()));
     assert!(!channel.is_interrupt(&user_msg));
     assert!(!channel.is_command(&user_msg));
     println!("   ✓ User input detection works");

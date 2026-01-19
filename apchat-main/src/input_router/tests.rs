@@ -14,7 +14,7 @@ mod tests {
         
         // Test parsing regular input
         let msg = router.parse_input("Hello world");
-        assert!(matches!(msg, MspcMessage::UserInput(s) if s == "Hello world"));
+        assert!(matches!(msg, MspcMessage::UserInput(s, sender) if s == "Hello world" && sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -24,10 +24,10 @@ mod tests {
         
         // Test parsing interrupt (starts with !)
         let msg = router.parse_input("!stop");
-        assert!(matches!(msg, MspcMessage::InterruptSignal(s) if s == "stop"));
+        assert!(matches!(msg, MspcMessage::InterruptSignal(s, sender) if s == "stop" && sender == Some("terminal".to_string())));
         
         let msg = router.parse_input("!cancel");
-        assert!(matches!(msg, MspcMessage::InterruptSignal(s) if s == "cancel"));
+        assert!(matches!(msg, MspcMessage::InterruptSignal(s, sender) if s == "cancel" && sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -37,10 +37,10 @@ mod tests {
         
         // Test parsing command (starts with /)
         let msg = router.parse_input("/help");
-        assert!(matches!(msg, MspcMessage::Command(s) if s == "/help"));
+        assert!(matches!(msg, MspcMessage::Command(s, sender) if s == "/help" && sender == Some("terminal".to_string())));
         
         let msg = router.parse_input("/model");
-        assert!(matches!(msg, MspcMessage::Command(s) if s == "/model"));
+        assert!(matches!(msg, MspcMessage::Command(s, sender) if s == "/model" && sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -50,7 +50,7 @@ mod tests {
         
         // Test parsing empty input
         let msg = router.parse_input("");
-        assert!(matches!(msg, MspcMessage::UserInput(s) if s.is_empty()));
+        assert!(matches!(msg, MspcMessage::UserInput(s, sender) if s.is_empty() && sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -60,7 +60,7 @@ mod tests {
         
         // Test parsing whitespace-only input
         let msg = router.parse_input("   ");
-        assert!(matches!(msg, MspcMessage::UserInput(s) if s.trim().is_empty()));
+        assert!(matches!(msg, MspcMessage::UserInput(s, sender) if s.trim().is_empty() && sender == Some("terminal".to_string())));
     }
     
     #[tokio::test]
@@ -69,11 +69,11 @@ mod tests {
         let router = crate::input_router::TerminalInputRouter::new(channel.clone());
         
         // Send a message through the router
-        router.send_to_channel(MspcMessage::UserInput("test message".to_string()));
+        router.send_to_channel(MspcMessage::UserInput("test message".to_string(), Some("terminal".to_string())));
         
         // Receive it from the channel
         let received = channel.recv().unwrap();
-        assert!(matches!(received, MspcMessage::UserInput(s) if s == "test message"));
+        assert!(matches!(received, MspcMessage::UserInput(s, sender) if s == "test message" && sender == Some("terminal".to_string())));
     }
     
     #[tokio::test]
@@ -82,16 +82,16 @@ mod tests {
         let router = crate::input_router::TerminalInputRouter::new(channel.clone());
         
         // Test that we can send confirmation messages
-        router.send_to_channel(MspcMessage::ConfirmationResponse(true));
+        router.send_to_channel(MspcMessage::ConfirmationResponse(true, Some("terminal".to_string())));
         
         // Receive the confirmation
         let received = channel.recv().unwrap();
-        assert!(matches!(received, MspcMessage::ConfirmationResponse(true)));
+        assert!(matches!(received, MspcMessage::ConfirmationResponse(true, sender) if sender == Some("terminal".to_string())));
         
         // Test false confirmation
-        router.send_to_channel(MspcMessage::ConfirmationResponse(false));
+        router.send_to_channel(MspcMessage::ConfirmationResponse(false, Some("terminal".to_string())));
         let received = channel.recv().unwrap();
-        assert!(matches!(received, MspcMessage::ConfirmationResponse(false)));
+        assert!(matches!(received, MspcMessage::ConfirmationResponse(false, sender) if sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -100,6 +100,6 @@ mod tests {
         let router = crate::input_router::WebexInputRouter::new(channel.clone());
         
         // For now, just verify it can be created
-        assert!(router.channel.send(MspcMessage::UserInput("test".to_string())).is_ok());
+        assert!(router.channel.send(MspcMessage::UserInput("test".to_string(), Some("webex".to_string()))).is_ok());
     }
 }

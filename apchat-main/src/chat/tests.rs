@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::chat::{calculate_conversation_size, get_max_session_size, should_compact_session, intelligent_compaction};
-    use crate::{APChat, ClientConfig};
+    use crate::{APChat, config::ClientConfig};
     use apchat_models::{Message, ModelColor, ToolCall, FunctionCall};
     use std::sync::Arc;
     use tokio::sync::Mutex;

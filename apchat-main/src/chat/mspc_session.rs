@@ -44,7 +44,7 @@ pub(crate) async fn chat_with_mspc(
             Ok(Some(message)) => {
                 if mspc_channel.is_interrupt(&message) {
                     // Handle interrupt immediately
-                    if let MspcMessage::InterruptSignal(content) = message {
+                    if let MspcMessage::InterruptSignal(content, _sender) = message {
                         eprintln!("{} Interrupt received: {}", "⚠️".yellow(), content);
                         
                         // Clean up interrupted agent message
@@ -67,7 +67,7 @@ pub(crate) async fn chat_with_mspc(
                     }
                 } else if mspc_channel.is_command(&message) {
                     // Handle command
-                    if let MspcMessage::Command(content) = message {
+                    if let MspcMessage::Command(content, _sender) = message {
                         eprintln!("{} Command received: {}", "🔧".cyan(), content);
                         
                         // Process command (e.g., /model, /skills)
@@ -90,13 +90,13 @@ pub(crate) async fn chat_with_mspc(
                     }
                 } else if mspc_channel.is_confirmation_request(&message) {
                     // Handle confirmation request
-                    if let MspcMessage::ConfirmationRequest(content) = message {
+                    if let MspcMessage::ConfirmationRequest(content, _sender) = message {
                         eprintln!("{} {}", "❓".yellow(), content);
                         eprintln!("{} Type 'yes' or 'no': ", "👉".bright_black(),);
                         
                         // Wait for confirmation response
                         match mspc_channel.recv().await {
-                            Some(MspcMessage::ConfirmationResponse(response)) => {
+                            Some(MspcMessage::ConfirmationResponse(response, _sender)) => {
                                 if response {
                                     eprintln!("{} Confirmed", "✅".green());
                                 } else {
@@ -113,7 +113,7 @@ pub(crate) async fn chat_with_mspc(
                         
                         continue;
                     }
-                } else if let MspcMessage::UserInput(content) = message {
+                } else if let MspcMessage::UserInput(content, _sender) = message {
                     // Process the user input
                     process_user_input(chat, &content, &mspc_channel).await?;
                 }

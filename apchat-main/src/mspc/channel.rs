@@ -1,18 +1,18 @@
 use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc as tokio_mpsc, Mutex as TokioMutex};
 use anyhow::Result;
 
 /// Message types for MSPC channel
 #[derive(Debug, Clone)]
 pub enum MspcMessage {
-    UserInput(String),
-    SystemPrompt(String),
-    ConfirmationRequest(String),
-    ConfirmationResponse(bool),
-    InterruptSignal(String),
-    Command(String),
-    ToolResult(String),
-    Error(String),
+    UserInput(String, Option<String>),      // Content, Sender
+    SystemPrompt(String, Option<String>),   // Content, Sender
+    ConfirmationRequest(String, Option<String>), // Content, Sender
+    ConfirmationResponse(bool, Option<String>),   // Response, Sender
+    InterruptSignal(String, Option<String>),    // Content, Sender
+    Command(String, Option<String>),         // Content, Sender
+    ToolResult(String, Option<String>),      // Content, Sender
+    Error(String, Option<String>),           // Content, Sender
 }
 
 /// Pair of user and agent messages for history
@@ -25,30 +25,30 @@ pub struct MessagePair {
 /// MSPC Channel for handling multiple input sources
 #[derive(Debug, Clone)]
 pub struct MspcChannel {
-    sender: mpsc::Sender<MspcMessage>,
-    receiver: Arc<Mutex<mpsc::Receiver<MspcMessage>>>,
-    message_history: Arc<Mutex<Vec<MessagePair>>>,
+    sender: tokio_mpsc::Sender<MspcMessage>,
+    receiver: Arc<TokioMutex<tokio_mpsc::Receiver<MspcMessage>>>,
+    message_history: Arc<TokioMutex<Vec<MessagePair>>>,
 }
 
 impl MspcChannel {
     /// Create a new MSPC channel with bounded capacity
     pub fn new(capacity: usize) -> Self {
-        let (sender, receiver) = mpsc::channel::<MspcMessage>(capacity);
+        let (sender, receiver) = tokio_mpsc::channel::<MspcMessage>(capacity);
         
         Self {
             sender,
-            receiver: Arc::new(Mutex::new(receiver)),
-            message_history: Arc::new(Mutex::new(Vec::new())),
+            receiver: Arc::new(TokioMutex::new(receiver)),
+            message_history: Arc::new(TokioMutex::new(Vec::new())),
         }
     }
     
     /// Send a message through the channel
-    pub async fn send(&self, message: MspcMessage) -> Result<(), mpsc::error::SendError<MspcMessage>> {
+    pub async fn send(&self, message: MspcMessage) -> Result<(), tokio_mpsc::error::SendError<MspcMessage>> {
         self.sender.send(message).await
     }
     
     /// Try to receive a message non-blockingly
-    pub async fn try_recv(&self) -> Result<Option<MspcMessage>, mpsc::error::TryRecvError> {
+    pub async fn try_recv(&self) -> Result<Option<MspcMessage>, tokio_mpsc::error::TryRecvError> {
         let mut receiver = self.receiver.lock().await;
         receiver.try_recv().map(Some)
     }
@@ -125,36 +125,36 @@ impl MspcChannel {
     }
     
     /// Parse input to determine message type
-    pub fn parse_input(input: &str) -> MspcMessage {
+    pub fn parse_input(input: &str, sender: Option<&str>) -> MspcMessage {
         if input.starts_with('!') {
-            MspcMessage::InterruptSignal(input.to_string())
+            MspcMessage::InterruptSignal(input.to_string(), sender.map(|s| s.to_string()))
         } else if input.starts_with('/') {
-            MspcMessage::Command(input.to_string())
+            MspcMessage::Command(input.to_string(), sender.map(|s| s.to_string()))
         } else if input.starts_with("confirm:") || input.starts_with("Confirm:") {
-            MspcMessage::ConfirmationRequest(input.to_string())
+            MspcMessage::ConfirmationRequest(input.to_string(), sender.map(|s| s.to_string()))
         } else {
-            MspcMessage::UserInput(input.to_string())
+            MspcMessage::UserInput(input.to_string(), sender.map(|s| s.to_string()))
         }
     }
     
     /// Check if a message is an interrupt
     pub fn is_interrupt(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::InterruptSignal(_))
+        matches!(message, MspcMessage::InterruptSignal(_, _))
     }
     
     /// Check if a message is a command
     pub fn is_command(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::Command(_))
+        matches!(message, MspcMessage::Command(_, _))
     }
     
     /// Check if a message is a confirmation request
     pub fn is_confirmation_request(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::ConfirmationRequest(_))
+        matches!(message, MspcMessage::ConfirmationRequest(_, _))
     }
     
     /// Check if a message is a confirmation response
     pub fn is_confirmation_response(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::ConfirmationResponse(_))
+        matches!(message, MspcMessage::ConfirmationResponse(_, _))
     }
 }
 
@@ -162,10 +162,10 @@ impl MspcChannel {
 #[derive(Debug, thiserror::Error)]
 pub enum ChannelError {
     #[error("Channel send error: {0}")]
-    SendError(#[from] mpsc::error::SendError<MspcMessage>),
+    SendError(#[from] tokio_mpsc::error::SendError<MspcMessage>),
     
     #[error("Channel receive error: {0}")]
-    RecvError(#[from] mpsc::error::TryRecvError),
+    RecvError(#[from] tokio_mpsc::error::TryRecvError),
     
     #[error("Channel closed")]
     Closed,

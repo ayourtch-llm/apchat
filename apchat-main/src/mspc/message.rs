@@ -1,12 +1,12 @@
 use std::sync::mpsc::{Sender, Receiver};
 
 pub enum MspcMessage {
-    UserInput(String),
-    SystemPrompt(String),
-    ConfirmationRequest(String),
-    ConfirmationResponse(bool),
-    InterruptSignal(String),
-    Command(String),
+    UserInput(String, Option<String>),      // Content, Sender
+    SystemPrompt(String, Option<String>),   // Content, Sender
+    ConfirmationRequest(String, Option<String>), // Content, Sender
+    ConfirmationResponse(bool, Option<String>),   // Response, Sender
+    InterruptSignal(String, Option<String>),    // Content, Sender
+    Command(String, Option<String>),         // Content, Sender
 }
 
 #[derive(Debug)]

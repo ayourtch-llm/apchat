@@ -8,19 +8,20 @@ async fn test_mspc_message_handling() {
     let channel = MspcChannel::new(10);
     
     // Send a test message
-    channel.send(MspcMessage::UserInput("Hello from MSPC!".to_string())).await.unwrap();
+    channel.send(MspcMessage::UserInput("Hello from MSPC!".to_string(), Some("test".to_string()))).await.unwrap();
     
     // Try to receive it non-blockingly
     match channel.try_recv().await {
-        Ok(Some(MspcMessage::UserInput(content))) => {
+        Ok(Some(MspcMessage::UserInput(content, sender))) => {
             assert_eq!(content, "Hello from MSPC!");
+            assert_eq!(sender, Some("test".to_string()));
             println!("✓ MSPC message received correctly");
         }
         _ => panic!("Failed to receive MSPC message"),
     }
     
     // Test interrupt message
-    channel.send(MspcMessage::InterruptSignal("test interrupt".to_string())).await.unwrap();
+    channel.send(MspcMessage::InterruptSignal("test interrupt".to_string(), Some("test".to_string()))).await.unwrap();
     
     match channel.try_recv().await {
         Ok(Some(msg)) => {
@@ -31,7 +32,7 @@ async fn test_mspc_message_handling() {
     }
     
     // Test command message
-    channel.send(MspcMessage::Command("/model blu".to_string())).await.unwrap();
+    channel.send(MspcMessage::Command("/model blu".to_string(), Some("test".to_string()))).await.unwrap();
     
     match channel.try_recv().await {
         Ok(Some(msg)) => {

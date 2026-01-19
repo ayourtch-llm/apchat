@@ -4,11 +4,15 @@ use crate::mspc::{MspcChannel, MspcMessage};
 
 pub struct TerminalInputRouter {
     pub channel: Arc<MspcChannel>,
+    pub sender_id: String,
 }
 
 impl TerminalInputRouter {
     pub fn new(channel: Arc<MspcChannel>) -> Self {
-        Self { channel }
+        Self {
+            channel,
+            sender_id: "terminal".to_string(),
+        }
     }
     
     /// Parse input string into appropriate MSPC message type
@@ -20,13 +24,13 @@ impl TerminalInputRouter {
         
         if trimmed.starts_with('!') {
             // Remove the "!" prefix and return as interrupt signal
-            MspcMessage::InterruptSignal(trimmed[1..].to_string())
+            MspcMessage::InterruptSignal(trimmed[1..].to_string(), Some(self.sender_id.clone()))
         } else if trimmed.starts_with('/') {
             // Return as command
-            MspcMessage::Command(trimmed.to_string())
+            MspcMessage::Command(trimmed.to_string(), Some(self.sender_id.clone()))
         } else {
             // Regular user input
-            MspcMessage::UserInput(trimmed.to_string())
+            MspcMessage::UserInput(trimmed.to_string(), Some(self.sender_id.clone()))
         }
     }
     

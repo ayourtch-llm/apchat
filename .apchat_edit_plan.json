@@ -1,0 +1,8 @@
+[
+  {
+    "file_path": "apchat-main/src/lib.rs",
+    "old_content": "pub mod mspc;\npub mod input_router;\n\npub mod chat;\npub mod preview;\npub mod tools_execution;\npub mod cli;\npub mod config;\npub mod api;\npub mod app;\npub mod terminal;\npub mod web;\n\nmod main;\npub use main::APChat;",
+    "new_content": "pub mod mspc;\npub mod input_router;\n\nmod main;\npub use main::APChat;\n\npub mod chat;\npub mod preview;\npub mod tools_execution;\npub mod cli;\npub mod config;\npub mod api;\npub mod app;\npub mod terminal;\npub mod web;",
+    "description": "Move APChat re-export before chat module to resolve crate::APChat imports"
+  }
+]

@@ -22,19 +22,19 @@ fn test_terminal_input_router_creation() {
     // Test parsing different input types
     let user_input = router.parse_input("Hello world");
     match user_input {
-        apchat::mspc::MspcMessage::UserInput(_) => {},
+        apchat::mspc::MspcMessage::UserInput(_, _) => {},
         _ => panic!("Expected UserInput message"),
     }
     
     let command = router.parse_input("/model blu");
     match command {
-        apchat::mspc::MspcMessage::Command(_) => {},
+        apchat::mspc::MspcMessage::Command(_, _) => {},
         _ => panic!("Expected Command message"),
     }
     
     let interrupt = router.parse_input("!cancel");
     match interrupt {
-        apchat::mspc::MspcMessage::InterruptSignal(_) => {},
+        apchat::mspc::MspcMessage::InterruptSignal(_, _) => {},
         _ => panic!("Expected InterruptSignal message"),
     }
 }
