@@ -108,33 +108,65 @@ async fn main() -> Result<()> {
         // Load Webex secret
         match apchat_webex::load_webex_secret() {
             Ok(token) => {
-                println!("{} Initializing Webex bot for {}", "🌐".bright_cyan(), user_email);
+                if cli.webex_websocket {
+                    println!("{} Initializing Webex WebSocket bot for {}", "🌐".bright_cyan(), user_email);
 
-                // Initialize Webex input router
-                match apchat_webex::WebexInputRouter::new(
-                    token,
-                    user_email.clone(),
-                    mspc_channel.clone(),
-                ).await {
-                    Ok(router) => {
-                        let room_id = router.room_id().to_string();
-                        let client = router.client();
+                    // Initialize Webex WebSocket router
+                    match apchat_webex::WebexWebSocketRouter::new(
+                        token,
+                        user_email.clone(),
+                        mspc_channel.clone(),
+                    ).await {
+                        Ok(router) => {
+                            let client = router.client();
 
-                        // Spawn Webex input router as background task
-                        tokio::spawn(async move {
-                            if let Err(e) = router.run().await {
-                                eprintln!("⚠️ Webex input router error: {}", e);
-                            }
-                        });
+                            // Spawn WebSocket router as background task
+                            tokio::spawn(async move {
+                                if let Err(e) = router.run().await {
+                                    eprintln!("⚠️ Webex WebSocket router error: {}", e);
+                                }
+                            });
 
-                        // Create Webex output sink
-                        let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
-                        println!("{} Webex bot ready - responses will be broadcast to both terminal and Webex", "✓".bright_green());
-                        (Some(sink), Some(mspc_channel))
+                            // Note: WebSocket doesn't have a room_id readily available
+                            // We'll need to get it from the first message or store it
+                            // For now, create output sink without room_id (will be fixed in next commit)
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, String::new()));
+                            println!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green());
+                            (Some(sink), Some(mspc_channel))
+                        }
+                        Err(e) => {
+                            eprintln!("{} Failed to initialize Webex WebSocket bot: {}", "⚠️".yellow(), e);
+                            (None, Some(mspc_channel))
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e);
-                        (None, Some(mspc_channel))
+                } else {
+                    println!("{} Initializing Webex bot (polling mode) for {}", "🌐".bright_cyan(), user_email);
+
+                    // Initialize Webex input router (polling mode)
+                    match apchat_webex::WebexInputRouter::new(
+                        token,
+                        user_email.clone(),
+                        mspc_channel.clone(),
+                    ).await {
+                        Ok(router) => {
+                            let room_id = router.room_id().to_string();
+                            let client = router.client();
+
+                            // Spawn Webex input router as background task
+                            tokio::spawn(async move {
+                                if let Err(e) = router.run().await {
+                                    eprintln!("⚠️ Webex input router error: {}", e);
+                                }
+                            });
+
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
+                            println!("{} Webex bot ready (polling mode)", "✓".bright_green());
+                            (Some(sink), Some(mspc_channel))
+                        }
+                        Err(e) => {
+                            eprintln!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e);
+                            (None, Some(mspc_channel))
+                        }
                     }
                 }
             }
