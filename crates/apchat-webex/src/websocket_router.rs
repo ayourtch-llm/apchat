@@ -3,8 +3,9 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::collections::HashSet;
 use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::{StreamExt, SinkExt};
+use futures_util::StreamExt;
 use apchat_mspc::{MspcChannel, MspcMessage};
 use crate::client::WebexClient;
 use crate::types::{MercuryEvent};
@@ -144,12 +145,43 @@ impl WebexWebSocketRouter {
         Ok(())
     }
 
-    /// Run the WebSocket router
+    /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email);
         eprintln!("🔍 DEBUG: Device ID: {}", self.device_id);
-        eprintln!("🔍 DEBUG: WebSocket URL: {}", self.websocket_url);
 
+        let mut reconnect_delay = 0u64; // 0 = immediate first connect
+
+        loop {
+            // Reconnection backoff delay
+            if reconnect_delay > 0 {
+                eprintln!("🔍 DEBUG: Reconnecting in {}s...", reconnect_delay);
+                sleep(Duration::from_secs(reconnect_delay)).await;
+            }
+
+            // Try to connect
+            match self.run_connection().await {
+                Ok(_) => {
+                    eprintln!("🔍 DEBUG: WebSocket connection ended cleanly");
+                    reconnect_delay = 1; // Start backoff on clean close
+                }
+                Err(e) => {
+                    eprintln!("⚠️ WebSocket error: {}", e);
+                    // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
+                    reconnect_delay = if reconnect_delay == 0 {
+                        1
+                    } else {
+                        (reconnect_delay * 2).min(30)
+                    };
+                }
+            }
+
+            eprintln!("🔍 DEBUG: Attempting reconnection...");
+        }
+    }
+
+    /// Run a single WebSocket connection (extracted for reconnection logic)
+    async fn run_connection(&self) -> Result<()> {
         // Connect to Mercury WebSocket
         let (ws_stream, _) = connect_async(&self.websocket_url)
             .await
@@ -157,15 +189,12 @@ impl WebexWebSocketRouter {
 
         eprintln!("🔍 DEBUG: WebSocket connected");
 
-        let (mut write, mut read) = ws_stream.split();
+        let (mut _write, mut read) = ws_stream.split();
 
         // Listen for messages
         while let Some(msg_result) = read.next().await {
             match msg_result {
                 Ok(Message::Text(text)) => {
-                    eprintln!("🔍 DEBUG: Received WebSocket message: {}",
-                        text.chars().take(100).collect::<String>());
-
                     // Parse Mercury event
                     match serde_json::from_str::<MercuryEvent>(&text) {
                         Ok(event) => {
@@ -186,13 +215,11 @@ impl WebexWebSocketRouter {
                     // Ignore ping/pong/binary messages
                 }
                 Err(e) => {
-                    eprintln!("⚠️ WebSocket error: {}", e);
-                    break;
+                    return Err(anyhow::anyhow!("WebSocket error: {}", e));
                 }
             }
         }
 
-        eprintln!("🔍 DEBUG: WebSocket connection ended");
         Ok(())
     }
 
