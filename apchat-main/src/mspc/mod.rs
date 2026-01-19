@@ -3,10 +3,17 @@
 // and routes them to the LLM interaction loop
 
 pub mod channel;
+pub mod output;
 
 pub use channel::{
     MspcChannel,
     MspcMessage,
     MessagePair,
     ChannelError,
+};
+
+pub use output::{
+    OutputDestination,
+    OutputMessage,
+    broadcast_to_all,
 };
