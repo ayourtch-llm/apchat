@@ -77,6 +77,73 @@ impl WebexWebSocketRouter {
         })
     }
 
+    /// Process a Mercury event and route to MSPC if it's a user message
+    async fn process_event(&self, event: MercuryEvent) -> Result<()> {
+        // Only process conversation.activity events
+        if event.data.event_type != "conversation.activity" {
+            return Ok(());
+        }
+
+        let activity = match event.data.activity {
+            Some(act) => act,
+            None => return Ok(()),
+        };
+
+        // Only process "post" verbs (new messages)
+        if activity.verb != "post" {
+            return Ok(());
+        }
+
+        // Extract message data from object
+        let obj = activity.object;
+        let message_id = obj.get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let person_email = obj.get("personEmail")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let text = obj.get("text")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Check if already seen
+        {
+            let mut seen = self.seen_message_ids.lock().await;
+            if seen.contains(&message_id) {
+                eprintln!("🔍 DEBUG: Message {} already seen, skipping", message_id);
+                return Ok(());
+            }
+            // Mark as seen
+            seen.insert(message_id.clone());
+        }
+
+        eprintln!("🔍 DEBUG: New message from {} (authorized: {}, bot: {})",
+            person_email, self.authorized_user_email, self.bot_email);
+
+        // Filter: only messages from authorized user, not from bot
+        if person_email == self.authorized_user_email && person_email != self.bot_email {
+            if let Some(text) = text {
+                println!("📨 Received Webex message from {}: {}", person_email, text);
+
+                // Send to MSPC channel
+                let message = MspcMessage::UserInput(
+                    text,
+                    Some(format!("webex:{}", person_email)),
+                );
+
+                if let Err(e) = self.mspc_channel.send(message).await {
+                    eprintln!("⚠️ Failed to send message to MSPC channel: {}", e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Run the WebSocket router
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email);
@@ -102,8 +169,9 @@ impl WebexWebSocketRouter {
                     // Parse Mercury event
                     match serde_json::from_str::<MercuryEvent>(&text) {
                         Ok(event) => {
-                            eprintln!("🔍 DEBUG: Parsed event type: {:?}", event.data.event_type);
-                            // TODO: Process event (next task)
+                            if let Err(e) = self.process_event(event).await {
+                                eprintln!("⚠️ Error processing event: {}", e);
+                            }
                         }
                         Err(e) => {
                             eprintln!("⚠️ Failed to parse Mercury event: {}", e);
