@@ -15,9 +15,6 @@ use crate::app::TerminalOutputDestination;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
-// TODO: Re-enable MSPC when basic readline is working
-// use crate::mspc::{MspcChannel, MspcMessage};
-// use crate::input_router::TerminalInputRouter;
 
 /// Run interactive REPL mode
 pub async fn run_repl_mode(
@@ -279,23 +276,70 @@ pub async fn run_repl_mode(
 
     // Initialize MSPC channel for input decoupling
     let mspc_channel = Arc::new(MspcChannel::new(100));
-    
+
     // Create output destinations
     let mut output_destinations: Vec<Box<dyn OutputDestination>> = vec![];
     output_destinations.push(Box::new(TerminalOutputDestination::new()));
-    
-    // Spawn terminal input router to handle stdin and route to MSPC channel
+
+    // Share current model state with background input task for prompt display
+    let current_model_shared = Arc::new(std::sync::RwLock::new(chat.current_model));
+    let current_model_for_main = current_model_shared.clone();
+
+    // Spawn terminal input router to handle stdin with rustyline and route to MSPC channel
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+    let client_config_for_router = chat.client_config.clone();
+
     let router_handle = tokio::spawn(async move {
-        use tokio::io::{AsyncBufReadExt, BufReader};
-        
-        let stdin = tokio::io::stdin();
-        let reader = BufReader::new(stdin);
-        let mut lines = reader.lines();
-        
-        while let Ok(Some(line)) = lines.next_line().await {
-            let message = terminal_router.parse_input(&line);
-            terminal_router.send_to_channel(message).await;
+        loop {
+            // Get current model state for prompt
+            let current_model = {
+                current_model_shared.read().unwrap().clone()
+            };
+
+            let model_name = get_model_name_for_prompt(&current_model, &client_config_for_router);
+            let model_indicator = format!("[{} ({})]", current_model.display_name(), model_name).bright_magenta();
+            let prompt_string = format!("{} {}", model_indicator, "You:".bright_green().bold());
+
+            // Use spawn_blocking for rustyline (it's a blocking operation)
+            let line_result = tokio::task::spawn_blocking(move || {
+                crate::chat::ReadlineInstance::readline(&prompt_string)
+            }).await;
+
+            match line_result {
+                Ok(Ok(Some(line))) => {
+                    // Add to readline history immediately so up-arrow works in next readline() call
+                    if let Err(e) = crate::chat::ReadlineInstance::add_history(&line) {
+                        eprintln!("{} Failed to add to history: {}", "⚠️".bright_yellow(), e);
+                    }
+
+                    let message = terminal_router.parse_input(&line);
+                    if terminal_router.send_to_channel(message).await.is_err() {
+                        break; // Channel closed, exit
+                    }
+                }
+                Ok(Ok(None)) => {
+                    // Empty line - readline returns None, just continue
+                    continue;
+                }
+                Ok(Err(e)) => {
+                    let err_str = e.to_string();
+                    if err_str.contains("EOF") {
+                        // Ctrl-D pressed - send exit command
+                        let _ = terminal_router.send_to_channel(
+                            MspcMessage::Command("exit".to_string(), Some("terminal".to_string()))
+                        ).await;
+                        break;
+                    } else if err_str.contains("Interrupted") {
+                        // Ctrl-C pressed - just continue to next prompt
+                        continue;
+                    } else {
+                        // Other errors - exit
+                        eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
+                        break;
+                    }
+                }
+                Err(_) => break, // Task panic
+            }
         }
     });
 
@@ -311,396 +355,393 @@ pub async fn run_repl_mode(
     }
 
     loop {
-        let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
-        let model_indicator = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
-        let prompt = format!("{} {}", model_indicator, "You:".bright_green().bold());
+        // Receive message from MSPC channel (background task handles readline)
+        let message = match mspc_channel.recv().await {
+            Some(msg) => msg,
+            None => {
+                // Channel closed, exit
+                println!("\n{}", "Goodbye!".bright_cyan());
 
-        // Read input directly from readline (MSPC channel support temporarily disabled for debugging)
-        let line = match crate::chat::ReadlineInstance::readline(&prompt) {
-            Ok(Some(line)) => Some(line),
-            Ok(None) => {
-                // Empty line - skip and prompt again
-                continue;
-            }
-            Err(e) => {
-                // Handle specific readline errors
-                let err_str = e.to_string();
-                if err_str.contains("EOF") {
-                    // Ctrl-D pressed - exit gracefully
-                    println!("\n{}", "Goodbye!".bright_cyan());
-
-                    // Save readline history before exiting
-                    if let Err(save_err) = crate::chat::ReadlineInstance::save_history() {
-                        if chat.debug_level > 0 {
-                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err);
-                        }
+                // Save readline history before exiting
+                if let Err(save_err) = crate::chat::ReadlineInstance::save_history() {
+                    if chat.debug_level > 0 {
+                        eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err);
                     }
-
-                    break;
-                } else if err_str.contains("Interrupted") {
-                    // Ctrl-C pressed - just continue to next prompt
-                    println!();  // New line after ^C
-                    continue;
-                } else {
-                    // Other errors - print and exit
-                    eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
-                    break;
                 }
+
+                break;
             }
         };
 
-        match line {
-            Some(line) => {
-                let line = line.trim();
+        // Extract content and sender from message
+        let line = match message {
+            MspcMessage::UserInput(content, _sender) => content,
+            MspcMessage::Command(content, _sender) => content,
+            MspcMessage::InterruptSignal(_content, _sender) => {
+                println!("\n{}", "Interrupt signal received".bright_yellow());
+                continue;
+            }
+            _ => {
+                // Unexpected message type for REPL, skip
+                continue;
+            }
+        };
 
-                if line.is_empty() {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        }
+
+        // Handle exit commands
+        if line == "exit" || line == "quit" {
+            println!("{}", "Goodbye!".bright_cyan());
+
+            // Save readline history before exiting
+            if let Err(e) = crate::chat::ReadlineInstance::save_history() {
+                if chat.debug_level > 0 {
+                    eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
+                }
+            }
+
+            break;
+        }
+
+        // Handle /save and /load commands
+        if line.starts_with("/save ") {
+            let file_path = line[6..].trim();
+            match chat.save_state(file_path) {
+                Ok(msg) => println!("{} {}", "💾".bright_green(), msg),
+                Err(e) => eprintln!("{} Failed to save: {}", "❌".bright_red(), e),
+            }
+            continue;
+        }
+
+        if line.starts_with("/load ") {
+            let file_path = line[6..].trim();
+            match chat.load_state(file_path) {
+                Ok(msg) => println!("{} {}", "📂".bright_green(), msg),
+                Err(e) => eprintln!("{} Failed to load: {}", "❌".bright_red(), e),
+            }
+            continue;
+        }
+
+        // Handle /model command
+        if line == "/model" || line.starts_with("/model ") {
+            if line == "/model" {
+                // Just display current model
+                println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+            } else {
+                // Parse model argument
+                let model_arg = line[7..].trim(); // Remove "/model " prefix
+                
+                if model_arg.is_empty() {
+                    println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
                     continue;
                 }
-
-                if line == "exit" || line == "quit" {
-                    println!("{}", "Goodbye!".bright_cyan());
-                    
-                    // Save readline history before exiting
-                    if let Err(e) = crate::chat::ReadlineInstance::save_history() {
-                        if chat.debug_level > 0 {
-                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
-                        }
-                    }
-                    
-                    break;
-                }
-
-                // Handle /save and /load commands
-                if line.starts_with("/save ") {
-                    let file_path = line[6..].trim();
-                    match chat.save_state(file_path) {
-                        Ok(msg) => println!("{} {}", "💾".bright_green(), msg),
-                        Err(e) => eprintln!("{} Failed to save: {}", "❌".bright_red(), e),
-                    }
+                
+                if model_arg == "help" || model_arg == "--help" || model_arg == "-h" {
+                    println!("{} Model switching commands:", "🤖".bright_cyan());
+                    println!("  /model              - Show current model");
+                    println!("  /model <color>      - Switch to model by color");
+                    println!("  Available colors: blu, grn, red");
+                    println!("  Example: /model blu");
                     continue;
                 }
-
-                if line.starts_with("/load ") {
-                    let file_path = line[6..].trim();
-                    match chat.load_state(file_path) {
-                        Ok(msg) => println!("{} {}", "📂".bright_green(), msg),
-                        Err(e) => eprintln!("{} Failed to load: {}", "❌".bright_red(), e),
+                
+                // Map color arguments to actual model names
+                let model_str = match model_arg.to_lowercase().as_str() {
+                    "blu" | "blue" => "blu_model",
+                    "grn" | "green" => "grn_model", 
+                    "red" => "red_model",
+                    _ => {
+                        eprintln!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), model_arg);
+                        continue;
                     }
-                    continue;
-                }
-
-                // Handle /model command
-                if line == "/model" || line.starts_with("/model ") {
-                    if line == "/model" {
-                        // Just display current model
+                };
+                
+                // Switch model with appropriate reason
+                let reason = format!("User requested switch to {} model", model_arg);
+                match chat.switch_model(model_str, &reason) {
+                    Ok(msg) => {
+                        println!("{} {}", "✓".bright_green(), msg);
                         println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+
+                        // Update shared model state for background input task
+                        {
+                            let mut model_guard = current_model_for_main.write().unwrap();
+                            *model_guard = chat.current_model;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to switch model: {}", "❌".bright_red(), e);
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Handle /debug command
+        if line == "/debug" {
+            println!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level());
+            println!("{} Usage: /debug <level>", "💡".bright_yellow());
+            println!("  0 = off");
+            println!("  1 = basic (bit 0)");
+            println!("  2 = detailed (bit 1)");
+            println!("  4 = verbose (bit 2)");
+            println!("  Example: /debug 3 (enables basic + detailed)");
+            continue;
+        }
+
+        if line.starts_with("/debug ") {
+            let level_str = line[7..].trim();
+            match level_str.parse::<u32>() {
+                Ok(level) => {
+                    chat.set_debug_level(level);
+                    println!("{} Debug level set to {} (binary: {:b})", "🔧".bright_green(), level, level);
+                }
+                Err(_) => {
+                    eprintln!("{} Invalid debug level: '{}'. Use a number like 0, 1, 3, 7, etc.", "❌".bright_red(), level_str);
+                }
+            }
+            continue;
+        }
+
+        // Handle /session commands
+        if line == "/session" || line == "/session help" {
+            println!("{} Session commands:", "🖥️".bright_cyan());
+            println!("  /session list           - List all terminal sessions");
+            println!("  /session show <id>      - Show screen buffer of session");
+            println!("  /session help           - Show this help");
+            continue;
+        }
+
+        if line == "/session list" {
+            let manager = chat.terminal_manager.lock().await;
+            match manager.list_sessions().await {
+                Ok(sessions) => {
+                    if sessions.is_empty() {
+                        println!("{} No active terminal sessions", "ℹ️".bright_blue());
                     } else {
-                        // Parse model argument
-                        let model_arg = line[7..].trim(); // Remove "/model " prefix
-                        
-                        if model_arg.is_empty() {
-                            println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
-                            continue;
-                        }
-                        
-                        if model_arg == "help" || model_arg == "--help" || model_arg == "-h" {
-                            println!("{} Model switching commands:", "🤖".bright_cyan());
-                            println!("  /model              - Show current model");
-                            println!("  /model <color>      - Switch to model by color");
-                            println!("  Available colors: blu, grn, red");
-                            println!("  Example: /model blu");
-                            continue;
-                        }
-                        
-                        // Map color arguments to actual model names
-                        let model_str = match model_arg.to_lowercase().as_str() {
-                            "blu" | "blue" => "blu_model",
-                            "grn" | "green" => "grn_model", 
-                            "red" => "red_model",
-                            _ => {
-                                eprintln!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), model_arg);
-                                continue;
-                            }
-                        };
-                        
-                        // Switch model with appropriate reason
-                        let reason = format!("User requested switch to {} model", model_arg);
-                        match chat.switch_model(model_str, &reason) {
-                            Ok(msg) => {
-                                println!("{} {}", "✓".bright_green(), msg);
-                                println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
-                            }
-                            Err(e) => {
-                                eprintln!("{} Failed to switch model: {}", "❌".bright_red(), e);
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // Handle /debug command
-                if line == "/debug" {
-                    println!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level());
-                    println!("{} Usage: /debug <level>", "💡".bright_yellow());
-                    println!("  0 = off");
-                    println!("  1 = basic (bit 0)");
-                    println!("  2 = detailed (bit 1)");
-                    println!("  4 = verbose (bit 2)");
-                    println!("  Example: /debug 3 (enables basic + detailed)");
-                    continue;
-                }
-
-                if line.starts_with("/debug ") {
-                    let level_str = line[7..].trim();
-                    match level_str.parse::<u32>() {
-                        Ok(level) => {
-                            chat.set_debug_level(level);
-                            println!("{} Debug level set to {} (binary: {:b})", "🔧".bright_green(), level, level);
-                        }
-                        Err(_) => {
-                            eprintln!("{} Invalid debug level: '{}'. Use a number like 0, 1, 3, 7, etc.", "❌".bright_red(), level_str);
-                        }
-                    }
-                    continue;
-                }
-
-                // Handle /session commands
-                if line == "/session" || line == "/session help" {
-                    println!("{} Session commands:", "🖥️".bright_cyan());
-                    println!("  /session list           - List all terminal sessions");
-                    println!("  /session show <id>      - Show screen buffer of session");
-                    println!("  /session help           - Show this help");
-                    continue;
-                }
-
-                if line == "/session list" {
-                    let manager = chat.terminal_manager.lock().await;
-                    match manager.list_sessions().await {
-                        Ok(sessions) => {
-                            if sessions.is_empty() {
-                                println!("{} No active terminal sessions", "ℹ️".bright_blue());
+                        println!("{} Active terminal sessions:", "🖥️".bright_cyan());
+                        for session in sessions {
+                            let status_icon = if session.status.contains("Running") {
+                                "▶️"
+                            } else if session.status.contains("Exited") {
+                                "⏹️"
                             } else {
-                                println!("{} Active terminal sessions:", "🖥️".bright_cyan());
-                                for session in sessions {
-                                    let status_icon = if session.status.contains("Running") {
-                                        "▶️"
-                                    } else if session.status.contains("Exited") {
-                                        "⏹️"
-                                    } else {
-                                        "⏸️"
-                                    };
-                                    println!("  {} Session {}: {} ({}x{}) - {}",
-                                        status_icon,
-                                        session.id,
-                                        session.command,
-                                        session.cols,
-                                        session.rows,
-                                        session.status
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("{} Failed to list sessions: {}", "❌".bright_red(), e);
-                        }
-                    }
-                    continue;
-                }
-
-                if line.starts_with("/session show ") {
-                    let session_id = line[14..].trim();
-                    let manager = chat.terminal_manager.lock().await;
-                    match manager.get_screen(session_id, false, true).await {
-                        Ok(screen_contents) => {
-                            // Get session info for size
-                            let width = if let Ok(sessions) = manager.list_sessions().await {
-                                sessions.iter()
-                                    .find(|s| s.id == session_id)
-                                    .map(|s| s.cols as usize)
-                                    .unwrap_or(80)
-                            } else {
-                                80
+                                "⏸️"
                             };
-
-                            println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
-                            println!("┌{}┐", "─".repeat(width));
-                            println!("{}", screen_contents);
-                            println!("└{}┘", "─".repeat(width));
-                        }
-                        Err(e) => {
-                            eprintln!("{} Failed to get screen for session '{}': {}", "❌".bright_red(), session_id, e);
+                            println!("  {} Session {}: {} ({}x{}) - {}",
+                                status_icon,
+                                session.id,
+                                session.command,
+                                session.cols,
+                                session.rows,
+                                session.status
+                            );
                         }
                     }
-                    continue;
                 }
-
-                // Handle /skills command to show available skill commands
-                if line == "/skills" || line == "/skills help" {
-                    println!("{} Available Commands:", "🎯".bright_cyan());
-                    println!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)");
-                    println!("  /brainstorm             - Use brainstorming skill for interactive design refinement");
-                    println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
-                    println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
-                    println!("  /compact               - Force immediate conversation compaction to reduce session size");
-                    println!("  /confirm                - Toggle auto-confirm mode (enable/disable confirmation prompts)");
-                    println!("  /skills help            - Show this help");
-                    continue;
+                Err(e) => {
+                    eprintln!("{} Failed to list sessions: {}", "❌".bright_red(), e);
                 }
+            }
+            continue;
+        }
 
-                // Handle /brainstorm command
-                if line == "/brainstorm" {
-                    if let Some(ref skill_registry) = chat.skill_registry {
-                        match skill_registry.get_skill("brainstorming") {
-                            Some(skill) => {
-                                let skill_msg = Message {
-                                    role: "system".to_string(),
-                                    content: format!(
-                                        "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
-                                        skill.name, skill.content
-                                    ),
-                                    tool_calls: None,
-                                    tool_call_id: None,
-                                    name: None,
-                                    reasoning: None,
-                                };
-                                chat.messages.push(skill_msg.clone());
-
-                                if let Some(logger) = &mut chat.logger {
-                                    logger.log("system", &skill_msg.content, None, false).await;
-                                }
-
-                                println!("{} {} Brainstorming skill activated! 🎯", "✓".bright_green(), "Skill:".bright_cyan());
-                                println!("{}", "Ask your question or describe what you want to brainstorm about.".bright_black());
-                            }
-                            None => {
-                                eprintln!("{} Brainstorming skill not found. Ensure skills/ directory contains brainstorming/SKILL.md", "❌".bright_red());
-                            }
-                        }
+        if line.starts_with("/session show ") {
+            let session_id = line[14..].trim();
+            let manager = chat.terminal_manager.lock().await;
+            match manager.get_screen(session_id, false, true).await {
+                Ok(screen_contents) => {
+                    // Get session info for size
+                    let width = if let Ok(sessions) = manager.list_sessions().await {
+                        sessions.iter()
+                            .find(|s| s.id == session_id)
+                            .map(|s| s.cols as usize)
+                            .unwrap_or(80)
                     } else {
-                        eprintln!("{} Skill registry not available", "❌".bright_red());
-                    }
-                    continue;
+                        80
+                    };
+
+                    println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
+                    println!("┌{}┐", "─".repeat(width));
+                    println!("{}", screen_contents);
+                    println!("└{}┘", "─".repeat(width));
                 }
+                Err(e) => {
+                    eprintln!("{} Failed to get screen for session '{}': {}", "❌".bright_red(), session_id, e);
+                }
+            }
+            continue;
+        }
 
-                // Handle /write-plan command
-                if line == "/write-plan" {
-                    if let Some(ref skill_registry) = chat.skill_registry {
-                        match skill_registry.get_skill("writing-plans") {
-                            Some(skill) => {
-                                let skill_msg = Message {
-                                    role: "system".to_string(),
-                                    content: format!(
-                                        "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
-                                        skill.name, skill.content
-                                    ),
-                                    tool_calls: None,
-                                    tool_call_id: None,
-                                    name: None,
-                                    reasoning: None,
-                                };
-                                chat.messages.push(skill_msg.clone());
+        // Handle /skills command to show available skill commands
+        if line == "/skills" || line == "/skills help" {
+            println!("{} Available Commands:", "🎯".bright_cyan());
+            println!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)");
+            println!("  /brainstorm             - Use brainstorming skill for interactive design refinement");
+            println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
+            println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
+            println!("  /compact               - Force immediate conversation compaction to reduce session size");
+            println!("  /confirm                - Toggle auto-confirm mode (enable/disable confirmation prompts)");
+            println!("  /skills help            - Show this help");
+            continue;
+        }
 
-                                if let Some(logger) = &mut chat.logger {
-                                    logger.log("system", &skill_msg.content, None, false).await;
-                                }
+        // Handle /brainstorm command
+        if line == "/brainstorm" {
+            if let Some(ref skill_registry) = chat.skill_registry {
+                match skill_registry.get_skill("brainstorming") {
+                    Some(skill) => {
+                        let skill_msg = Message {
+                            role: "system".to_string(),
+                            content: format!(
+                                "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
+                                skill.name, skill.content
+                            ),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        };
+                        chat.messages.push(skill_msg.clone());
 
-                                println!("{} {} Writing-plans skill activated! 📋", "✓".bright_green(), "Skill:".bright_cyan());
-                                println!("{}", "Describe what you want to plan and I'll create a detailed implementation plan.".bright_black());
-                            }
-                            None => {
-                                eprintln!("{} Writing-plans skill not found. Ensure skills/ directory contains writing-plans/SKILL.md", "❌".bright_red());
-                            }
+                        if let Some(logger) = &mut chat.logger {
+                            logger.log("system", &skill_msg.content, None, false).await;
                         }
-                    } else {
-                        eprintln!("{} Skill registry not available", "❌".bright_red());
+
+                        println!("{} {} Brainstorming skill activated! 🎯", "✓".bright_green(), "Skill:".bright_cyan());
+                        println!("{}", "Ask your question or describe what you want to brainstorm about.".bright_black());
                     }
-                    continue;
+                    None => {
+                        eprintln!("{} Brainstorming skill not found. Ensure skills/ directory contains brainstorming/SKILL.md", "❌".bright_red());
+                    }
                 }
+            } else {
+                eprintln!("{} Skill registry not available", "❌".bright_red());
+            }
+            continue;
+        }
 
-                // Handle /execute-plan command
-                if line == "/execute-plan" {
-                    if let Some(ref skill_registry) = chat.skill_registry {
-                        match skill_registry.get_skill("executing-plans") {
-                            Some(skill) => {
-                                let skill_msg = Message {
-                                    role: "system".to_string(),
-                                    content: format!(
-                                        "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
-                                        skill.name, skill.content
-                                    ),
-                                    tool_calls: None,
-                                    tool_call_id: None,
-                                    name: None,
-                                    reasoning: None,
-                                };
-                                chat.messages.push(skill_msg.clone());
+        // Handle /write-plan command
+        if line == "/write-plan" {
+            if let Some(ref skill_registry) = chat.skill_registry {
+                match skill_registry.get_skill("writing-plans") {
+                    Some(skill) => {
+                        let skill_msg = Message {
+                            role: "system".to_string(),
+                            content: format!(
+                                "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
+                                skill.name, skill.content
+                            ),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        };
+                        chat.messages.push(skill_msg.clone());
 
-                                if let Some(logger) = &mut chat.logger {
-                                    logger.log("system", &skill_msg.content, None, false).await;
-                                }
-
-                                println!("{} {} Executing-plans skill activated! 🚀", "✓".bright_green(), "Skill:".bright_cyan());
-                                println!("{}", "I'll execute the plan in batches with review checkpoints.".bright_black());
-                            }
-                            None => {
-                                eprintln!("{} Executing-plans skill not found. Ensure skills/ directory contains executing-plans/SKILL.md", "❌".bright_red());
-                            }
+                        if let Some(logger) = &mut chat.logger {
+                            logger.log("system", &skill_msg.content, None, false).await;
                         }
-                    } else {
-                        eprintln!("{} Skill registry not available", "❌".bright_red());
-                    }
-                    continue;
-                }
 
-                // Handle /compact command
-                if line == "/compact" {
-                    println!("{} Starting manual conversation compaction...", "🗜️".bright_blue());
-                    match intelligent_compaction(&mut chat, 0).await {
-                        Ok(()) => {
-                            let session_size = crate::chat::history::calculate_conversation_size(&chat.messages);
-                            println!("{} Compaction completed successfully!", "✓".bright_green());
-                            println!("{} Session size: {:.1} KB, Messages: {}", "📊".bright_cyan(), 
-                                     session_size as f64 / 1024.0, chat.messages.len());
+                        println!("{} {} Writing-plans skill activated! 📋", "✓".bright_green(), "Skill:".bright_cyan());
+                        println!("{}", "Describe what you want to plan and I'll create a detailed implementation plan.".bright_black());
+                    }
+                    None => {
+                        eprintln!("{} Writing-plans skill not found. Ensure skills/ directory contains writing-plans/SKILL.md", "❌".bright_red());
+                    }
+                }
+            } else {
+                eprintln!("{} Skill registry not available", "❌".bright_red());
+            }
+            continue;
+        }
+
+        // Handle /execute-plan command
+        if line == "/execute-plan" {
+            if let Some(ref skill_registry) = chat.skill_registry {
+                match skill_registry.get_skill("executing-plans") {
+                    Some(skill) => {
+                        let skill_msg = Message {
+                            role: "system".to_string(),
+                            content: format!(
+                                "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
+                                skill.name, skill.content
+                            ),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        };
+                        chat.messages.push(skill_msg.clone());
+
+                        if let Some(logger) = &mut chat.logger {
+                            logger.log("system", &skill_msg.content, None, false).await;
                         }
-                        Err(e) => {
-                            eprintln!("{} Failed to compact conversation: {}", "❌".bright_red(), e);
-                        }
+
+                        println!("{} {} Executing-plans skill activated! 🚀", "✓".bright_green(), "Skill:".bright_cyan());
+                        println!("{}", "I'll execute the plan in batches with review checkpoints.".bright_black());
                     }
-                    continue;
-                }
-
-                // Handle /confirm command
-                if line == "/confirm" {
-                    // Check if we're in auto-confirm mode
-                    let is_auto_confirm = chat.policy_manager.is_allow_all();
-                    
-                    // Toggle the mode
-                    if is_auto_confirm {
-                        // Switch to regular policy manager that asks for confirmation
-                        chat.policy_manager = PolicyManager::new();
-                        println!("{} Auto-confirm mode disabled. Actions will now require confirmation.", "✓".bright_green());
-                    } else {
-                        // Switch to allow-all policy manager for auto-confirm
-                        chat.policy_manager = PolicyManager::allow_all();
-                        println!("{} Auto-confirm mode enabled. All actions will be approved automatically.", "✓".bright_green());
+                    None => {
+                        eprintln!("{} Executing-plans skill not found. Ensure skills/ directory contains executing-plans/SKILL.md", "❌".bright_red());
                     }
-                    
-                    // Print current state
-                    let current_state = chat.policy_manager.is_allow_all();
-                    println!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"});
-                    continue;
                 }
+            } else {
+                eprintln!("{} Skill registry not available", "❌".bright_red());
+            }
+            continue;
+        }
 
-                crate::chat::ReadlineInstance::add_history(line)?;
+        // Handle /compact command
+        if line == "/compact" {
+            println!("{} Starting manual conversation compaction...", "🗜️".bright_blue());
+            match intelligent_compaction(&mut chat, 0).await {
+                Ok(()) => {
+                    let session_size = crate::chat::history::calculate_conversation_size(&chat.messages);
+                    println!("{} Compaction completed successfully!", "✓".bright_green());
+                    println!("{} Session size: {:.1} KB, Messages: {}", "📊".bright_cyan(), 
+                             session_size as f64 / 1024.0, chat.messages.len());
+                }
+                Err(e) => {
+                    eprintln!("{} Failed to compact conversation: {}", "❌".bright_red(), e);
+                }
+            }
+            continue;
+        }
 
-                // Save to persistent history file
-                match crate::chat::readline_history::save_to_file(&
-                    crate::chat::readline_history::ReadlineEntry::with_session(
-                        line,
-                        format!("session_{}", chat.process_id)
-                    )
-                ) {
-                    Ok(_) => {
+        // Handle /confirm command
+        if line == "/confirm" {
+            // Check if we're in auto-confirm mode
+            let is_auto_confirm = chat.policy_manager.is_allow_all();
+            
+            // Toggle the mode
+            if is_auto_confirm {
+                // Switch to regular policy manager that asks for confirmation
+                chat.policy_manager = PolicyManager::new();
+                println!("{} Auto-confirm mode disabled. Actions will now require confirmation.", "✓".bright_green());
+            } else {
+                // Switch to allow-all policy manager for auto-confirm
+                chat.policy_manager = PolicyManager::allow_all();
+                println!("{} Auto-confirm mode enabled. All actions will be approved automatically.", "✓".bright_green());
+            }
+            
+            // Print current state
+            let current_state = chat.policy_manager.is_allow_all();
+            println!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"});
+            continue;
+        }
+
+        // Save to persistent history file (in-memory history already added in background task)
+        match crate::chat::readline_history::save_to_file(&
+            crate::chat::readline_history::ReadlineEntry::with_session(
+                line,
+                format!("session_{}", chat.process_id)
+            )
+        ) {
+            Ok(_) => {
                         if chat.debug_level > 2 {
                             println!("{} Saved to readline history", "✏️".bright_blue());
                         }
@@ -820,13 +861,6 @@ pub async fn run_repl_mode(
                     // Add extra newline after streaming to separate from next prompt
                     println!();
                 }
-            }
-            None => {
-                // No input available
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                continue;
-            }
-        }
     }
 
     // Abort terminal input router on exit

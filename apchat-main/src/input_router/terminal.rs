@@ -35,8 +35,8 @@ impl TerminalInputRouter {
     }
     
     /// Send a message to the MSPC channel
-    pub async fn send_to_channel(&self, message: MspcMessage) {
-        let _ = self.channel.send(message).await;
+    pub async fn send_to_channel(&self, message: MspcMessage) -> Result<(), tokio::sync::mpsc::error::SendError<MspcMessage>> {
+        self.channel.send(message).await
     }
     
     /// Handle confirmation prompts by reading from stdin
