@@ -251,8 +251,8 @@ impl WebexClient {
         let request = DeviceRegistrationRequest {
             device_name: "apchat-bot".to_string(),
             device_type: "DESKTOP".to_string(),
-            localized_model: "rust".to_string(),
-            model: "rust".to_string(),
+            localized_model: "python".to_string(),
+            model: "python".to_string(),
             name: device_name,
             system_name: "APChat".to_string(),
             system_version: "0.1.0".to_string(),
