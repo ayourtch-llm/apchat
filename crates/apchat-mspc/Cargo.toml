@@ -1,0 +1,11 @@
+[package]
+name = "apchat-mspc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["sync"] }
+thiserror = "1.0"
+anyhow = "1.0"
+async-trait = "0.1"
+serde_json = "1.0"

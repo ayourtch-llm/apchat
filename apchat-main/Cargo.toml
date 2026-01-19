@@ -20,6 +20,7 @@ apchat-agents = { path = "../crates/apchat-agents" }
 apchat-llm-api = { path = "../crates/apchat-llm-api" }
 apchat-logging = { path = "../crates/apchat-logging" }
 apchat-models = { path = "../crates/apchat-models" }
+apchat-mspc = { path = "../crates/apchat-mspc" }
 apchat-policy = { path = "../crates/apchat-policy" }
 apchat-skills = { path = "../crates/apchat-skills", features = ["embeddings"] }
 apchat-terminal = { path = "../crates/apchat-terminal" }

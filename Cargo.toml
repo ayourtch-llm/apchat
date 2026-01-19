@@ -5,6 +5,7 @@ members = [
     "crates/apchat-models",
     "crates/apchat-logging",
     "crates/apchat-llm-api",
+    "crates/apchat-mspc",
     "crates/apchat-todo",
     "crates/apchat-policy",
     "crates/apchat-skills",
@@ -12,6 +13,7 @@ members = [
     "crates/apchat-toolcore",
     "crates/apchat-tools",
     "crates/apchat-wasm",
+    "crates/apchat-webex",
 ]
 resolver = "2"
 

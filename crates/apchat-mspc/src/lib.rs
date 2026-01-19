@@ -1,11 +1,18 @@
 // MSPC module - Multi-Stream Processing Channel
-// Re-exports from apchat-mspc crate
+// Handles inputs from multiple sources (terminal, webex, etc.)
+// and routes them to the LLM interaction loop
 
-pub use apchat_mspc::{
+pub mod channel;
+pub mod output;
+
+pub use channel::{
     MspcChannel,
     MspcMessage,
     MessagePair,
     HistoryError,
+};
+
+pub use output::{
     OutputDestination,
     OutputMessage,
     broadcast_to_all,
