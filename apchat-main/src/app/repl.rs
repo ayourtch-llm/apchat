@@ -8,6 +8,8 @@ use crate::APChat;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::chat::history::intelligent_compaction;
+use crate::mspc::{MspcChannel, MspcMessage};
+use crate::input_router::TerminalInputRouter;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
@@ -273,9 +275,24 @@ pub async fn run_repl_mode(
         }
     });
 
-    // TODO: MSPC channel and terminal input router temporarily disabled for debugging
-    // Will be re-enabled once basic readline functionality is working
-    // NOTE: Rustyline's blocking readline() is now the sole stdin reader.
+    // Initialize MSPC channel for input decoupling
+    let mspc_channel = Arc::new(MspcChannel::new(100));
+    
+    // Spawn terminal input router to handle stdin and route to MSPC channel
+    let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+    let router_handle = tokio::spawn(async move {
+        use tokio::io::{AsyncBufReadExt, BufReader};
+        
+        let stdin = tokio::io::stdin();
+        let reader = BufReader::new(stdin);
+        let mut lines = reader.lines();
+        
+        while let Ok(Some(line)) = lines.next_line().await {
+            let message = terminal_router.parse_input(&line);
+            terminal_router.send_to_channel(message).await;
+        }
+    });
+
 
     // Helper function to get model name for a color from client config
     fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
@@ -806,6 +823,9 @@ pub async fn run_repl_mode(
         }
     }
 
+    // Abort terminal input router on exit
+    router_handle.abort();
+    
     // Graceful shutdown of logger (flush & close)
     if let Some(logger) = &mut chat.logger {
         logger.shutdown().await;
