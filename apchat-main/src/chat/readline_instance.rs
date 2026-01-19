@@ -122,20 +122,17 @@ impl ReadlineInstance {
     
     /// Save the readline history to file
     ///
-    /// This method saves the in-memory history to the persistent FileHistory storage.
+    /// This method is a no-op because we use a custom JSON-based history system
+    /// (see readline_history.rs) that saves after each command. Rustyline's native
+    /// save format conflicts with our JSON format, so we disable it here.
     ///
     /// # Returns
     ///
-    /// * `Result<()>` - Ok if successful, Err otherwise
+    /// * `Result<()>` - Always Ok
     pub fn save_history() -> Result<()> {
-        let mut guard = Self::get()?;
-        let rl = &mut *guard;
-        
-        // Save history using rustyline's built-in functionality
-        let history_path = readline_history::get_default_history_path()?;
-        rl.save_history(&PathBuf::from(history_path))
-            .map_err(|e| anyhow::anyhow!("Failed to save readline history: {}", e))?;
-        
+        // No-op: We use custom JSON-based history saving in readline_history.rs
+        // which is called after each command in repl.rs (line ~797).
+        // Rustyline's native save would overwrite our JSON with plain text format.
         Ok(())
     }
     

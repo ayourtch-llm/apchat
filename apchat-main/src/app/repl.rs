@@ -194,16 +194,13 @@ pub async fn run_repl_mode(
         let mut rl = crate::chat::ReadlineInstance::get()?;
         match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
             Ok(_) => {
-                if chat.debug_level > 1 {
-                    println!("{} Loaded {} readline history entries",
-                             "📖".bright_green(),
-                             crate::chat::readline_history::load_history(None)?.len());
-                }
+                let history_len = crate::chat::readline_history::load_history(None)?.len();
+                println!("{} Loaded {} readline history entries",
+                         "📖".bright_green(),
+                         history_len);
             }
             Err(e) => {
-                if chat.debug_level > 0 {
-                    eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
-                }
+                eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
             }
         }
         // Guard is automatically dropped here when scope ends

@@ -140,10 +140,13 @@ pub fn load_history(file_path: Option<&str>) -> Result<ReadlineHistory> {
     let mut history = ReadlineHistory::new();
     for line in reader.lines() {
         let line = line.map_err(|e| anyhow::anyhow!("Failed to read line from history file: {}", e))?;
-        if line.trim().is_empty() {
+        let trimmed = line.trim();
+
+        // Skip empty lines and comment lines (starting with #)
+        if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        
+
         let entry: ReadlineEntry = serde_json::from_str(&line)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize ReadlineEntry from line: {}", e))?;
         history.add_entry(entry);
@@ -172,13 +175,13 @@ pub fn save_to_file(entry: &ReadlineEntry) -> Result<String> {
 }
 
 /// Load history and add to rustyline editor
-pub fn load_and_add_to_editor(rl: &mut rustyline::Editor<(), rustyline::history::DefaultHistory>) -> Result<()> {
+pub fn load_and_add_to_editor(rl: &mut rustyline::Editor<(), rustyline::history::FileHistory>) -> Result<()> {
     let history = load_history(None)?;
-    
+
     for entry in history.get_entries() {
         rl.add_history_entry(&entry.command)?;
     }
-    
+
     Ok(())
 }
 
