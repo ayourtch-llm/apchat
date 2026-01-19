@@ -80,3 +80,23 @@ pub struct DeviceRegistration {
     pub web_socket_url: String,
     pub id: String,
 }
+
+// Mercury WebSocket event messages
+#[derive(Debug, Deserialize)]
+pub struct MercuryEvent {
+    pub id: String,
+    pub data: MercuryEventData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MercuryEventData {
+    #[serde(rename = "eventType")]
+    pub event_type: String,
+    pub activity: Option<Activity>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Activity {
+    pub verb: String,
+    pub object: serde_json::Value,
+}
