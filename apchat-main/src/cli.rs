@@ -179,6 +179,11 @@ pub struct Cli {
     /// Requires WEBEX_APCHAT_SECRET environment variable or ~/.okaychat/env config
     #[arg(long, value_name = "USER_EMAIL")]
     pub webex_bot: Option<String>,
+
+    /// Use WebSocket instead of polling for Webex bot
+    /// Requires --webex-bot to be set
+    #[arg(long)]
+    pub webex_websocket: bool,
 }
 
 #[derive(Subcommand)]
