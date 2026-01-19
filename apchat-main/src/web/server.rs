@@ -9,6 +9,7 @@ use tower_http::{
 
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
+use crate::mspc::MspcChannel;
 use crate::web::{routes, session_manager::SessionManager};
 
 /// Web server configuration
@@ -25,11 +26,12 @@ pub struct WebServerConfig {
 pub struct WebServer {
     config: WebServerConfig,
     session_manager: Arc<SessionManager>,
+    mspc_channel: Option<Arc<MspcChannel>>,
 }
 
 impl WebServer {
     /// Create a new web server
-    pub fn new(config: WebServerConfig) -> Self {
+    pub fn new(config: WebServerConfig, mspc_channel: Option<Arc<MspcChannel>>) -> Self {
         let session_manager = Arc::new(SessionManager::new(
             config.work_dir.clone(),
             config.client_config.clone(),
@@ -48,6 +50,7 @@ impl WebServer {
         Self {
             config,
             session_manager,
+            mspc_channel,
         }
     }
 
@@ -55,6 +58,7 @@ impl WebServer {
     pub async fn start(self) -> Result<()> {
         let app_state = routes::AppState {
             session_manager: self.session_manager.clone(),
+            mspc_channel: self.mspc_channel.clone(),
         };
 
         // Create router

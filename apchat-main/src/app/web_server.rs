@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
+use crate::mspc::MspcChannel;
 use crate::web::server::{WebServer, WebServerConfig};
 
 /// Expand ~ to home directory
@@ -53,7 +55,7 @@ pub async fn run_web_server(
     };
 
     // Create and start server
-    let server = WebServer::new(config);
+    let server = WebServer::new(config, None);
     server.start().await?;
 
     Ok(())

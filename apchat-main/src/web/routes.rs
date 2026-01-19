@@ -16,6 +16,7 @@ use uuid::Uuid;
 use apchat_models::Message as ChatMessage;
 use crate::{
     api::call_api,
+    mspc::{MspcChannel, MspcMessage},
     web::{
         protocol::{ClientMessage, ServerMessage, SessionConfig, SessionId, SessionInfo},
         session_manager::SessionManager,
@@ -26,6 +27,7 @@ use crate::{
 #[derive(Clone)]
 pub struct AppState {
     pub session_manager: Arc<SessionManager>,
+    pub mspc_channel: Option<Arc<MspcChannel>>,
 }
 
 /// Create router with all routes
@@ -514,6 +516,21 @@ async fn handle_send_message(
     session: &Arc<crate::web::session_manager::Session>,
     state: &AppState,
 ) {
+    // Check if MSPC channel is available
+    if let Some(mspc_channel) = &state.mspc_channel {
+        // Send message to MSPC channel
+        let mspc_msg = MspcMessage::UserInput(content.clone(), Some("web_socket".to_string()));
+        
+        if mspc_channel.send(mspc_msg).await.is_err() {
+            eprintln!("⚠️  Failed to send WebSocket message to MSPC channel");
+            // Fallback to direct processing if MSPC fails
+        } else {
+            // Message sent to MSPC, no further processing needed here
+            return;
+        }
+    }
+    
+    // Fallback: Direct processing (for backward compatibility)
     let mut apchat = session.apchat.lock().await;
 
     // Check if this is the first user message
