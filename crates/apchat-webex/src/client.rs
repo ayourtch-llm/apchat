@@ -279,9 +279,11 @@ impl WebexClient {
             return Err(anyhow::anyhow!("Failed to register device: {} - {}", status, error_body));
         }
 
-        let registration: DeviceRegistration = response
-            .json()
-            .await
+        // Get response text first for diagnostics
+        let response_text = response.text().await.context("Failed to read response body")?;
+        eprintln!("🔍 DEBUG: Device registration response body: {}", response_text);
+
+        let registration: DeviceRegistration = serde_json::from_str(&response_text)
             .context("Failed to parse device registration response")?;
 
         eprintln!("🔍 DEBUG: Device registered: ID={}, WebSocket URL={}",
