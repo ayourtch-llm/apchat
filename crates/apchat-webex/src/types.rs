@@ -79,7 +79,6 @@ pub struct DeviceRegistration {
     pub url: String,
     #[serde(rename = "webSocketUrl")]
     pub web_socket_url: String,
-    pub id: String,
 }
 
 // Mercury WebSocket event messages

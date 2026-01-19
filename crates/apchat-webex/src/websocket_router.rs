@@ -70,10 +70,10 @@ impl WebexWebSocketRouter {
 
         Ok(Self {
             client: Arc::new(client),
-            authorized_user_email: user_email,
+            authorized_user_email: user_email.clone(),
             bot_email,
             mspc_channel,
-            device_id: registration.id,
+            device_id: format!("webex-{}", &user_email),
             websocket_url: registration.web_socket_url,
             room_id,
             seen_message_ids: Arc::new(Mutex::new(seen_ids)),

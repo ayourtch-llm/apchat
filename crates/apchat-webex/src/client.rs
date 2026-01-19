@@ -286,8 +286,8 @@ impl WebexClient {
         let registration: DeviceRegistration = serde_json::from_str(&response_text)
             .context("Failed to parse device registration response")?;
 
-        eprintln!("🔍 DEBUG: Device registered: ID={}, WebSocket URL={}",
-            registration.id, registration.web_socket_url);
+        eprintln!("🔍 DEBUG: Device registered: WebSocket URL={}",
+             registration.web_socket_url);
 
         Ok(registration)
     }
