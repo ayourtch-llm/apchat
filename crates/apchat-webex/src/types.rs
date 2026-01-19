@@ -67,6 +67,7 @@ pub struct DeviceRegistrationRequest {
     #[serde(rename = "localizedModel")]
     pub localized_model: String,
     pub model: String,
+    pub name: String,
     #[serde(rename = "systemName")]
     pub system_name: String,
     #[serde(rename = "systemVersion")]

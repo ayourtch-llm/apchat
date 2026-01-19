@@ -239,14 +239,26 @@ impl WebexClient {
         let url = format!("{}/devices", WEBEX_API_BASE);
         eprintln!("🔍 DEBUG: Registering device for Mercury WebSocket");
 
+        // Generate unique device name (similar to Python bot implementation)
+        // Use timestamp and process ID for uniqueness
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let pid = std::process::id();
+        let device_name = format!("apchat-rust-client-{}-{}", pid, timestamp);
+
         let request = DeviceRegistrationRequest {
             device_name: "apchat-bot".to_string(),
             device_type: "DESKTOP".to_string(),
             localized_model: "rust".to_string(),
             model: "rust".to_string(),
+            name: device_name,
             system_name: "APChat".to_string(),
             system_version: "0.1.0".to_string(),
         };
+
+        eprintln!("🔍 DEBUG: Device registration payload: {}", serde_json::to_string_pretty(&request).unwrap_or_default());
 
         let response = self.client
             .post(&url)
