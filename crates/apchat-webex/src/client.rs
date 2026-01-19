@@ -233,4 +233,46 @@ impl WebexClient {
 
         Ok(messages_response.items)
     }
+
+    /// Register device to get Mercury WebSocket URL
+    pub async fn register_device(&self) -> Result<DeviceRegistration> {
+        let url = format!("{}/devices", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Registering device for Mercury WebSocket");
+
+        let request = DeviceRegistrationRequest {
+            device_name: "apchat-bot".to_string(),
+            device_type: "DESKTOP".to_string(),
+            localized_model: "Rust APChat Bot".to_string(),
+            model: "apchat".to_string(),
+            system_name: "APChat".to_string(),
+            system_version: "0.1.0".to_string(),
+        };
+
+        let response = self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to register device")?;
+
+        let status = response.status();
+        eprintln!("🔍 DEBUG: Device registration response status: {}", status);
+
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            eprintln!("🔍 DEBUG: Error response body: {}", error_body);
+            return Err(anyhow::anyhow!("Failed to register device: {} - {}", status, error_body));
+        }
+
+        let registration: DeviceRegistration = response
+            .json()
+            .await
+            .context("Failed to parse device registration response")?;
+
+        eprintln!("🔍 DEBUG: Device registered: ID={}, WebSocket URL={}",
+            registration.id, registration.web_socket_url);
+
+        Ok(registration)
+    }
 }
