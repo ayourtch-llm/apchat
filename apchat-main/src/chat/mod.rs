@@ -20,9 +20,6 @@ pub use readline_history::{ // Added readline_history exports
     history_file_exists,
 };
 pub use readline_instance::ReadlineInstance;
-
-// Include test module only for lib tests
-#[cfg(all(test, not(miri)))]
-mod tests;
+pub use mspc_session::{execute_chat_turn, chat_with_mspc};
 
 

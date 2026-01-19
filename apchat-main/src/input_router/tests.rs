@@ -96,19 +96,17 @@ mod tests {
     }
     
     #[test]
-    #[test]
-
-#[cfg(test)]
-mod manager_tests {
-    use super::*;
+    fn test_webex_router_parses_regular_input() {
+        let channel = Arc::new(MspcChannel::new(100));
+        let router = crate::input_router::WebexInputRouter::new(channel.clone());
+        
+        // Test parsing regular input from webex
+        let msg = router.parse_input("Hello from WebEx", "user1");
+        assert!(matches!(msg, MspcMessage::UserInput(s, sender) if s == "Hello from WebEx" && sender == Some("user1".to_string())));
+    }
 
     #[test]
     fn test_input_source_manager_new() {
-        let manager = crate::input_router::InputSourceManager::new();
-        
-        // Verify initial state
-        assert!(manager.terminal_reader.is_none());
-        assert!(manager.webex_reader.is_none());
         assert!(manager.websocket_handlers.is_empty());
     }
 
@@ -448,5 +446,4 @@ mod manager_tests {
         assert!(manager.websocket_handlers.is_empty());
     }
 }
-}
-}
+

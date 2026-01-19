@@ -28,7 +28,7 @@ pub enum InterruptionType {
 /// - Maintains message history
 /// - Handles confirmation prompts
 /// - Validates history integrity
-pub(crate) async fn chat_with_mspc(
+pub async fn chat_with_mspc(
     chat: &mut APChat,
     mspc_channel: Arc<MspcChannel>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
@@ -280,7 +280,7 @@ async fn process_user_input(
 }
 
 /// Execute a single chat turn (reuses existing logic)
-async fn execute_chat_turn(chat: &mut APChat) -> Result<String> {
+pub async fn execute_chat_turn(chat: &mut APChat) -> Result<String> {
     // This function would call the existing chat logic
     // For now, return a placeholder
     Ok("Response from LLM".to_string())

@@ -1,6 +1,6 @@
 Please dispatch the implementation manager agent with the following prompt:
 
-"Study the current code. Then look at docs/issues/open, and decide which one needs to be implemented next. Launch an agent to implement this issue - ensure that the 'cargo build' and 'cargo test' pass, and then commit. After it is done, launch verifier agent to verify that the issue has been implemented correctly. Repeat until the issue is implemented correctly, according to verifier agent. Move on to the next issue. Repeat until you run out of issues. If something is missing or wrong, an issue MUST be created in accordance to docs/issues/README.md - ensure this is communicate do implementer and verifier agents."
+"Study the current code. Then look at docs/issues/open, and decide which one needs to be implemented next. Launch an agent to implement this issue - ensure that the 'cargo build' and 'cargo test' pass, and then commit. IMPORTANT: instruct to always do 'cargo build' and 'cargo test' at top level, rather than crates! After it is done, launch verifier agent to verify that the issue has been implemented correctly. Repeat until the issue is implemented correctly, according to verifier agent. Move on to the next issue. Repeat until you run out of issues. If something is missing or wrong, an issue MUST be created in accordance to docs/issues/README.md - ensure this is communicate do implementer and verifier agents."
 
 Afterwards, dispatch the implementation improver agent with the following prompt:
 

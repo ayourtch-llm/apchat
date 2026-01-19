@@ -9,7 +9,9 @@ use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::chat::history::intelligent_compaction;
 use crate::mspc::{MspcChannel, MspcMessage};
+use crate::mspc::{OutputDestination, broadcast_to_all, OutputMessage};
 use crate::input_router::TerminalInputRouter;
+use crate::app::TerminalOutputDestination;
 use apchat_policy::PolicyManager;
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
@@ -277,6 +279,10 @@ pub async fn run_repl_mode(
 
     // Initialize MSPC channel for input decoupling
     let mspc_channel = Arc::new(MspcChannel::new(100));
+    
+    // Create output destinations
+    let mut output_destinations: Vec<Box<dyn OutputDestination>> = vec![];
+    output_destinations.push(Box::new(TerminalOutputDestination::new()));
     
     // Spawn terminal input router to handle stdin and route to MSPC channel
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
