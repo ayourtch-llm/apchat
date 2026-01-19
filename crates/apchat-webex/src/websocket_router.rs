@@ -148,15 +148,16 @@ impl WebexWebSocketRouter {
     }
 
     /// Poll for missed messages after reconnection
-    async fn recover_message_gap(&self, room_id: &str) -> Result<()> {
+    async fn recover_message_gap(&self) -> Result<()> {
         eprintln!("🔍 DEBUG: Checking for missed messages during disconnect...");
 
         let messages = self.client
-            .get_messages(room_id)
+            .get_messages(&self.room_id)
             .await
             .context("Failed to poll for missed messages")?;
 
         let mut new_count = 0;
+        let mut new_messages = Vec::new();
 
         for msg in messages {
             let mut seen = self.seen_message_ids.lock().await;
@@ -168,24 +169,29 @@ impl WebexWebSocketRouter {
             seen.insert(msg.id.clone());
             drop(seen); // Release lock before processing
 
-            // Filter and route message
+            // Collect messages instead of processing immediately
             if msg.person_email == self.authorized_user_email
                 && msg.person_email != self.bot_email
             {
-                if let Some(text) = msg.text {
-                    println!("📨 Recovered missed message from {}: {}", msg.person_email, text);
+                new_messages.push(msg);
+            }
+        }
 
-                    let message = MspcMessage::UserInput(
-                        text,
-                        Some(format!("webex:{}", msg.person_email)),
-                    );
+        // Process in reverse order (oldest first)
+        for msg in new_messages.into_iter().rev() {
+            if let Some(text) = msg.text {
+                println!("📨 Recovered missed message from {}: {}", msg.person_email, text);
 
-                    if let Err(e) = self.mspc_channel.send(message).await {
-                        eprintln!("⚠️ Failed to send recovered message to MSPC: {}", e);
-                    }
+                let message = MspcMessage::UserInput(
+                    text,
+                    Some(format!("webex:{}", msg.person_email)),
+                );
 
-                    new_count += 1;
+                if let Err(e) = self.mspc_channel.send(message).await {
+                    eprintln!("⚠️ Failed to send recovered message to MSPC: {}", e);
                 }
+
+                new_count += 1;
             }
         }
 
@@ -212,7 +218,7 @@ impl WebexWebSocketRouter {
                 sleep(Duration::from_secs(reconnect_delay)).await;
 
                 // Recover any messages missed during disconnect
-                if let Err(e) = self.recover_message_gap(&self.room_id).await {
+                if let Err(e) = self.recover_message_gap().await {
                     eprintln!("⚠️ Failed to recover message gap: {}", e);
                 }
             }
