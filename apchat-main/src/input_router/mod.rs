@@ -1,9 +1,14 @@
 use anyhow::Result;
 use crate::mspc::{MspcChannel, MspcMessage};
 
+pub mod manager;
 pub mod terminal;
 pub mod webex;
 
+#[cfg(test)]
+mod tests;
+
+pub use manager::InputSourceManager;
 pub use terminal::TerminalInputRouter;
 pub use webex::WebexInputRouter;
 

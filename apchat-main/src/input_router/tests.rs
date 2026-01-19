@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::task::JoinHandle;
 
 use crate::mspc::{MspcChannel, MspcMessage};
 
@@ -101,5 +102,181 @@ mod tests {
         
         // For now, just verify it can be created
         assert!(router.channel.send(MspcMessage::UserInput("test".to_string(), Some("webex".to_string()))).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod manager_tests {
+    use super::*;
+
+    #[test]
+    fn test_input_source_manager_new() {
+        let manager = crate::input_router::InputSourceManager::new();
+        
+        // Verify initial state
+        assert!(manager.terminal_reader.is_none());
+        assert!(manager.webex_reader.is_none());
+        assert!(manager.websocket_handlers.is_empty());
+    }
+
+    #[test]
+    fn test_input_source_manager_add_terminal_reader() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        let channel = Arc::new(MspcChannel::new(100));
+        let router = crate::input_router::TerminalInputRouter::new(channel);
+        
+        // Create a dummy JoinHandle for testing
+        let handle = tokio::spawn(async {});
+        manager.terminal_reader = Some(handle);
+        
+        assert!(manager.terminal_reader.is_some());
+    }
+
+    #[test]
+    fn test_input_source_manager_add_webex_reader() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        let channel = Arc::new(MspcChannel::new(100));
+        let router = crate::input_router::WebexInputRouter::new(channel);
+        
+        // Create a dummy JoinHandle for testing
+        let handle = tokio::spawn(async {});
+        manager.webex_reader = Some(handle);
+        
+        assert!(manager.webex_reader.is_some());
+    }
+
+    #[test]
+    fn test_input_source_manager_add_websocket_handler() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Create a dummy JoinHandle for testing
+        let handle = tokio::spawn(async {});
+        manager.websocket_handlers.insert("session123".to_string(), handle);
+        
+        assert_eq!(manager.websocket_handlers.len(), 1);
+        assert!(manager.websocket_handlers.contains_key("session123"));
+    }
+
+    #[tokio::test]
+    async fn test_input_source_manager_cleanup_without_readers() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Cleanup should not panic when no readers are present
+        manager.cleanup().await;
+        
+        // Verify state is still valid
+        assert!(manager.terminal_reader.is_none());
+        assert!(manager.webex_reader.is_none());
+        assert!(manager.websocket_handlers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_input_source_manager_cleanup_terminal_reader() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Create a task that will run indefinitely
+        let handle = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        manager.terminal_reader = Some(handle);
+        assert!(manager.terminal_reader.is_some());
+        
+        // Cleanup should abort the task
+        manager.cleanup().await;
+        
+        // Verify the reader is cleared
+        assert!(manager.terminal_reader.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_input_source_manager_cleanup_webex_reader() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Create a task that will run indefinitely
+        let handle = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        manager.webex_reader = Some(handle);
+        assert!(manager.webex_reader.is_some());
+        
+        // Cleanup should abort the task
+        manager.cleanup().await;
+        
+        // Verify the reader is cleared
+        assert!(manager.webex_reader.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_input_source_manager_cleanup_websocket_handlers() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Create multiple tasks
+        let handle1 = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        let handle2 = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        manager.websocket_handlers.insert("session1".to_string(), handle1);
+        manager.websocket_handlers.insert("session2".to_string(), handle2);
+        
+        assert_eq!(manager.websocket_handlers.len(), 2);
+        
+        // Cleanup should abort all tasks
+        manager.cleanup().await;
+        
+        // Verify all handlers are cleared
+        assert!(manager.websocket_handlers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_input_source_manager_cleanup_all_readers() {
+        let mut manager = crate::input_router::InputSourceManager::new();
+        
+        // Create tasks for all reader types
+        let terminal_handle = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        let webex_handle = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        let ws_handle = tokio::spawn(async {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        
+        manager.terminal_reader = Some(terminal_handle);
+        manager.webex_reader = Some(webex_handle);
+        manager.websocket_handlers.insert("ws1".to_string(), ws_handle);
+        
+        assert!(manager.terminal_reader.is_some());
+        assert!(manager.webex_reader.is_some());
+        assert_eq!(manager.websocket_handlers.len(), 1);
+        
+        // Cleanup should abort all tasks
+        manager.cleanup().await;
+        
+        // Verify all readers are cleared
+        assert!(manager.terminal_reader.is_none());
+        assert!(manager.webex_reader.is_none());
+        assert!(manager.websocket_handlers.is_empty());
     }
 }
