@@ -22,6 +22,25 @@ pub struct MessagePair {
     pub agent: String,
 }
 
+/// Error type for message history validation
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum HistoryError {
+    #[error("Empty message pair at index {0}")]
+    EmptyMessagePair(usize),
+    
+    #[error("Invalid message pattern at index {0}: both user and agent messages are empty")]
+    InvalidMessagePattern(usize),
+    
+    #[error("Message too long at index {0}: {1} characters (max {2})")]
+    MessageTooLong(usize, usize, usize),
+    
+    #[error("History starts with agent message at index {0}")]
+    StartsWithAgentMessage(usize),
+    
+    #[error("Duplicate consecutive messages from same speaker at index {0}")]
+    DuplicateConsecutiveMessages(usize),
+}
+
 /// MSPC Channel for handling multiple input sources
 #[derive(Debug, Clone)]
 pub struct MspcChannel {
@@ -156,17 +175,188 @@ impl MspcChannel {
     pub fn is_confirmation_response(&self, message: &MspcMessage) -> bool {
         matches!(message, MspcMessage::ConfirmationResponse(_, _))
     }
-}
-
-/// Error type for MSPC operations
-#[derive(Debug, thiserror::Error)]
-pub enum ChannelError {
-    #[error("Channel send error: {0}")]
-    SendError(#[from] tokio_mpsc::error::SendError<MspcMessage>),
     
-    #[error("Channel receive error: {0}")]
-    RecvError(#[from] tokio_mpsc::error::TryRecvError),
+    /// Validate message history for consistency and correctness
+    /// Returns a list of validation errors if any
+    pub async fn validate_history(&self) -> Result<Vec<HistoryError>, HistoryError> {
+        let history = self.message_history.lock().await;
+        let mut errors = Vec::new();
+        
+        if history.is_empty() {
+            return Ok(errors);
+        }
+        
+        // Maximum message length (10,000 characters)
+        const MAX_MESSAGE_LENGTH: usize = 10_000;
+        
+        // Check each message pair
+        for (i, pair) in history.iter().enumerate() {
+            // Check for empty message pairs
+            if pair.user.is_empty() && pair.agent.is_empty() {
+                errors.push(HistoryError::EmptyMessagePair(i));
+                continue;
+            }
+            
+            // Check message lengths
+            if !pair.user.is_empty() && pair.user.len() > MAX_MESSAGE_LENGTH {
+                errors.push(HistoryError::MessageTooLong(i, pair.user.len(), MAX_MESSAGE_LENGTH));
+            }
+            
+            if !pair.agent.is_empty() && pair.agent.len() > MAX_MESSAGE_LENGTH {
+                errors.push(HistoryError::MessageTooLong(i, pair.agent.len(), MAX_MESSAGE_LENGTH));
+            }
+            
+            // Check for invalid patterns (both empty)
+            if pair.user.is_empty() && pair.agent.is_empty() {
+                errors.push(HistoryError::InvalidMessagePattern(i));
+            }
+            
+            // Check if history starts with agent message
+            if i == 0 && !pair.user.is_empty() && pair.agent.is_empty() {
+                // This is valid: starts with user message
+            } else if i == 0 && pair.user.is_empty() && !pair.agent.is_empty() {
+                errors.push(HistoryError::StartsWithAgentMessage(i));
+            }
+            
+            // Check for duplicate consecutive messages
+            if i > 0 {
+                let prev = &history[i - 1];
+                let current = pair;
+                
+                // Both previous and current have user messages
+                if !prev.user.is_empty() && !current.user.is_empty() {
+                    errors.push(HistoryError::DuplicateConsecutiveMessages(i));
+                }
+                
+                // Both previous and current have agent messages
+                if !prev.agent.is_empty() && !current.agent.is_empty() {
+                    errors.push(HistoryError::DuplicateConsecutiveMessages(i));
+                }
+            }
+        }
+        
+        if errors.is_empty() {
+            Ok(errors)
+        } else {
+            Err(errors.into_iter().next().unwrap())
+        }
+    }
     
-    #[error("Channel closed")]
-    Closed,
+    /// Validate and repair message history
+    /// Attempts to fix common issues automatically
+    pub async fn validate_and_repair_history(&self) -> Result<(), Vec<HistoryError>> {
+        let mut history = self.message_history.lock().await;
+        let mut errors = Vec::new();
+        
+        if history.is_empty() {
+            return Ok(());
+        }
+        
+        // Maximum message length (10,000 characters)
+        const MAX_MESSAGE_LENGTH: usize = 10_000;
+        
+        // First pass: check for issues and truncate messages
+        for (i, pair) in history.iter().enumerate() {
+            // Check for empty message pairs
+            if pair.user.is_empty() && pair.agent.is_empty() {
+                errors.push(HistoryError::EmptyMessagePair(i));
+                continue;
+            }
+            
+            // Check message lengths
+            if !pair.user.is_empty() && pair.user.len() > MAX_MESSAGE_LENGTH {
+                errors.push(HistoryError::MessageTooLong(i, pair.user.len(), MAX_MESSAGE_LENGTH));
+            }
+            
+            if !pair.agent.is_empty() && pair.agent.len() > MAX_MESSAGE_LENGTH {
+                errors.push(HistoryError::MessageTooLong(i, pair.agent.len(), MAX_MESSAGE_LENGTH));
+            }
+            
+            // Check if history starts with agent message
+            if i == 0 && pair.user.is_empty() && !pair.agent.is_empty() {
+                errors.push(HistoryError::StartsWithAgentMessage(i));
+            }
+            
+            // Check for duplicate consecutive messages
+            if i > 0 {
+                let prev = &history[i - 1];
+                
+                // Both previous and current have user messages
+                if !prev.user.is_empty() && !pair.user.is_empty() {
+                    errors.push(HistoryError::DuplicateConsecutiveMessages(i));
+                }
+                
+                // Both previous and current have agent messages
+                if !prev.agent.is_empty() && !pair.agent.is_empty() {
+                    errors.push(HistoryError::DuplicateConsecutiveMessages(i));
+                }
+            }
+        }
+        
+        // Second pass: repair issues
+        let mut prev_user_empty = true;
+        let mut prev_agent_empty = true;
+        
+        for (i, pair) in history.iter_mut().enumerate() {
+            // Truncate messages that are too long
+            if pair.user.len() > MAX_MESSAGE_LENGTH {
+                pair.user.truncate(MAX_MESSAGE_LENGTH);
+            }
+            
+            if pair.agent.len() > MAX_MESSAGE_LENGTH {
+                pair.agent.truncate(MAX_MESSAGE_LENGTH);
+            }
+            
+            // Fix orphaned agent messages at the start
+            if i == 0 && pair.user.is_empty() && !pair.agent.is_empty() {
+                // Move agent message to user field (treat as user message)
+                pair.user = std::mem::take(&mut pair.agent);
+            }
+            
+            // Fix duplicate consecutive messages
+            if i > 0 {
+                // If previous has user message and current also has user message,
+                // merge them or move current user to agent
+                if !prev_user_empty && !pair.user.is_empty() {
+                    // Move current user message to agent field
+                    pair.agent = std::mem::take(&mut pair.user);
+                }
+                
+                // If previous has agent message and current also has agent message,
+                // merge them or clear current agent
+                if !prev_agent_empty && !pair.agent.is_empty() {
+                    // Clear current agent message
+                    pair.agent.clear();
+                }
+            }
+            
+            // Update previous state for next iteration
+            prev_user_empty = pair.user.is_empty();
+            prev_agent_empty = pair.agent.is_empty();
+        }
+        
+        // Remove any remaining empty pairs
+        history.retain(|pair| !(pair.user.is_empty() && pair.agent.is_empty()));
+        
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+    
+    /// Handle interruption with validation and repair
+    /// Returns the interrupted message content if any
+    pub async fn handle_interruption_with_validation(&self) -> Result<String, Vec<HistoryError>> {
+        let interrupted = self.handle_interruption().await;
+        
+        // Validate and repair history after interruption
+        let result = self.validate_and_repair_history().await;
+        
+        if result.is_ok() {
+            Ok(interrupted)
+        } else {
+            Err(result.unwrap_err())
+        }
+    }
 }

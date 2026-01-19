@@ -9,7 +9,7 @@ pub use channel::{
     MspcChannel,
     MspcMessage,
     MessagePair,
-    ChannelError,
+    HistoryError,
 };
 
 pub use output::{

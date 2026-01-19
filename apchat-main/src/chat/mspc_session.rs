@@ -7,8 +7,19 @@ use tokio::sync::Mutex;
 use crate::APChat;
 use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
-use crate::mspc::{MspcChannel, MspcMessage};
+use crate::mspc::{MspcChannel, MspcMessage, HistoryError};
 use crate::input_router::TerminalInputRouter;
+
+/// Types of interruptions that can occur
+#[derive(Debug, Clone, PartialEq)]
+pub enum InterruptionType {
+    /// User-initiated interruption (e.g., via !command)
+    UserInitiated,
+    /// System error or unexpected failure
+    SystemError,
+    /// Timeout or long-running operation interruption
+    Timeout,
+}
 
 /// New chat loop with MSPC integration
 /// This function implements a continuous loop that:
@@ -16,6 +27,7 @@ use crate::input_router::TerminalInputRouter;
 /// - Processes regular inputs at turn end
 /// - Maintains message history
 /// - Handles confirmation prompts
+/// - Validates history integrity
 pub(crate) async fn chat_with_mspc(
     chat: &mut APChat,
     mspc_channel: Arc<MspcChannel>,
@@ -47,21 +59,40 @@ pub(crate) async fn chat_with_mspc(
                     if let MspcMessage::InterruptSignal(content, _sender) = message {
                         eprintln!("{} Interrupt received: {}", "⚠️".yellow(), content);
                         
-                        // Clean up interrupted agent message
-                        let interrupted = mspc_channel.handle_interruption().await;
-                        if !interrupted.is_empty() {
-                            eprintln!("{} Interrupted message: {}", "ℹ️".blue(), safe_truncate(&interrupted, 100));
+                        // Handle interruption with validation and repair
+                        match mspc_channel.handle_interruption_with_validation().await {
+                            Ok(interrupted) => {
+                                if !interrupted.is_empty() {
+                                    eprintln!("{} Interrupted message: {}", "ℹ️".blue(), safe_truncate(&interrupted, 100));
+                                }
+                                
+                                // Add interruption to message history
+                                chat.messages.push(Message {
+                                    role: "user".to_string(),
+                                    content: format!("[INTERRUPTED] {}", content),
+                                    tool_calls: None,
+                                    tool_call_id: None,
+                                    name: None,
+                                    reasoning: None,
+                                });
+                                
+                                // Validate history after interruption
+                                validate_and_log_history(&mspc_channel).await;
+                            }
+                            Err(errors) => {
+                                eprintln!("{} History validation errors after interruption:", "⚠️".yellow());
+                                for error in errors {
+                                    eprintln!("  - {}", error);
+                                }
+                                
+                                // Attempt to repair history
+                                if let Err(repair_errors) = mspc_channel.validate_and_repair_history().await {
+                                    eprintln!("{} Failed to repair history: {}", "❌".red(), repair_errors.len());
+                                } else {
+                                    eprintln!("{} History repaired successfully", "✅".green());
+                                }
+                            }
                         }
-                        
-                        // Add interruption to message history
-                        chat.messages.push(Message {
-                            role: "user".to_string(),
-                            content: format!("[INTERRUPTED] {}", content),
-                            tool_calls: None,
-                            tool_call_id: None,
-                            name: None,
-                            reasoning: None,
-                        });
                         
                         continue;
                     }
@@ -84,6 +115,22 @@ pub(crate) async fn chat_with_mspc(
                             eprintln!("  /model <grn|blu|red> - Switch model");
                             eprintln!("  /skills - Show this help");
                             eprintln!("  !<command> - Interrupt current operation");
+                        } else if content == "/validate" {
+                            // Validate history
+                            validate_and_log_history(&mspc_channel).await;
+                        } else if content == "/repair" {
+                            // Repair history
+                            match mspc_channel.validate_and_repair_history().await {
+                                Ok(_) => {
+                                    eprintln!("{} History repaired successfully", "✅".green());
+                                }
+                                Err(errors) => {
+                                    eprintln!("{} Failed to repair history:", "❌".red());
+                                    for error in errors {
+                                        eprintln!("  - {}", error);
+                                    }
+                                }
+                            }
                         }
                         
                         continue;
@@ -131,6 +178,51 @@ pub(crate) async fn chat_with_mspc(
     }
 }
 
+/// Validate and log history status
+async fn validate_and_log_history(mspc_channel: &MspcChannel) {
+    match mspc_channel.validate_history().await {
+        Ok(errors) => {
+            if errors.is_empty() {
+                eprintln!("{} History validation: OK", "✅".green());
+            } else {
+                eprintln!("{} History validation: {} error(s)", "⚠️".yellow(), errors.len());
+                for error in errors {
+                    eprintln!("  - {}", error);
+                }
+            }
+        }
+        Err(error) => {
+            eprintln!("{} History validation failed: {}", "❌".red(), error);
+        }
+    }
+}
+
+/// Handle interruption with context-aware cleanup
+async fn handle_interruption_context_aware(
+    mspc_channel: &MspcChannel,
+    interruption_type: InterruptionType,
+) -> Result<String, Vec<HistoryError>> {
+    match interruption_type {
+        InterruptionType::UserInitiated => {
+            // For user-initiated interruptions, clear partial agent responses
+            // but preserve complete conversation history
+            let interrupted = mspc_channel.handle_interruption_with_validation().await?;
+            Ok(interrupted)
+        }
+        InterruptionType::SystemError => {
+            // For system errors, preserve history for debugging
+            // but ensure it's in a valid state
+            let interrupted = mspc_channel.handle_interruption_with_validation().await?;
+            Ok(interrupted)
+        }
+        InterruptionType::Timeout => {
+            // For timeouts, handle partial responses gracefully
+            let interrupted = mspc_channel.handle_interruption_with_validation().await?;
+            Ok(interrupted)
+        }
+    }
+}
+
 /// Read input from terminal and send to MSPC channel
 async fn read_terminal_input(router: TerminalInputRouter) {
     use tokio::io::{AsyncBufReadExt, BufReader};
@@ -165,6 +257,11 @@ async fn process_user_input(
     // Add to MSPC history
     mspc_channel.add_user_message(user_message.to_string()).await;
     
+    // Validate history after adding user message
+    if let Err(errors) = mspc_channel.validate_history().await {
+        eprintln!("{} History validation warning: {}", "⚠️".yellow(), errors);
+    }
+    
     // Summarize history before processing
     crate::chat::history::summarize_and_trim_history(chat).await?;
     
@@ -173,6 +270,11 @@ async fn process_user_input(
     
     // Add agent response to history
     mspc_channel.add_agent_message(response.clone()).await;
+    
+    // Validate history after adding agent message
+    if let Err(errors) = mspc_channel.validate_history().await {
+        eprintln!("{} History validation warning: {}", "⚠️".yellow(), errors);
+    }
     
     Ok(response)
 }
