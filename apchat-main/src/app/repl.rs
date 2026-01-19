@@ -30,7 +30,7 @@ pub async fn run_repl_mode(
         println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
     }
 
-    println!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, or '/skills' to see available commands\n".bright_black());
+    println!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, '/history' to view history, or '/skills' for all commands\n".bright_black());
 
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
@@ -330,7 +330,10 @@ pub async fn run_repl_mode(
                         ).await;
                         break;
                     } else if err_str.contains("Interrupted") {
-                        // Ctrl-C pressed - just continue to next prompt
+                        // Ctrl-C pressed - send interrupt signal to cancel current operation
+                        let _ = terminal_router.send_to_channel(
+                            MspcMessage::InterruptSignal("interrupt".to_string(), Some("terminal".to_string()))
+                        ).await;
                         continue;
                     } else {
                         // Other errors - exit
@@ -354,7 +357,7 @@ pub async fn run_repl_mode(
         }
     }
 
-    loop {
+    'outer: loop {
         // Receive message from MSPC channel (background task handles readline)
         let message = match mspc_channel.recv().await {
             Some(msg) => msg,
@@ -378,7 +381,8 @@ pub async fn run_repl_mode(
             MspcMessage::UserInput(content, _sender) => content,
             MspcMessage::Command(content, _sender) => content,
             MspcMessage::InterruptSignal(_content, _sender) => {
-                println!("\n{}", "Interrupt signal received".bright_yellow());
+                // Interrupt without active operation - just show message and continue
+                println!("\n{}", "No operation in progress to interrupt".bright_yellow());
                 continue;
             }
             _ => {
@@ -478,6 +482,63 @@ pub async fn run_repl_mode(
                     }
                 }
             }
+            continue;
+        }
+
+        // Handle /history command
+        if line == "/history" {
+            println!("{}", "📜 Conversation History:".bright_cyan());
+            println!("{}", "═".repeat(80).bright_black());
+
+            for (i, msg) in chat.messages.iter().enumerate() {
+                let role_label = match msg.role.as_str() {
+                    "system" => "SYS".bright_magenta(),
+                    "user" => "USR".bright_green(),
+                    "assistant" => "AST".bright_blue(),
+                    "tool" => "TL ".bright_yellow(),
+                    _ => "???".bright_red(),
+                };
+
+                // Check if assistant message has tool calls
+                let tool_indicator = if msg.role == "assistant" {
+                    if let Some(ref tool_calls) = msg.tool_calls {
+                        if !tool_calls.is_empty() {
+                            let tool_names: Vec<_> = tool_calls.iter()
+                                .map(|tc| tc.function.name.as_str())
+                                .collect();
+                            format!(" 🔧[{}]", tool_names.join(", ")).bright_yellow().to_string()
+                        } else {
+                            String::new()
+                        }
+                    } else {
+                        String::new()
+                    }
+                } else if msg.role == "tool" {
+                    // Show tool call ID for tool messages
+                    if let Some(ref tool_call_id) = msg.tool_call_id {
+                        format!(" (id: {})", &tool_call_id[..tool_call_id.len().min(8)]).bright_black().to_string()
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                };
+
+                // Truncate content to 80 chars to leave room for tool indicator
+                let content_preview = if msg.content.len() > 80 {
+                    format!("{}...", &msg.content[..77])
+                } else {
+                    msg.content.clone()
+                };
+
+                // Replace newlines with spaces for single-line display
+                let content_preview = content_preview.replace('\n', " ");
+
+                println!("{:3}. [{}]{} {}", i, role_label, tool_indicator, content_preview.bright_black());
+            }
+
+            println!("{}", "═".repeat(80).bright_black());
+            println!("{} Total messages: {}", "📊".bright_cyan(), chat.messages.len());
             continue;
         }
 
@@ -581,6 +642,7 @@ pub async fn run_repl_mode(
         if line == "/skills" || line == "/skills help" {
             println!("{} Available Commands:", "🎯".bright_cyan());
             println!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)");
+            println!("  /history                - Display conversation history with message roles");
             println!("  /brainstorm             - Use brainstorming skill for interactive design refinement");
             println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
             println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
@@ -774,77 +836,177 @@ pub async fn run_repl_mode(
                     }
                 }
 
+                // Create cancellation token for this operation
+                let cancel_token = tokio_util::sync::CancellationToken::new();
+
+                // Register this token with the persistent Ctrl-C handler
+                {
+                    let mut guard = current_token.lock().unwrap();
+                    *guard = Some(cancel_token.clone());
+                }
+
+                // Use tokio::select! to race inference against interrupt signals
                 let response = if chat.use_agents && chat.agent_coordinator.is_some() {
-                    // Create cancellation token for this agent request
-                    let cancel_token = tokio_util::sync::CancellationToken::new();
-
-                    // Register this token with the persistent Ctrl-C handler
-                    {
-                        let mut guard = current_token.lock().unwrap();
-                        *guard = Some(cancel_token.clone());
-                    }
-
-                    // Use agent system with cancellation support
-                    let result = chat.process_with_agents(line, Some(cancel_token.clone())).await;
-
-                    // Clear the current token after operation completes
-                    {
-                        let mut guard = current_token.lock().unwrap();
-                        *guard = None;
-                    }
-
-                    match result {
-                        Ok(response) => response,
-                        Err(e) if e.to_string().contains("cancelled") || e.to_string().contains("interrupted") => {
-                            println!("{}", "Task interrupted by user".bright_yellow());
-                            continue;
-                        }
-                        Err(e) => {
-                            eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
-                            // Fallback to regular chat with same cancellation token
-                            match crate::chat::session::chat(&mut chat, line, Some(cancel_token.clone())).await {
-                                Ok(response) => response,
-                                Err(e) if e.to_string().contains("interrupted") => {
-                                    println!("{}", "Operation interrupted by user".bright_yellow());
-                                    continue;
+                    // Agent inference with interrupt handling
+                    'agent_loop: loop {
+                        tokio::select! {
+                            result = chat.process_with_agents(line, Some(cancel_token.clone())) => {
+                                match result {
+                                    Ok(response) => {
+                                        break 'agent_loop response;
+                                    }
+                                    Err(e) if e.to_string().contains("cancelled") || e.to_string().contains("interrupted") => {
+                                        // This shouldn't happen since interrupts are handled in select! branch
+                                        // But if it does, treat it like an error
+                                        eprintln!("{} Unexpected interruption: {}", "⚠️".yellow(), e);
+                                        {
+                                            let mut guard = current_token.lock().unwrap();
+                                            *guard = None;
+                                        }
+                                        chat.messages.push(Message {
+                                            role: "assistant".to_string(),
+                                            content: format!("[Interrupted: {}]", e),
+                                            tool_calls: None,
+                                            tool_call_id: None,
+                                            name: None,
+                                            reasoning: None,
+                                        });
+                                        continue 'outer;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                                        {
+                                            let mut guard = current_token.lock().unwrap();
+                                            *guard = None;
+                                        }
+                                        // Add assistant message to maintain turn alternation
+                                        chat.messages.push(Message {
+                                            role: "assistant".to_string(),
+                                            content: format!("[Error: {}]", e),
+                                            tool_calls: None,
+                                            tool_call_id: None,
+                                            name: None,
+                                            reasoning: None,
+                                        });
+                                        continue 'outer;
+                                    }
                                 }
-                                Err(e) => {
-                                    eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                                    continue;
+                            }
+                            interrupt_msg = mspc_channel.recv() => {
+                                if let Some(msg) = interrupt_msg {
+                                    match msg {
+                                        MspcMessage::InterruptSignal(_content, _sender) => {
+                                            println!("\n{}", "^C - Interrupting current operation...".bright_yellow());
+                                            cancel_token.cancel();
+                                            {
+                                                let mut guard = current_token.lock().unwrap();
+                                                *guard = None;
+                                            }
+                                            // Add assistant message to maintain turn alternation
+                                            chat.messages.push(Message {
+                                                role: "assistant".to_string(),
+                                                content: "[Interrupted by user]".to_string(),
+                                                tool_calls: None,
+                                                tool_call_id: None,
+                                                name: None,
+                                                reasoning: None,
+                                            });
+                                            continue 'outer;
+                                        }
+                                        _ => {
+                                            // Non-interrupt message - ignore during inference
+                                        }
+                                    }
+                                } else {
+                                    break 'agent_loop String::new();
                                 }
                             }
                         }
                     }
                 } else {
-                    // Use regular chat with cancellation support
-                    let cancel_token = tokio_util::sync::CancellationToken::new();
-
-                    // Register this token with the persistent Ctrl-C handler
-                    {
-                        let mut guard = current_token.lock().unwrap();
-                        *guard = Some(cancel_token.clone());
-                    }
-
-                    let result = crate::chat::session::chat(&mut chat, line, Some(cancel_token.clone())).await;
-
-                    // Clear the current token after operation completes
-                    {
-                        let mut guard = current_token.lock().unwrap();
-                        *guard = None;
-                    }
-
-                    match result {
-                        Ok(response) => response,
-                        Err(e) if e.to_string().contains("interrupted") => {
-                            println!("{}", "Operation interrupted by user".bright_yellow());
-                            continue;
-                        }
-                        Err(e) => {
-                            eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
-                            continue;
+                    // Regular chat inference with interrupt handling
+                    'chat_loop: loop {
+                        tokio::select! {
+                            result = crate::chat::session::chat(&mut chat, line, Some(cancel_token.clone())) => {
+                                match result {
+                                    Ok(response) => {
+                                        break 'chat_loop response;
+                                    }
+                                    Err(e) if e.to_string().contains("interrupted") => {
+                                        // This shouldn't happen since interrupts are handled in select! branch
+                                        // But if it does, treat it like an error
+                                        eprintln!("{} Unexpected interruption: {}", "⚠️".yellow(), e);
+                                        {
+                                            let mut guard = current_token.lock().unwrap();
+                                            *guard = None;
+                                        }
+                                        chat.messages.push(Message {
+                                            role: "assistant".to_string(),
+                                            content: format!("[Interrupted: {}]", e),
+                                            tool_calls: None,
+                                            tool_call_id: None,
+                                            name: None,
+                                            reasoning: None,
+                                        });
+                                        continue 'outer;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                                        {
+                                            let mut guard = current_token.lock().unwrap();
+                                            *guard = None;
+                                        }
+                                        // Add assistant message to maintain turn alternation
+                                        chat.messages.push(Message {
+                                            role: "assistant".to_string(),
+                                            content: format!("[Error: {}]", e),
+                                            tool_calls: None,
+                                            tool_call_id: None,
+                                            name: None,
+                                            reasoning: None,
+                                        });
+                                        continue 'outer;
+                                    }
+                                }
+                            }
+                            interrupt_msg = mspc_channel.recv() => {
+                                if let Some(msg) = interrupt_msg {
+                                    match msg {
+                                        MspcMessage::InterruptSignal(_content, _sender) => {
+                                            println!("\n{}", "^C - Interrupting current operation...".bright_yellow());
+                                            cancel_token.cancel();
+                                            {
+                                                let mut guard = current_token.lock().unwrap();
+                                                *guard = None;
+                                            }
+                                            // Add assistant message to maintain turn alternation
+                                            chat.messages.push(Message {
+                                                role: "assistant".to_string(),
+                                                content: "[Interrupted by user]".to_string(),
+                                                tool_calls: None,
+                                                tool_call_id: None,
+                                                name: None,
+                                                reasoning: None,
+                                            });
+                                            continue 'outer;
+                                        }
+                                        _ => {
+                                            // Non-interrupt message - ignore during inference
+                                        }
+                                    }
+                                } else {
+                                    break 'chat_loop String::new();
+                                }
+                            }
                         }
                     }
                 };
+
+                // Clear the current token after operation completes
+                {
+                    let mut guard = current_token.lock().unwrap();
+                    *guard = None;
+                }
 
                 // Log assistant response
                 if let Some(logger) = &mut chat.logger {
