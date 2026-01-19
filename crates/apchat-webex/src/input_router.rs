@@ -14,6 +14,7 @@ pub struct WebexInputRouter {
     authorized_user_email: String,
     bot_email: String,
     mspc_channel: Arc<MspcChannel>,
+    initial_seen_ids: HashSet<String>,
 }
 
 impl WebexInputRouter {
@@ -21,9 +22,8 @@ impl WebexInputRouter {
     ///
     /// This will:
     /// 1. Create Webex client with access token
-    /// 2. Look up the person from the user email
-    /// 3. Get or create a direct message room with that person
-    /// 4. Send "APchat ready" startup message
+    /// 2. Send initial message to user (creates/finds direct room automatically)
+    /// 3. Use the room ID from the message response for future polling
     pub async fn new(
         access_token: String,
         user_email: String,
@@ -43,25 +43,32 @@ impl WebexInputRouter {
             .ok_or_else(|| anyhow::anyhow!("Bot has no email addresses"))?
             .clone();
 
-        // Get person from email
-        let person = client
-            .get_person_by_email(&user_email)
-            .await
-            .context("Failed to get person by email")?;
-
-        // Create direct room with this person
-        let room = client
-            .create_direct_room(&person.id)
-            .await
-            .context("Failed to create direct room")?;
-
-        let room_id = room.id.clone();
-
-        // Send startup message
-        client
-            .send_message(&room_id, "APchat ready")
+        // Send startup message directly to user's email
+        // This automatically creates/uses the direct room
+        let message = client
+            .send_message_to_email(&user_email, "APchat ready")
             .await
             .context("Failed to send startup message")?;
+
+        // Extract the room ID from the message response
+        let room_id = message.room_id.clone();
+
+        eprintln!("🔍 DEBUG: Fetching existing messages to mark as seen...");
+
+        // Fetch existing messages and build the "seen" set
+        // This prevents processing old messages from before bot startup
+        // Note: This uses max=20, which should be enough for initial sync
+        let initial_messages = client
+            .get_messages(&room_id)
+            .await
+            .context("Failed to fetch initial messages")?;
+
+        let seen_message_ids: HashSet<String> = initial_messages
+            .into_iter()
+            .map(|msg| msg.id)
+            .collect();
+
+        eprintln!("🔍 DEBUG: Marked {} existing messages as seen", seen_message_ids.len());
 
         Ok(Self {
             client: Arc::new(client),
@@ -69,6 +76,7 @@ impl WebexInputRouter {
             authorized_user_email: user_email,
             bot_email,
             mspc_channel,
+            initial_seen_ids: seen_message_ids,
         })
     }
 
@@ -78,18 +86,41 @@ impl WebexInputRouter {
     /// and route them to the MSPC channel
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex bot starting - monitoring messages from {}", self.authorized_user_email);
+        eprintln!("🔍 DEBUG: Room ID: {}", self.room_id);
+        eprintln!("🔍 DEBUG: Bot email: {}", self.bot_email);
 
-        let mut seen_message_ids: HashSet<String> = HashSet::new();
+        // Start with all messages that existed at startup already marked as seen
+        let mut seen_message_ids = self.initial_seen_ids.clone();
+        eprintln!("🔍 DEBUG: Starting with {} messages already marked as seen", seen_message_ids.len());
+
+        let mut poll_count = 0;
 
         loop {
-            // Poll for messages
+            poll_count += 1;
+            eprintln!("🔍 DEBUG: Poll #{} - Checking for messages...", poll_count);
+
+            // Poll for messages (API returns newest first)
             match self.client.get_messages(&self.room_id).await {
                 Ok(messages) => {
+                    eprintln!("🔍 DEBUG: Poll #{} - Got {} messages", poll_count, messages.len());
+
                     for msg in messages {
-                        // Skip if we've already processed this message
+                        eprintln!("🔍 DEBUG: Message ID: {}, from: {}, already seen: {}",
+                            msg.id, msg.person_email, seen_message_ids.contains(&msg.id));
+
+                        // If we've already processed this message, we've caught up
+                        // Since messages are newest-first, we can stop here
                         if seen_message_ids.contains(&msg.id) {
-                            continue;
+                            eprintln!("🔍 DEBUG: Hit already-seen message, stopping iteration");
+                            break;
                         }
+
+                        eprintln!("🔍 DEBUG: Message from {} (authorized: {}, bot: {})",
+                            msg.person_email, self.authorized_user_email, self.bot_email);
+
+                        // Mark as seen immediately (before filtering) so we don't reprocess it
+                        let msg_id = msg.id.clone();
+                        seen_message_ids.insert(msg_id);
 
                         // Filter: only messages from authorized user, not from bot
                         if msg.person_email == self.authorized_user_email
@@ -110,11 +141,12 @@ impl WebexInputRouter {
                                 // Send to MSPC channel
                                 if let Err(e) = self.mspc_channel.send(message).await {
                                     eprintln!("⚠️ Failed to send Webex message to MSPC channel: {}", e);
+                                } else {
+                                    eprintln!("🔍 DEBUG: Successfully sent message to MSPC channel");
                                 }
-
-                                // Mark as seen
-                                seen_message_ids.insert(msg.id);
                             }
+                        } else {
+                            eprintln!("🔍 DEBUG: Message filtered out (wrong sender or from bot)");
                         }
                     }
                 }

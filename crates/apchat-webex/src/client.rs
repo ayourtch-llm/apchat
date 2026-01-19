@@ -22,16 +22,24 @@ impl WebexClient {
     /// Get person by email
     pub async fn get_person_by_email(&self, email: &str) -> Result<Person> {
         let url = format!("{}/people?email={}", WEBEX_API_BASE, email);
+        eprintln!("🔍 DEBUG: Fetching person by email: {}", email);
+        eprintln!("🔍 DEBUG: URL: {}", url);
 
-        let response: PeopleResponse = self.client
+        let response = self.client
             .get(&url)
             .bearer_auth(&self.access_token)
             .send()
             .await
-            .context("Failed to send request to Webex API")?
+            .context("Failed to send request to Webex API")?;
+
+        eprintln!("🔍 DEBUG: Response status: {}", response.status());
+
+        let response: PeopleResponse = response
             .json()
             .await
             .context("Failed to parse Webex API response")?;
+
+        eprintln!("🔍 DEBUG: Found {} people", response.items.len());
 
         response.items
             .into_iter()
@@ -42,76 +50,187 @@ impl WebexClient {
     /// Get bot's own details
     pub async fn get_me(&self) -> Result<Person> {
         let url = format!("{}/people/me", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Fetching bot details from /people/me");
 
-        self.client
+        let response = self.client
             .get(&url)
             .bearer_auth(&self.access_token)
             .send()
             .await
-            .context("Failed to get bot details")?
+            .context("Failed to get bot details")?;
+
+        eprintln!("🔍 DEBUG: Bot details response status: {}", response.status());
+
+        let person: Person = response
             .json()
             .await
-            .context("Failed to parse bot details")
+            .context("Failed to parse bot details")?;
+
+        eprintln!("🔍 DEBUG: Bot email: {:?}", person.emails.first());
+        Ok(person)
     }
 
-    /// Create a direct room with a person
+    /// Create a direct room with a person by person ID
     pub async fn create_direct_room(&self, person_id: &str) -> Result<Room> {
         let url = format!("{}/rooms", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Creating direct room with person_id: {}", person_id);
 
         let request = CreateRoomRequest {
             title: None,
             to_person_id: Some(person_id.to_string()),
+            to_person_email: None,
         };
 
-        self.client
+        let response = self.client
             .post(&url)
             .bearer_auth(&self.access_token)
             .json(&request)
             .send()
             .await
-            .context("Failed to create direct room")?
+            .context("Failed to create direct room")?;
+
+        eprintln!("🔍 DEBUG: Create room response status: {}", response.status());
+
+        let room: Room = response
             .json()
             .await
-            .context("Failed to parse room response")
+            .context("Failed to parse room response")?;
+
+        eprintln!("🔍 DEBUG: Created room ID: {}", room.id);
+        Ok(room)
+    }
+
+    /// Create a direct room with a person by email address
+    pub async fn create_direct_room_by_email(&self, email: &str) -> Result<Room> {
+        let url = format!("{}/rooms", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Creating direct room with email: {}", email);
+
+        let request = CreateRoomRequest {
+            title: None,
+            to_person_id: None,
+            to_person_email: Some(email.to_string()),
+        };
+
+        eprintln!("🔍 DEBUG: Request body: {}", serde_json::to_string(&request).unwrap_or_default());
+
+        let response = self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to create direct room")?;
+
+        let status = response.status();
+        eprintln!("🔍 DEBUG: Create room response status: {}", status);
+
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            eprintln!("🔍 DEBUG: Error response body: {}", error_body);
+            return Err(anyhow::anyhow!("Failed to create room: {} - {}", status, error_body));
+        }
+
+        let room: Room = response
+            .json()
+            .await
+            .context("Failed to parse room response")?;
+
+        eprintln!("🔍 DEBUG: Created room ID: {}", room.id);
+        Ok(room)
     }
 
     /// Send a message to a room
     pub async fn send_message(&self, room_id: &str, text: &str) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Sending message to room {}: {}", room_id, text.chars().take(50).collect::<String>());
 
         let request = SendMessageRequest {
-            room_id: room_id.to_string(),
+            room_id: Some(room_id.to_string()),
+            to_person_email: None,
             text: text.to_string(),
         };
 
-        self.client
+        let response = self.client
             .post(&url)
             .bearer_auth(&self.access_token)
             .json(&request)
             .send()
             .await
-            .context("Failed to send message")?
+            .context("Failed to send message")?;
+
+        eprintln!("🔍 DEBUG: Send message response status: {}", response.status());
+
+        let message: Message = response
             .json()
             .await
-            .context("Failed to parse message response")
+            .context("Failed to parse message response")?;
+
+        eprintln!("🔍 DEBUG: Sent message ID: {}", message.id);
+        Ok(message)
+    }
+
+    /// Send a message to a person by email (creates/uses direct room automatically)
+    pub async fn send_message_to_email(&self, email: &str, text: &str) -> Result<Message> {
+        let url = format!("{}/messages", WEBEX_API_BASE);
+        eprintln!("🔍 DEBUG: Sending message to email {}: {}", email, text.chars().take(50).collect::<String>());
+
+        let request = SendMessageRequest {
+            room_id: None,
+            to_person_email: Some(email.to_string()),
+            text: text.to_string(),
+        };
+
+        eprintln!("🔍 DEBUG: Request body: {}", serde_json::to_string(&request).unwrap_or_default());
+
+        let response = self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send message")?;
+
+        let status = response.status();
+        eprintln!("🔍 DEBUG: Send message response status: {}", status);
+
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            eprintln!("🔍 DEBUG: Error response body: {}", error_body);
+            return Err(anyhow::anyhow!("Failed to send message: {} - {}", status, error_body));
+        }
+
+        let message: Message = response
+            .json()
+            .await
+            .context("Failed to parse message response")?;
+
+        eprintln!("🔍 DEBUG: Sent message ID: {}, room ID: {}", message.id, message.room_id);
+        Ok(message)
     }
 
     /// Get messages from a room
-    /// mentionedPeople=me ensures we only get messages that mention the bot (or DMs)
+    /// In DM rooms, we get all messages and filter by person_email in the router
+    /// Using max=20 since we're polling frequently and only need recent messages
     pub async fn get_messages(&self, room_id: &str) -> Result<Vec<Message>> {
-        let url = format!("{}/messages?roomId={}&mentionedPeople=me&max=100",
+        let url = format!("{}/messages?roomId={}&max=20",
             WEBEX_API_BASE, room_id);
 
-        let response: MessagesResponse = self.client
+        let response = self.client
             .get(&url)
             .bearer_auth(&self.access_token)
             .send()
             .await
-            .context("Failed to get messages")?
+            .context("Failed to get messages")?;
+
+        eprintln!("🔍 DEBUG: Get messages response status: {}", response.status());
+
+        let messages_response: MessagesResponse = response
             .json()
             .await
             .context("Failed to parse messages response")?;
 
-        Ok(response.items)
+        eprintln!("🔍 DEBUG: Received {} messages from room {}", messages_response.items.len(), room_id);
+
+        Ok(messages_response.items)
     }
 }

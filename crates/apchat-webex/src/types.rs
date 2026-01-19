@@ -24,15 +24,20 @@ pub struct Room {
 
 #[derive(Debug, Serialize)]
 pub struct CreateRoomRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    #[serde(rename = "toPersonId")]
+    #[serde(rename = "toPersonId", skip_serializing_if = "Option::is_none")]
     pub to_person_id: Option<String>,
+    #[serde(rename = "toPersonEmail", skip_serializing_if = "Option::is_none")]
+    pub to_person_email: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct SendMessageRequest {
-    #[serde(rename = "roomId")]
-    pub room_id: String,
+    #[serde(rename = "roomId", skip_serializing_if = "Option::is_none")]
+    pub room_id: Option<String>,
+    #[serde(rename = "toPersonEmail", skip_serializing_if = "Option::is_none")]
+    pub to_person_email: Option<String>,
     pub text: String,
 }
 
