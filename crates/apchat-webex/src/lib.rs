@@ -6,8 +6,10 @@ pub mod config;
 pub mod input_router;
 pub mod output_sink;
 pub mod types;
+pub mod websocket_router;
 
 pub use client::WebexClient;
 pub use config::load_webex_secret;
 pub use input_router::WebexInputRouter;
 pub use output_sink::WebexOutputSink;
+pub use websocket_router::WebexWebSocketRouter;
