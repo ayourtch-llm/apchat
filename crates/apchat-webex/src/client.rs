@@ -5,6 +5,7 @@ use reqwest::Client;
 use crate::types::*;
 
 const WEBEX_API_BASE: &str = "https://webexapis.com/v1";
+const WEBEX_WDM_BASE: &str = "https://wdm-a.wbx2.com/wdm/api/v1";
 
 pub struct WebexClient {
     client: Client,
@@ -236,8 +237,9 @@ impl WebexClient {
 
     /// Register device to get Mercury WebSocket URL
     pub async fn register_device(&self) -> Result<DeviceRegistration> {
-        let url = format!("{}/devices", WEBEX_API_BASE);
+        let url = format!("{}/devices", WEBEX_WDM_BASE);
         eprintln!("🔍 DEBUG: Registering device for Mercury WebSocket");
+        eprintln!("🔍 DEBUG: Using WDM endpoint: {}", url);
 
         // Generate unique device name (similar to Python bot implementation)
         // Use timestamp and process ID for uniqueness
