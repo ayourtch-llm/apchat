@@ -83,9 +83,48 @@ impl WebexWebSocketRouter {
         eprintln!("🔍 DEBUG: Device ID: {}", self.device_id);
         eprintln!("🔍 DEBUG: WebSocket URL: {}", self.websocket_url);
 
-        // TODO: Connect to WebSocket and start listening
-        // This will be implemented in the next tasks
+        // Connect to Mercury WebSocket
+        let (ws_stream, _) = connect_async(&self.websocket_url)
+            .await
+            .context("Failed to connect to Mercury WebSocket")?;
 
+        eprintln!("🔍 DEBUG: WebSocket connected");
+
+        let (mut write, mut read) = ws_stream.split();
+
+        // Listen for messages
+        while let Some(msg_result) = read.next().await {
+            match msg_result {
+                Ok(Message::Text(text)) => {
+                    eprintln!("🔍 DEBUG: Received WebSocket message: {}",
+                        text.chars().take(100).collect::<String>());
+
+                    // Parse Mercury event
+                    match serde_json::from_str::<MercuryEvent>(&text) {
+                        Ok(event) => {
+                            eprintln!("🔍 DEBUG: Parsed event type: {:?}", event.data.event_type);
+                            // TODO: Process event (next task)
+                        }
+                        Err(e) => {
+                            eprintln!("⚠️ Failed to parse Mercury event: {}", e);
+                        }
+                    }
+                }
+                Ok(Message::Close(_)) => {
+                    eprintln!("🔍 DEBUG: WebSocket closed by server");
+                    break;
+                }
+                Ok(_) => {
+                    // Ignore ping/pong/binary messages
+                }
+                Err(e) => {
+                    eprintln!("⚠️ WebSocket error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        eprintln!("🔍 DEBUG: WebSocket connection ended");
         Ok(())
     }
 
