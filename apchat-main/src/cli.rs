@@ -173,6 +173,12 @@ pub struct Cli {
     /// String to inject as user input when idle timeout is reached
     #[arg(long, value_name = "TEXT")]
     pub idle_input: Option<String>,
+
+    /// Enable Webex bot and specify authorized user email
+    /// The bot will monitor direct messages from this user and broadcast responses to Webex
+    /// Requires WEBEX_APCHAT_SECRET environment variable or ~/.okaychat/env config
+    #[arg(long, value_name = "USER_EMAIL")]
+    pub webex_bot: Option<String>,
 }
 
 #[derive(Subcommand)]

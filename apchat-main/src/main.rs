@@ -1,6 +1,7 @@
 // Main entry point for APChat binary
 use anyhow::Result;
 use clap::Parser;
+use colored::Colorize;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -99,12 +100,60 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Run REPL mode
+    // Run REPL mode (with optional Webex integration)
+    let (webex_sink, mspc_channel) = if let Some(ref user_email) = cli.webex_bot {
+        // Create shared MSPC channel for both terminal and Webex
+        let mspc_channel = Arc::new(apchat::mspc::MspcChannel::new(100));
+
+        // Load Webex secret
+        match apchat_webex::load_webex_secret() {
+            Ok(token) => {
+                println!("{} Initializing Webex bot for {}", "🌐".bright_cyan(), user_email);
+
+                // Initialize Webex input router
+                match apchat_webex::WebexInputRouter::new(
+                    token,
+                    user_email.clone(),
+                    mspc_channel.clone(),
+                ).await {
+                    Ok(router) => {
+                        let room_id = router.room_id().to_string();
+                        let client = router.client();
+
+                        // Spawn Webex input router as background task
+                        tokio::spawn(async move {
+                            if let Err(e) = router.run().await {
+                                eprintln!("⚠️ Webex input router error: {}", e);
+                            }
+                        });
+
+                        // Create Webex output sink
+                        let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
+                        println!("{} Webex bot ready - responses will be broadcast to both terminal and Webex", "✓".bright_green());
+                        (Some(sink), Some(mspc_channel))
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e);
+                        (None, Some(mspc_channel))
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("{} {}", "⚠️".yellow(), e);
+                (None, Some(mspc_channel))
+            }
+        }
+    } else {
+        (None, None)
+    };
+
     run_repl_mode(
         &cli,
         app_config.client_config,
         app_config.work_dir,
         app_config.policy_manager,
+        webex_sink,
+        mspc_channel,
     )
     .await
 }

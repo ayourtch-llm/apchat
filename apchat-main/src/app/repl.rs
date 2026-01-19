@@ -22,6 +22,8 @@ pub async fn run_repl_mode(
     client_config: ClientConfig,
     work_dir: PathBuf,
     policy_manager: PolicyManager,
+    webex_sink: Option<std::sync::Arc<apchat_webex::WebexOutputSink>>,
+    mspc_channel_opt: Option<Arc<MspcChannel>>,
 ) -> Result<()> {
     println!("{}", "🤖 APChat - Claude Code-like Experience".bright_cyan().bold());
     println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
@@ -272,7 +274,8 @@ pub async fn run_repl_mode(
     });
 
     // Initialize MSPC channel for input decoupling
-    let mspc_channel = Arc::new(MspcChannel::new(100));
+    // Use provided channel (shared with Webex) or create new one
+    let mspc_channel = mspc_channel_opt.unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
 
     // Create output destinations
     let mut output_destinations: Vec<Box<dyn OutputDestination>> = vec![];
@@ -1008,6 +1011,13 @@ pub async fn run_repl_mode(
                 // Log assistant response
                 if let Some(logger) = &mut chat.logger {
                     logger.log("assistant", &response, None, false).await;
+                }
+
+                // Broadcast response to Webex if enabled
+                if let Some(ref webex) = webex_sink {
+                    if let Err(e) = webex.send_response(&response).await {
+                        eprintln!("{} Failed to send to Webex: {}", "⚠️".yellow(), e);
+                    }
                 }
 
                 // Display response if not streaming (streaming already displayed it)
