@@ -166,6 +166,12 @@ pub struct Cli {
     #[arg(long, value_name = "PATH", env = "APCHAT_MEMORY_DB_PATH")]
     pub memory_db_path: Option<String>,
 
+    /// Enable Webex bot and specify authorized user email
+    /// The bot will monitor direct messages from this user and broadcast responses to Webex
+    /// Requires WEBEX_APCHAT_SECRET environment variable or ~/.okaychat/env config
+    #[arg(long, value_name = "USER_EMAIL")]
+    pub webex_bot: Option<String>,
+
     /// Idle timeout in seconds (1-86400). If no keystrokes for this duration, inject idle_input string
     #[arg(long, value_name = "SECONDS")]
     pub idle_timeout: Option<u32>,

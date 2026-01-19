@@ -12,6 +12,7 @@ members = [
     "crates/apchat-toolcore",
     "crates/apchat-tools",
     "crates/apchat-wasm",
+    # "crates/apchat-webex",
 ]
 resolver = "2"
 

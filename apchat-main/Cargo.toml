@@ -26,6 +26,7 @@ apchat-terminal = { path = "../crates/apchat-terminal" }
 apchat-todo = { path = "../crates/apchat-todo" }
 apchat-toolcore = { path = "../crates/apchat-toolcore" }
 apchat-tools = { path = "../crates/apchat-tools" }
+apchat-webex = { path = "../crates/apchat-webex" }
 once_cell = "1.18"
 portable-pty = "0.8"
 regex = "*"
