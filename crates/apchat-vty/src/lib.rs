@@ -50,15 +50,10 @@ fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io:
     let lines: Vec<&str> = text.split('\n').collect();
 
     for (i, line) in lines.iter().enumerate() {
-        // If it's an empty line (from consecutive newlines), print just the newline
-        if line.is_empty() {
-            // Only print empty lines that aren't the last one (to avoid extra newlines)
-            if i < lines.len() - 1 {
-                let _ = writeln!(writer);
-            }
-        } else {
-            // Print the emoji + content
+        if i < lines.len() - 1 {
             let _ = writeln!(writer, "{} {}", emoji, line);
+        } else {
+            let _ = write!(writer, "{} {}", emoji, line);
         }
     }
 
