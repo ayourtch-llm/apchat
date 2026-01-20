@@ -5,13 +5,14 @@ use std::collections::HashSet;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use futures_util::StreamExt;
+use futures_util::{StreamExt, SinkExt};
 use apchat_mspc::{MspcChannel, MspcMessage};
 use crate::client::WebexClient;
 use crate::types::{MercuryEvent};
 
 pub struct WebexWebSocketRouter {
     client: Arc<WebexClient>,
+    access_token: String,
     authorized_user_email: String,
     bot_email: String,
     mspc_channel: Arc<MspcChannel>,
@@ -28,6 +29,7 @@ impl WebexWebSocketRouter {
         user_email: String,
         mspc_channel: Arc<MspcChannel>,
     ) -> Result<Self> {
+        let token = access_token.clone();
         let client = WebexClient::new(access_token);
 
         // Get bot's own email
@@ -70,6 +72,7 @@ impl WebexWebSocketRouter {
 
         Ok(Self {
             client: Arc::new(client),
+            access_token: token,
             authorized_user_email: user_email.clone(),
             bot_email,
             mspc_channel,
@@ -253,7 +256,21 @@ impl WebexWebSocketRouter {
 
         eprintln!("🔍 DEBUG: WebSocket connected");
 
-        let (mut _write, mut read) = ws_stream.split();
+        let (mut write, mut read) = ws_stream.split();
+
+        // Send authorization message to Mercury
+        let auth_message = serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "type": "authorization",
+            "data": {
+                "token": format!("Bearer {}", self.access_token)
+            }
+        });
+
+        let auth_text = serde_json::to_string(&auth_message)?;
+        eprintln!("🔍 DEBUG: Sending authorization to Mercury");
+        write.send(Message::Text(auth_text)).await
+            .context("Failed to send authorization message")?;
 
         // Listen for messages
         while let Some(msg_result) = read.next().await {
