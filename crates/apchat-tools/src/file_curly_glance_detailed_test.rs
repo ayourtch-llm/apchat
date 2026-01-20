@@ -1,6 +1,7 @@
 [cfg(test)]
 mod detailed_test {
     use super::*;
+    use apchat_logging::vty_output::print_heart_red;
 
     #[test]
     fn test_unmatched_opening_at_eof_detailed() {
@@ -15,16 +16,16 @@ fn test() {
 
         let pairs = analyze_file_content(test_content, None);
         
-        println!("\n=== Testing unmatched opening bracket at EOF ===");
-        println!("Content:");
-        println!("{}", test_content);
-        println!("\nFound {} bracket pairs:", pairs.len());
+        print_heart_red(&format!("\n=== Testing unmatched opening bracket at EOF ==="), true);
+        print_heart_red(&format!("Content:"), true);
+        print_heart_red(&format!("{}", test_content), true);
+        print_heart_red(&format!("\nFound {} bracket pairs:", pairs.len()), true);
         
         for pair in &pairs {
-            println!("  {}..{}: {} (preceding whitespace: {:?})", 
+            print_heart_red(&format!("  {}..{}: {} (preceding whitespace: {:?})", 
                      pair.opening_line, pair.closing_line, 
                      pair.content, 
-                     pair.preceding_whitespace_line);
+                     pair.preceding_whitespace_line), true);
         }
         
         // Should find the main function
@@ -39,14 +40,14 @@ fn test() {
         if let Some(main_pair) = pairs.iter().find(|p| p.content == "main") {
             assert_eq!(main_pair.opening_line, 1);
             assert_eq!(main_pair.closing_line, 2);
-            println!("\nMain function: {}..{} ✓", main_pair.opening_line, main_pair.closing_line);
+            print_heart_red(&format!("\nMain function: {}..{} ✓", main_pair.opening_line, main_pair.closing_line), true);
         }
         
         // Verify test function has EOF as closing line
         if let Some(test_pair) = pairs.iter().find(|p| p.content == "test") {
             assert_eq!(test_pair.opening_line, 5);
             assert_eq!(test_pair.closing_line, 8); // EOF
-            println!("Test function: {}..{} (incomplete at EOF) ✓", test_pair.opening_line, test_pair.closing_line);
+            print_heart_red(&format!("Test function: {}..{} (incomplete at EOF) ✓", test_pair.opening_line, test_pair.closing_line), true);
         }
     }
 }

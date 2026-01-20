@@ -3,6 +3,7 @@ use colored::Colorize;
 use regex::Regex;
 
 use crate::APChat;
+use crate::app::vty_output::{print_heart_yellow};
 use apchat_models::{ModelColor, Message, ToolCall, FunctionCall, ChatRequest, ChatResponse};
 use apchat_logging::{log_request_to_file, log_response_to_file, log_raw_response_to_file};
 
@@ -12,7 +13,7 @@ pub(crate) async fn repair_tool_call_with_model(
     tool_call: &ToolCall,
     error_msg: &str,
 ) -> Result<ToolCall> {
-    eprintln!("{} Attempting to repair tool call '{}' using AI...", "🔧".bright_yellow(), tool_call.function.name);
+    print_heart_yellow(&format!("{} Attempting to repair tool call '{}' using AI...", "🔧".bright_yellow(), tool_call.function.name), true);
 
     let repair_prompt = format!(
         "A tool call failed with a validation error. Please fix the JSON arguments.\n\n\
@@ -97,7 +98,7 @@ pub(crate) async fn repair_tool_call_with_model(
 
         // Validate the repaired JSON
         if let Ok(_) = serde_json::from_str::<serde_json::Value>(repaired_json) {
-            eprintln!("{} Successfully repaired tool call arguments", "✓".bright_green());
+            print_heart_yellow(&format!("{} Successfully repaired tool call arguments", "✓".bright_green()), true);
 
             // Return repaired tool call
             Ok(ToolCall {
@@ -144,7 +145,7 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                                     if let Some(num) = start_fix {
                                         obj.insert("start_line".to_string(), serde_json::json!(num));
                                         needs_fix = true;
-                                        eprintln!("{} Fixed start_line: string → integer {}", "🔧".yellow(), num);
+                                        print_heart_yellow(&format!("{} Fixed start_line: string → integer {}", "🔧".yellow(), num), true);
                                     }
 
                                     // Check end_line
@@ -155,7 +156,7 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                                     if let Some(num) = end_fix {
                                         obj.insert("end_line".to_string(), serde_json::json!(num));
                                         needs_fix = true;
-                                        eprintln!("{} Fixed end_line: string → integer {}", "🔧".yellow(), num);
+                                        print_heart_yellow(&format!("{} Fixed end_line: string → integer {}", "🔧".yellow(), num), true);
                                     }
                                 }
                             }
@@ -169,7 +170,7 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                                     if let Some(num) = max_fix {
                                         obj.insert("max_results".to_string(), serde_json::json!(num));
                                         needs_fix = true;
-                                        eprintln!("{} Fixed max_results: string → integer {}", "🔧".yellow(), num);
+                                        print_heart_yellow(&format!("{} Fixed max_results: string → integer {}", "🔧".yellow(), num), true);
                                     }
                                 }
                             }
@@ -190,17 +191,17 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                         let re = Regex::new(r#":\s*(\d+)"\s*([,}])"#)?;
                         if re.is_match(&fixed_args) {
                             fixed_args = re.replace_all(&fixed_args, ": $1$2").to_string();
-                            eprintln!("{} Fixed malformed JSON: removed trailing quotes after numbers", "🔧".yellow());
+                            print_heart_yellow(&format!("{} Fixed malformed JSON: removed trailing quotes after numbers", "🔧".yellow()), true);
 
                             // Verify the fix worked
                             if serde_json::from_str::<serde_json::Value>(&fixed_args).is_ok() {
                                 tool_call.function.arguments = fixed_args;
                                 fixed_any = true;
                             } else {
-                                eprintln!("{} Failed to fix malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e);
+                                print_heart_yellow(&format!("{} Failed to fix malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e), true);
                             }
                         } else {
-                            eprintln!("{} Malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e);
+                            print_heart_yellow(&format!("{} Malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e), true);
                         }
                     }
                 }

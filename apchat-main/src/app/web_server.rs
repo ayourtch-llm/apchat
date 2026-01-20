@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::cli::Cli;
+use super::vty_output::{print_heart_red};
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
 use crate::mspc::MspcChannel;
@@ -34,9 +35,9 @@ pub async fn run_web_server(
     // Parse bind address
     let addr: SocketAddr = format!("{}:{}", cli.web_bind, cli.web_port).parse()?;
 
-    println!("🌐 Starting APChat web server...");
-    println!("   Address: {}", addr);
-    println!("   Working directory: {}", work_dir.display());
+    print_heart_red(&format!("🌐 Starting APChat web server..."), true);
+    print_heart_red(&format!("   Address: {}", addr), true);
+    print_heart_red(&format!("   Working directory: {}", work_dir.display()), true);
 
     // Determine web directory (relative to work_dir)
     let web_dir = work_dir.join("web");

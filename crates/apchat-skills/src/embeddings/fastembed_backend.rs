@@ -4,6 +4,7 @@ use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 use std::sync::Mutex;
 use std::path::PathBuf;
 use apchat_logging::get_okaychat_dir;
+use apchat_logging::vty_output::print_heart_yellow;
 use super::EmbeddingBackend;
 
 /// FastEmbed-based embedding backend
@@ -26,7 +27,7 @@ impl FastEmbedBackend {
         if !cache_dir.exists() {
             std::fs::create_dir_all(&cache_dir)
                 .context("Failed to create cache directory")?;
-            eprintln!("Created FastEmbed cache directory: {:?}", cache_dir);
+            print_heart_yellow(format!("Created FastEmbed cache directory: {:?}", cache_dir).as_str(), true);
         }
 
         Ok(cache_dir)
@@ -40,11 +41,11 @@ impl FastEmbedBackend {
 
     /// Create a new FastEmbed backend with a specific model
     pub fn with_model(model: EmbeddingModel) -> Result<Self> {
-        eprintln!("Loading FastEmbed model: {:?}", model);
+        print_heart_yellow(format!("Loading FastEmbed model: {:?}", model).as_str(), true);
 
         // Get cache directory
         let cache_dir = Self::get_cache_dir()?;
-        eprintln!("Using cache directory: {:?}", cache_dir);
+        print_heart_yellow(format!("Using cache directory: {:?}", cache_dir).as_str(), true);
 
         let embedding_model = TextEmbedding::try_new(
             InitOptions::new(model.clone())
@@ -62,7 +63,7 @@ impl FastEmbedBackend {
             _ => 384, // Default fallback
         };
 
-        eprintln!("FastEmbed model loaded successfully (dimension: {})", dimension);
+        print_heart_yellow(format!("FastEmbed model loaded successfully (dimension: {})", dimension).as_str(), true);
 
         Ok(Self {
             model: Mutex::new(embedding_model),

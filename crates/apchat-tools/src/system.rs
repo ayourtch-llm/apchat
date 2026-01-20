@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use tokio::process::Command as AsyncCommand;
 use colored::Colorize;
 use std::io::Write;
+use apchat_logging::vty_output::print_heart_red;
 
 /// Maximum allowed timeout (120 seconds)
 const MAX_TIMEOUT: u64 = 120;
@@ -64,7 +65,7 @@ impl Tool for RunCommandTool {
         }
 
         // Check permission using policy system
-        print!("{} {} ", "Run command:".yellow(), command.cyan());
+        print_heart_red(&format!("{} {} ", "Run command:".yellow(), command.cyan()), false);
         std::io::stdout().flush().ok();
 
         let (approved, rejection_reason) = match context.check_permission(
@@ -85,7 +86,7 @@ impl Tool for RunCommandTool {
             return ToolResult::error(error_msg);
         }
 
-        println!("{} {} {}ms", "Running:".green(), command.cyan(), timeout_secs * 1000);
+        print_heart_red(&format!("{} {} {}ms", "Running:".green(), command.cyan(), timeout_secs * 1000), true);
 
         // Parse command and arguments
         let orig_command = command.clone();

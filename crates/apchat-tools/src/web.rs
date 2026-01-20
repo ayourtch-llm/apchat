@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use colored::Colorize;
 use std::io::Write as IoWrite;
+use apchat_logging::vty_output::print_heart_red;
 
 /// Maximum allowed response size (50MB)
 const MAX_RESPONSE_SIZE: usize = 50 * 1024 * 1024;
@@ -90,7 +91,7 @@ impl Tool for FetchUrlTool {
         }
 
         // Check permission using policy system
-        print!("{} {} ", "Fetch URL:".yellow(), url.cyan());
+        print_heart_red(&format!("{} {} ", "Fetch URL:".yellow(), url.cyan()), false);
         std::io::stdout().flush().ok();
 
         let (approved, rejection_reason) = match context.check_permission(
@@ -111,7 +112,7 @@ impl Tool for FetchUrlTool {
             return ToolResult::error(error_msg);
         }
 
-        println!("{} {}", "Fetching:".green(), url.cyan());
+        print_heart_red(&format!("{} {}", "Fetching:".green(), url.cyan()), true);
 
         // Build HTTP client with timeout
         let client = match reqwest::Client::builder()

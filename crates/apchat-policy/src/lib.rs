@@ -2,6 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
+use apchat_logging::vty_output::print_heart_yellow;
 
 /// Types of actions that can be governed by policies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -246,7 +247,7 @@ impl PolicyManager {
                 std::fs::create_dir_all(parent)?;
             }
             config.save_to_file(&path_buf)?;
-            eprintln!("📋 Created default policy file: {}", path_buf.display());
+            print_heart_yellow(&format!("📋 Created default policy file: {}", path_buf.display()), true);
             config
         };
 
@@ -292,14 +293,16 @@ impl PolicyManager {
         if let Some(ref path) = self.policy_file {
             config.save_to_file(path)?;
             if let Some(reason_text) = reason {
-                eprintln!(
-                    "📚 Learned policy: {} {} -> {} (reason: {})",
-                    action, target, decision, reason_text
+                print_heart_yellow(
+                    &format!("📚 Learned policy: {} {} -> {} (reason: {})",
+                    action, target, decision, reason_text),
+                    true
                 );
             } else {
-                eprintln!(
-                    "📚 Learned policy: {} {} -> {}",
-                    action, target, decision
+                print_heart_yellow(
+                    &format!("📚 Learned policy: {} {} -> {}",
+                    action, target, decision),
+                    true
                 );
             }
         }

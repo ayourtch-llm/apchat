@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
 use serde_json;
+use apchat_logging::vty_output::print_heart_red;
 
 
 /// Tool for launching a subagent to execute a task independently
@@ -85,7 +86,7 @@ impl Tool for LaunchSubagentTool {
             // Read stdout
             for line_result in stdout_reader.lines() {
                 if let Ok(line) = line_result {
-                    println!("{}{}", pid_prefix, line);
+                    print_heart_red(&format!("{}{}", pid_prefix, line), true);
                     stdout_content.push_str(&line);
                     stdout_content.push('\n');
                 }
@@ -229,7 +230,7 @@ impl Tool for LaunchSubagentPrettyTool {
             // Read stdout
             for line_result in stdout_reader.lines() {
                 if let Ok(line) = line_result {
-                    println!("{}{}", pid_prefix, line);
+                    print_heart_red(&format!("{}{}", pid_prefix, line), true);
                     stdout_content.push_str(&line);
                     stdout_content.push('\n');
                 }

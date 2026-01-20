@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use colored::Colorize;
 use chrono;
+use apchat_logging::vty_output::print_heart_red;
 
 /// Tool for opening files with optional line range
 pub struct OpenFileTool;
@@ -262,24 +263,24 @@ impl Tool for EditFileTool {
         let occurrences = current_content.matches(&old_content).count();
 
         // Show diff and ask for confirmation
-        println!("{}", "═".repeat(60).bright_blue());
-        println!("{} {}", "📝 Editing:".bright_cyan().bold(), file_path.bright_white());
-        println!("{}", "═".repeat(60).bright_black());
+        print_heart_red(&format!("{}", "═".repeat(60).bright_blue()), true);
+        print_heart_red(&format!("{} {}", "📝 Editing:".bright_cyan().bold(), file_path.bright_white()), true);
+        print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
         // Simple diff display
-        println!("{}", "─ Old content:".red());
+        print_heart_red(&format!("{}", "─ Old content:".red()), true);
         for line in old_content.lines() {
-            println!("{} {}", "-".red(), line);
+            print_heart_red(&format!("{} {}", "-".red(), line), true);
         }
-        println!();
-        println!("{}", "+ New content:".green());
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{}", "+ New content:".green()), true);
         for line in new_content.lines() {
-            println!("{} {}", "+".green(), line);
+            print_heart_red(&format!("{} {}", "+".green(), line), true);
         }
-        println!("{}", "═".repeat(60).bright_black());
+        print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
         if occurrences > 1 {
-            println!("{}", format!("⚠️  Warning: {} occurrences will be replaced", occurrences).yellow());
+            print_heart_red(&format!("{}", format!("⚠️  Warning: {} occurrences will be replaced", occurrences).yellow()), true);
         }
 
         // Check permission using policy system

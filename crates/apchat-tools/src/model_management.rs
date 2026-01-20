@@ -9,6 +9,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use strsim::levenshtein;
+use apchat_logging::vty_output::print_heart_red;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EditOperation {
@@ -470,17 +471,17 @@ impl Tool for PlanEditsTool {
             return ToolResult::error("Cannot create empty edit plan. Provide at least one edit operation.".to_string());
         }
 
-        println!("\n{}", "📋 Edit Plan Created".bright_cyan().bold());
-        println!("{}", "═".repeat(60).bright_black());
+        print_heart_red(&format!("\n{}", "📋 Edit Plan Created".bright_cyan().bold()), true);
+        print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
         // Validate and preview each edit
         let mut validated_edits = Vec::new();
         for (idx, edit) in edits.iter().enumerate() {
-            println!("\n{} {} - {}",
+            print_heart_red(&format!("\n{} {} - {}",
                 format!("Edit #{}", idx + 1).bright_yellow(),
                 edit.file_path.cyan(),
                 edit.description.bright_white()
-            );
+            ), true);
 
             // Read current file to validate old_content exists
             let full_path = context.work_dir.join(&edit.file_path);
@@ -505,8 +506,8 @@ impl Tool for PlanEditsTool {
                 // Exact match failed - try normalized whitespace match
                 if content_matches(&current_content, &edit.old_content, MatchStrategy::NormalizedWhitespace) {
                     // Found with normalized whitespace - warn but allow
-                    println!("  {} Whitespace differences detected - using normalized matching", "⚠".yellow());
-                    println!("  {} Make sure tabs/spaces match exactly in the future", "ℹ".bright_blue());
+                    print_heart_red(&format!("  {} Whitespace differences detected - using normalized matching", "⚠".yellow()), true);
+                    print_heart_red(&format!("  {} Make sure tabs/spaces match exactly in the future", "ℹ".bright_blue()), true);
                 } else {
                     // Neither exact nor normalized match worked - provide detailed error
                     let mut error_msg = format!(
@@ -569,19 +570,19 @@ impl Tool for PlanEditsTool {
             let diff_output = show_unified_diff(&edit.old_content, &edit.new_content);
             if !diff_output.is_empty() {
                 for line in diff_output.lines() {
-                    println!("  {}", line);
+                    print_heart_red(&format!("  {}", line), true);
                 }
             } else {
-                println!("  {}", "(No changes)".bright_black());
+                print_heart_red(&format!("  {}", "(No changes)".bright_black()), true);
             }
 
             validated_edits.push(edit.clone());
         }
 
-        println!("\n{}", "═".repeat(60).bright_black());
-        println!("{} {} edits planned", "✓".green(), validated_edits.len());
-        println!("\n{}", "Use apply_edit_plan to execute all edits atomically.".bright_yellow());
-        println!("{}", "The plan will be cleared after application or if you create a new plan.".bright_black());
+        print_heart_red(&format!("\n{}", "═".repeat(60).bright_black()), true);
+        print_heart_red(&format!("{} {} edits planned", "✓".green(), validated_edits.len()), true);
+        print_heart_red(&format!("\n{}", "Use apply_edit_plan to execute all edits atomically.".bright_yellow()), true);
+        print_heart_red(&format!("{}", "The plan will be cleared after application or if you create a new plan.".bright_black()), true);
 
         // Store the plan
         if let Err(e) = save_edit_plan(&context.work_dir, &validated_edits) {
@@ -621,20 +622,20 @@ impl Tool for ApplyEditPlanTool {
             Err(e) => return ToolResult::error(e),
         };
 
-        println!("\n{}", "🚀 Applying Edit Plan".bright_cyan().bold());
-        println!("{}", "═".repeat(60).bright_black());
-        println!("{} {} edit(s) will be applied:", "📋".cyan(), plan.len());
+        print_heart_red(&format!("\n{}", "🚀 Applying Edit Plan".bright_cyan().bold()), true);
+        print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
+        print_heart_red(&format!("{} {} edit(s) will be applied:", "📋".cyan(), plan.len()), true);
 
         // Show summary of all edits
         for (idx, edit) in plan.iter().enumerate() {
-            println!("  {}. {} - {}",
+            print_heart_red(&format!("  {}. {} - {}",
                 idx + 1,
                 edit.file_path.bright_white(),
                 edit.description.cyan()
-            );
+            ), true);
         }
 
-        println!("{}", "═".repeat(60).bright_black());
+        print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
         // Check permission using policy system
         let (approved, rejection_reason) = match context.check_permission(
@@ -659,7 +660,7 @@ impl Tool for ApplyEditPlanTool {
         // Apply all edits sequentially
         let mut results = Vec::new();
         for (idx, edit) in plan.iter().enumerate() {
-            println!("\n{} {}", format!("Applying edit #{}", idx + 1).yellow(), edit.file_path.cyan());
+            print_heart_red(&format!("\n{} {}", format!("Applying edit #{}", idx + 1).yellow(), edit.file_path.cyan()), true);
 
             // Re-read file to get current state (in case previous edits affected it)
             let full_path = context.work_dir.join(&edit.file_path);
@@ -681,7 +682,7 @@ impl Tool for ApplyEditPlanTool {
                 current_content.replace(&edit.old_content, &edit.new_content)
             } else if content_matches(&current_content, &edit.old_content, MatchStrategy::NormalizedWhitespace) {
                 // Found with normalized whitespace - need to find and replace with normalization
-                println!("  {} Using normalized whitespace matching", "ℹ".bright_blue());
+                print_heart_red(&format!("  {} Using normalized whitespace matching", "ℹ".bright_blue()), true);
 
                 // Find the actual content in the file that matches when normalized
                 // This is more complex - we need to find the matching substring
@@ -754,11 +755,11 @@ impl Tool for ApplyEditPlanTool {
             }
 
             results.push(format!("✓ {}", edit.file_path));
-            println!("  {} {}", "✓".green(), edit.description);
+            print_heart_red(&format!("  {} {}", "✓".green(), edit.description), true);
         }
 
-        println!("\n{}", "═".repeat(60).bright_black());
-        println!("{} All {} edits applied successfully!", "✅".green(), plan.len());
+        print_heart_red(&format!("\n{}", "═".repeat(60).bright_black()), true);
+        print_heart_red(&format!("{} All {} edits applied successfully!", "✅".green(), plan.len()), true);
 
         // Clear the plan after successful application
         clear_edit_plan(&context.work_dir);

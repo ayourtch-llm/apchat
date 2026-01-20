@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use colored::Colorize;
 use crate::mspc::OutputMessage;
 use crate::mspc::OutputDestination;
+use super::vty_output::{print_heart_yellow, print_heart_red};
 
 /// Custom error type for terminal output
 #[derive(Debug)]
@@ -52,22 +53,22 @@ impl OutputDestination for TerminalOutputDestination {
                 } else {
                     format!("[{}] ", sender)
                 };
-                print!("{} {}{}", "You:".bright_green().bold(), sender_prefix, text);
+                print_heart_red(&format!("{} {}{}", "You:".bright_green().bold(), sender_prefix, text), false);
             }
             OutputMessage::AssistantResponse(text) => {
-                println!("{} {}", "Assistant:".bright_blue().bold(), text);
+                print_heart_red(&format!("{} {}", "Assistant:".bright_blue().bold(), text), true);
             }
             OutputMessage::ToolCall { name, args } => {
-                println!("{} {} {}", "🔧".bright_yellow(), name, args);
+                print_heart_red(&format!("{} {} {}", "🔧".bright_yellow(), name, args), true);
             }
             OutputMessage::ToolResult(text) => {
-                println!("{} {}", "✅ Tool result:".bright_green(), text);
+                print_heart_red(&format!("{} {}", "✅ Tool result:".bright_green(), text), true);
             }
             OutputMessage::SystemMessage(text) => {
-                println!("{} {}", "ℹ️".bright_black(), text);
+                print_heart_red(&format!("{} {}", "ℹ️".bright_black(), text), true);
             }
             OutputMessage::Error(text) => {
-                eprintln!("{} {}", "❌ Error:".bright_red(), text);
+                print_heart_yellow(&format!("{} {}", "❌ Error:".bright_red(), text), true);
             }
         }
         

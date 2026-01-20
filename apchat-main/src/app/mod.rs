@@ -4,6 +4,7 @@ pub mod subagent;
 pub mod repl;
 pub mod web_server;
 pub mod terminal_output;
+pub mod vty_output;
 
 pub use setup::setup_from_cli;
 pub use task::run_task_mode;

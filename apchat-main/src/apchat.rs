@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::app::vty_output::{print_heart_yellow, print_heart_red};
+
 use apchat_agents::{
     PlanningCoordinator, GroqLlmClient,
     ChatMessage, ExecutionContext,
@@ -163,8 +165,8 @@ impl APChat {
         let skill_registry = match apchat_skills::SkillRegistry::new(skills_dir) {
             Ok(registry) => Some(Arc::new(registry)),
             Err(e) => {
-                eprintln!("{} Failed to load skills: {}", "⚠️".yellow(), e);
-                eprintln!("{} Skills will not be available", "⚠️".yellow());
+                print_heart_yellow(&format!("{} Failed to load skills: {}", "⚠️".yellow(), e), true);
+                print_heart_yellow(&format!("{} Skills will not be available", "⚠️".yellow()), true);
                 None
             }
         };
@@ -173,8 +175,8 @@ impl APChat {
             match initialize_agent_system(&client_config, &tool_registry, &policy_manager) {
                 Ok(coordinator) => Some(coordinator),
                 Err(e) => {
-                    eprintln!("{} Failed to initialize agent system: {}", "❌".red(), e);
-                    eprintln!("{} Falling back to non-agent mode", "⚠️".yellow());
+                    print_heart_yellow(&format!("{} Failed to initialize agent system: {}", "❌".red(), e), true);
+                    print_heart_yellow(&format!("{} Falling back to non-agent mode", "⚠️".yellow()), true);
                     None
                 }
             }
@@ -323,7 +325,7 @@ impl APChat {
 
             // Debug: Log current model
             if self.debug_level > 0 {
-                eprintln!("[DEBUG] Processing with agents using model: {}", self.current_model.display_name());
+                print_heart_yellow(&format!("[DEBUG] Processing with agents using model: {}", self.current_model.display_name()), true);
             }
 
             // Process request through coordinator
@@ -422,7 +424,7 @@ impl APChat {
     /// Save conversation history automatically to logs directory
     pub fn auto_save_history(&self) -> Result<String> {
         let history_dir = apchat_logging::get_logs_dir()?.join("history");
-        println!("History dir: {:?}", &history_dir);
+        print_heart_red(&format!("History dir: {:?}", &history_dir), true);
         fs::create_dir_all(&history_dir).unwrap();
         let file_name = format!("history-{}.json", self.process_id);
         let file_path = history_dir.join(file_name);

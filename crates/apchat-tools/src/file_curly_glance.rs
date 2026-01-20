@@ -3,6 +3,7 @@ use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
+use apchat_logging::vty_output::print_heart_red;
 
 /// Data structure representing a curly bracket pair
 /// Stores information about opening and closing brackets, their content, and preceding whitespace
@@ -462,12 +463,12 @@ fn test() {
             assert!(main_pair.closing_line >= main_pair.opening_line);
         }
         
-        println!("Test result: Found {} bracket pairs", pairs.len());
+        print_heart_red(&format!("Test result: Found {} bracket pairs", pairs.len()), true);
         for pair in &pairs {
-            println!("  {}..{}: {} (preceding: {:?})", 
+            print_heart_red(&format!("  {}..{}: {} (preceding: {:?})", 
                      pair.opening_line, pair.closing_line, 
                      pair.content, 
-                     pair.preceding_whitespace_line);
+                     pair.preceding_whitespace_line), true);
         }
     }
     
@@ -491,9 +492,9 @@ fn test() {
         // Start from line 3 (fn main)
         let pairs = analyze_file_content(test_content, Some(3));
         
-        println!("Test result with starting line 3:");
+        print_heart_red(&format!("Test result with starting line 3:"), true);
         for pair in &pairs {
-            println!("  {}..{}: {}", pair.opening_line, pair.closing_line, pair.content);
+            print_heart_red(&format!("  {}..{}: {}", pair.opening_line, pair.closing_line, pair.content), true);
         }
         
         // Should find main function starting at line 3
@@ -702,7 +703,7 @@ fn second() {
         // Should contain line ranges
         assert!(output.contains("-"));
         
-        println!("Output format test:\n{}", output);
+        print_heart_red(&format!("Output format test:\n{}", output), true);
     }
     
     #[test]

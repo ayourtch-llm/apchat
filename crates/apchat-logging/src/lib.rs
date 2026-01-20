@@ -1,6 +1,7 @@
 // Logging module - conversation and request logging
 pub mod conversation_logger;
 pub mod request_logger;
+pub mod vty_output;
 
 use std::path::PathBuf;
 use anyhow::{Result, Context};

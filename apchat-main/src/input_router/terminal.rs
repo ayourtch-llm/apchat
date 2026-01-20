@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::io::{self, Write};
 use crate::mspc::{MspcChannel, MspcMessage};
+use crate::app::vty_output::{print_heart_yellow, print_heart_red};
 
 pub struct TerminalInputRouter {
     pub channel: Arc<MspcChannel>,
@@ -43,7 +44,7 @@ impl TerminalInputRouter {
     /// Returns true if user confirms, false otherwise
     pub fn handle_confirmation_prompt(&self, prompt: &str) -> bool {
         loop {
-            print!("{}", prompt);
+            print_heart_red(&format!("{}", prompt), false);
             io::stdout().flush().unwrap();
             
             let mut response = String::new();
@@ -60,7 +61,7 @@ impl TerminalInputRouter {
                 }
             }
             
-            println!("Please enter 'y' or 'n'");
+            print_heart_red(&format!("Please enter 'y' or 'n'"), true);
         }
     }
 }

@@ -6,6 +6,7 @@ use apchat_policy::PolicyManager;
 use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
 use apchat_todo::TodoManager;
+use apchat_logging::vty_output::print_heart_red;
 use crate::content_limiter::ContentLimiter;
 use apchat_models::types::ModelColor;
 
@@ -146,20 +147,20 @@ impl ToolContext {
                         | apchat_policy::ActionType::MemoryList
                         | apchat_policy::ActionType::MemoryDelete
                 ) {
-                    println!("{} {}", "✓".green(), "Auto-confirmed (memory operation)".bright_black());
+                    print_heart_red(&format!("{} {}", "✓".green(), "Auto-confirmed (memory operation)".bright_black()), true);
                     return Ok((true, None));
                 }
 
                 // In non-interactive mode (web/API), auto-approve since confirmation
                 // was already handled via web UI
                 if self.non_interactive {
-                    println!("{} {}", "✓".green(), "Auto-confirmed (web UI)".bright_black());
+                    print_heart_red(&format!("{} {}", "✓".green(), "Auto-confirmed (web UI)".bright_black()), true);
                     return Ok((true, None));
                 }
 
                 // Ask the user for confirmation in interactive mode
-                println!("\n{}", prompt_message.bright_green().bold());
-                print!(">>> ");
+                print_heart_red(&format!("\n{}", prompt_message.bright_green().bold()), true);
+                print_heart_red(&format!(">>> "), false);
                 io::stdout().flush()?;
 
                 let stdin = io::stdin();
@@ -173,8 +174,8 @@ impl ToolContext {
 
                 let rejection_reason = if !approved {
                     // Ask for reason if rejected
-                    println!("{}", "Why not? (optional - helps the AI understand):".bright_yellow());
-                    print!(">>> ");
+                    print_heart_red(&format!("{}", "Why not? (optional - helps the AI understand):".bright_yellow()), true);
+                    print_heart_red(&format!(">>> "), false);
                     io::stdout().flush()?;
 
                     let mut reason = String::new();

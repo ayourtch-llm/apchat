@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
+use apchat_logging::vty_output::print_heart_yellow;
 
 // Embedding support for semantic skill search
 pub mod embeddings;
@@ -68,7 +69,7 @@ impl SkillRegistry {
         {
             match FastEmbedBackend::new() {
                 Ok(backend) => {
-                    eprintln!("Initializing skill embeddings...");
+                    print_heart_yellow(format!("Initializing skill embeddings...").as_str(), true);
                     let backend = Arc::new(backend);
 
                     // Precompute embeddings for all skills
@@ -82,22 +83,22 @@ impl SkillRegistry {
                                 embeddings.insert(name.clone(), embedding);
                             }
                             Err(e) => {
-                                eprintln!("Warning: Failed to embed skill '{}': {}", name, e);
+                                print_heart_yellow(format!("Warning: Failed to embed skill '{}': {}", name, e).as_str(), true);
                             }
                         }
                     }
 
                     if !embeddings.is_empty() {
-                        eprintln!("Successfully embedded {} skills", embeddings.len());
+                        print_heart_yellow(format!("Successfully embedded {} skills", embeddings.len()).as_str(), true);
                         self.skill_embeddings = embeddings;
                         self.embedding_backend = Some(backend);
                     } else {
-                        eprintln!("Warning: No skill embeddings generated, falling back to keyword search");
+                        print_heart_yellow(format!("Warning: No skill embeddings generated, falling back to keyword search").as_str(), true);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to initialize embedding backend: {}", e);
-                    eprintln!("Falling back to keyword-only skill search");
+                    print_heart_yellow(format!("Warning: Failed to initialize embedding backend: {}", e).as_str(), true);
+                    print_heart_yellow(format!("Falling back to keyword-only skill search").as_str(), true);
                 }
             }
         }
@@ -105,7 +106,7 @@ impl SkillRegistry {
         #[cfg(not(feature = "fastembed"))]
         {
             // Embeddings feature not enabled, using keyword-only search
-            eprintln!("Embedding feature not enabled, using keyword-only skill search");
+            print_heart_yellow(format!("Embedding feature not enabled, using keyword-only skill search").as_str(), true);
         }
     }
 
@@ -126,11 +127,11 @@ impl SkillRegistry {
                     self.skills.insert(name, skill);
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse embedded skill '{}': {}", skill_name, e);
+                    print_heart_yellow(format!("Warning: Failed to parse embedded skill '{}': {}", skill_name, e).as_str(), true);
                 }
             }
         }
-        eprintln!("Loaded {} embedded skills", self.skills.len());
+        print_heart_yellow(format!("Loaded {} embedded skills", self.skills.len()).as_str(), true);
 
         // Then, load from filesystem (can override embedded skills)
         if self.skills_dir.exists() {
@@ -150,11 +151,11 @@ impl SkillRegistry {
                                 let skill_name = skill.name.clone();
                                 self.skills.insert(skill_name.clone(), skill);
                                 if is_override {
-                                    eprintln!("  ↳ Overriding embedded skill with filesystem version: {}", skill_name);
+                                    print_heart_yellow(format!("  ↳ Overriding embedded skill with filesystem version: {}", skill_name).as_str(), true);
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Warning: Failed to load skill from {:?}: {}", skill_file, e);
+                                print_heart_yellow(format!("Warning: Failed to load skill from {:?}: {}", skill_file, e).as_str(), true);
                             }
                         }
                     }
@@ -163,13 +164,13 @@ impl SkillRegistry {
 
             let filesystem_count = self.skills.len() - initial_count;
             if filesystem_count > 0 {
-                eprintln!("Loaded {} additional skills from filesystem", filesystem_count);
+                print_heart_yellow(format!("Loaded {} additional skills from filesystem", filesystem_count).as_str(), true);
             }
         } else {
-            eprintln!("Skills directory does not exist: {:?} (using embedded skills only)", self.skills_dir);
+            print_heart_yellow(format!("Skills directory does not exist: {:?} (using embedded skills only)", self.skills_dir).as_str(), true);
         }
 
-        eprintln!("Total skills available: {}", self.skills.len());
+        print_heart_yellow(format!("Total skills available: {}", self.skills.len()).as_str(), true);
         Ok(())
     }
 
@@ -350,7 +351,7 @@ impl SkillRegistry {
         let task_embedding = match backend.embed(task_description) {
             Ok(embedding) => embedding,
             Err(e) => {
-                eprintln!("Warning: Failed to embed task description: {}", e);
+                print_heart_yellow(format!("Warning: Failed to embed task description: {}", e).as_str(), true);
                 return HashMap::new();
             }
         };

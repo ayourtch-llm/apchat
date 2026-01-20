@@ -8,6 +8,7 @@ use apchat_agents::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
+use crate::app::vty_output::{print_heart_yellow, print_heart_red};
 
 /// Metrics for token generation rate tracking
 #[derive(Debug, Clone)]
@@ -54,31 +55,31 @@ impl StreamingMetrics {
                 let seconds = duration.as_secs_f64();
                 let tps = self.tokens_per_second();
                 
-                println!("\n{}", "📊 Streaming Metrics:".bright_blue());
-                println!("  ⏱️  Duration: {:.2}s", seconds);
-                println!("  🪪 Completion Tokens: {}", self.completion_tokens);
+                print_heart_red(&format!("\n{}", "📊 Streaming Metrics:".bright_blue()), true);
+                print_heart_red(&format!("  ⏱️  Duration: {:.2}s", seconds), true);
+                print_heart_red(&format!("  🪪 Completion Tokens: {}", self.completion_tokens), true);
                 
                 if let Some(prompt) = self.prompt_tokens {
-                    println!("  📝 Prompt Tokens: {}", prompt);
-                    println!("  🪪 Total Tokens: {}", self.completion_tokens + prompt);
+                    print_heart_red(&format!("  📝 Prompt Tokens: {}", prompt), true);
+                    print_heart_red(&format!("  🪪 Total Tokens: {}", self.completion_tokens + prompt), true);
                 }
                 
-                println!("  ⚡ Rate: {:.1} tokens/sec", tps);
+                print_heart_red(&format!("  ⚡ Rate: {:.1} tokens/sec", tps), true);
                 
                 if tps >= 100.0 {
-                    println!("  🚀 Performance: Excellent");
+                    print_heart_red(&format!("  🚀 Performance: Excellent"), true);
                 } else if tps >= 50.0 {
-                    println!("  👍 Performance: Good");
+                    print_heart_red(&format!("  👍 Performance: Good"), true);
                 } else if tps >= 20.0 {
-                    println!("  📈 Performance: Moderate");
+                    print_heart_red(&format!("  📈 Performance: Moderate"), true);
                 } else {
-                    println!("  🐌 Performance: Slow");
+                    print_heart_red(&format!("  🐌 Performance: Slow"), true);
                 }
                 
-                println!("{}", "─".repeat(50).dimmed());
+                print_heart_red(&format!("{}", "─".repeat(50).dimmed()), true);
             }
             None => {
-                println!("\n{} Streaming metrics unavailable - duration not measured", "⚠️".yellow());
+                print_heart_red(&format!("\n{} Streaming metrics unavailable - duration not measured", "⚠️".yellow()), true);
             }
         }
     }
@@ -180,8 +181,8 @@ pub(crate) async fn call_api_streaming(
     }
 
     if chat.verbose {
-        println!("\n{}", "📡 Starting streaming response...".bright_cyan());
-        println!("{}", "═".repeat(80).bright_cyan());
+        print_heart_red(&format!("\n{}", "📡 Starting streaming response...".bright_cyan()), true);
+        print_heart_red(&format!("{}", "═".repeat(80).bright_cyan()), true);
     }
 
     // Initialize metrics tracking
@@ -197,7 +198,7 @@ pub(crate) async fn call_api_streaming(
     let mut raw_response_body = String::new(); // Capture raw response body
 
     // Show thinking indicator
-    print!("🤔 Thinking...");
+    print_heart_red(&format!("🤔 Thinking..."), false);
     io::stdout().flush().unwrap();
     let mut first_chunk = true;
     let mut first_reasoning = true;
@@ -232,8 +233,8 @@ pub(crate) async fn call_api_streaming(
                     // Check for stream end marker
                     if data.trim() == "[DONE]" {
                         if chat.verbose {
-                            println!("{}", "✓ Stream completed".bright_green());
-                            println!("{}", "═".repeat(80).bright_green());
+                            print_heart_red(&format!("{}", "✓ Stream completed".bright_green()), true);
+                            print_heart_red(&format!("{}", "═".repeat(80).bright_green()), true);
                         }
                         break;
                     }
@@ -262,20 +263,20 @@ pub(crate) async fn call_api_streaming(
                             if let Some(reasoning) = &delta.reasoning_content {
                                 if first_chunk {
                                     // Clear thinking indicator
-                                    print!("\r\x1B[K");
+                                    print_heart_red(&format!("\r\x1B[K"), false);
                                     io::stdout().flush().unwrap();
                                     first_chunk = false;
                                 }
 
                                 if first_reasoning {
                                     // Show reasoning header
-                                    print!("{}", "💭 ".bright_black());
+                                    print_heart_red(&format!("{}", "💭 ".bright_black()), false);
                                     first_reasoning = false;
                                 }
 
                                 accumulated_reasoning.push_str(reasoning);
                                 // Display reasoning in dim color to distinguish from actual response
-                                print!("{}", reasoning.bright_black());
+                                print_heart_red(&format!("{}", reasoning.bright_black()), false);
                                 io::stdout().flush().unwrap();
                             }
 
@@ -283,21 +284,21 @@ pub(crate) async fn call_api_streaming(
                             if let Some(content) = &delta.content {
                                 if first_chunk {
                                     // Clear thinking indicator
-                                    print!("\r\x1B[K");
+                                    print_heart_red(&format!("\r\x1B[K"), false);
                                     io::stdout().flush().unwrap();
                                     first_chunk = false;
                                 }
 
                                 // If we just finished reasoning, add separator
                                 if !first_reasoning && accumulated_content.is_empty() {
-                                    println!(); // New line after reasoning
+                                    print_heart_red("", true); // New line after reasoning
                                 }
 
                                 accumulated_content.push_str(content);
                                 // Update token count in metrics (rough estimate: 1 token ≈ 4 characters)
                                 metrics.completion_tokens += content.len() / 4;
                                 metrics.total_tokens += content.len() / 4;
-                                print!("{}", content);
+                                print_heart_red(&format!("{}", content), false);
                                 io::stdout().flush().unwrap();
                             }
 
@@ -305,8 +306,8 @@ pub(crate) async fn call_api_streaming(
                             if let Some(tool_call_deltas) = &delta.tool_calls {
                                 if first_chunk {
                                     // Clear thinking indicator
-                                    print!("\r\x1B[K");
-                                    print!("🔧 Tool calls...");
+                                    print_heart_red(&format!("\r\x1B[K"), false);
+                                    print_heart_red(&format!("🔧 Tool calls..."), false);
                                     io::stdout().flush().unwrap();
                                     first_chunk = false;
                                 }
@@ -353,11 +354,11 @@ pub(crate) async fn call_api_streaming(
 
     // Clear thinking indicator if it was never cleared (no content received)
     if first_chunk {
-        print!("\r\x1B[K");
+        print_heart_red(&format!("\r\x1B[K"), false);
         io::stdout().flush().unwrap();
     }
 
-    println!(); // New line after streaming complete
+    print_heart_red("", true); // New line after streaming complete
 
     // Finish metrics collection
     metrics.finish();
@@ -417,7 +418,7 @@ pub(crate) async fn call_api_streaming(
     // If no structured tool calls were received, check for XML format in content
     if message.tool_calls.is_none() {
         if let Some(parsed_calls) = parse_xml_tool_calls(&accumulated_content) {
-            eprintln!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len());
+            print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
             message.tool_calls = Some(parsed_calls);
             // Clear the XML from content to avoid displaying it
             message.content = String::new();
@@ -434,7 +435,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     model: &ModelColor,
 ) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
     if chat.should_show_debug(1) {
-        println!("🔧 DEBUG: call_api_streaming_with_llm_client called with model: {:?}", model);
+        print_heart_red(&format!("🔧 DEBUG: call_api_streaming_with_llm_client called with model: {:?}", model), true);
     }
 
     // Convert old Message format to new ChatMessage format
@@ -483,7 +484,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
         .unwrap()
         .as_secs();
 
-    println!("\n{}", "📡 Starting Anthropic streaming response...".bright_cyan());
+    print_heart_red(&format!("\n{}", "📡 Starting Anthropic streaming response...".bright_cyan()), true);
 
     // Initialize metrics tracking
     let mut metrics = StreamingMetrics::new();
@@ -502,7 +503,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     use std::io::{self, Write};
 
     // Show thinking indicator
-    print!("🤔 Thinking...");
+    print_heart_red(&format!("🤔 Thinking..."), false);
     io::stdout().flush().unwrap();
     let mut first_chunk = true;
 
@@ -513,7 +514,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                 // Handle the first chunk
                 if first_chunk {
                     // Clear the "Thinking..." indicator
-                    print!("\r");
+                    print_heart_red(&format!("\r"), false);
                     io::stdout().flush().unwrap();
                     first_chunk = false;
                 }
@@ -534,13 +535,13 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                     match tool_event {
                         ToolCallEvent::Start { index, id, name } => {
                             if chat.verbose {
-                                eprintln!("🔧 Tool call started: index={}, id={}, name={}", index, id, name);
+                                print_heart_yellow(&format!("🔧 Tool call started: index={}, id={}, name={}", index, id, name), true);
                             }
                             tool_calls_in_progress.insert(*index, (id.clone(), name.clone(), String::new()));
                         }
                         ToolCallEvent::Delta { index, arguments_delta } => {
                             if chat.verbose {
-                                eprintln!("🔧 Tool call delta: index={}, delta={}", index, arguments_delta);
+                                print_heart_yellow(&format!("🔧 Tool call delta: index={}, delta={}", index, arguments_delta), true);
                             }
                             if let Some((id, name, args)) = tool_calls_in_progress.get_mut(index) {
                                 args.push_str(arguments_delta);
@@ -570,13 +571,13 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                 }
             }
             Err(e) => {
-                eprintln!("{} Streaming error: {}", "❌".red(), e);
+                print_heart_yellow(&format!("{} Streaming error: {}", "❌".red(), e), true);
                 break;
             }
         }
     }
 
-    println!(); // New line after streaming complete
+    print_heart_red("", true); // New line after streaming complete
 
     // Finish metrics collection
     metrics.finish();

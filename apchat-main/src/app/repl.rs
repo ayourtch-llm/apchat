@@ -4,6 +4,8 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use super::vty_output::{print_heart_yellow, print_heart_red};
+
 use crate::APChat;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
@@ -25,14 +27,14 @@ pub async fn run_repl_mode(
     webex_sink: Option<std::sync::Arc<apchat_webex::WebexOutputSink>>,
     mspc_channel_opt: Option<Arc<MspcChannel>>,
 ) -> Result<()> {
-    println!("{}", "🤖 APChat - Claude Code-like Experience".bright_cyan().bold());
-    println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
+    print_heart_red(&format!("{}", "🤖 APChat - Claude Code-like Experience".bright_cyan().bold()), true);
+    print_heart_red(&format!("{}", format!("Working directory: {}", work_dir.display()).bright_black()), true);
 
     if cli.agents {
-        println!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold());
+        print_heart_red(&format!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold()), true);
     }
 
-    println!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, '/history' to view history, or '/skills' for all commands\n".bright_black());
+    print_heart_red(&format!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, '/history' to view history, or '/skills' for all commands\n".bright_black()), true);
 
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
@@ -49,9 +51,9 @@ pub async fn run_repl_mode(
     );
 
     // Comprehensive model configuration display
-    println!("{}", "═".repeat(80).bright_black());
-    println!("{}", "🤖 Model Configuration".bright_cyan().bold());
-    println!("{}", "═".repeat(80).bright_black());
+    print_heart_red(&format!("{}", "═".repeat(80).bright_black()), true);
+    print_heart_red(&format!("{}", "🤖 Model Configuration".bright_cyan().bold()), true);
+    print_heart_red(&format!("{}", "═".repeat(80).bright_black()), true);
 
     // Current model display
     let current_model_display = match chat.current_model {
@@ -59,13 +61,13 @@ pub async fn run_repl_mode(
         ModelColor::GrnModel => format!("GrnModel/{} (default)", chat.current_model.display_name()),
         ModelColor::RedModel => format!("RedModel/{}", chat.current_model.display_name()),
     };
-    println!("{} {}", "📍 Current:".bright_green().bold(), current_model_display.bright_white());
+    print_heart_red(&format!("{} {}", "📍 Current:".bright_green().bold(), current_model_display.bright_white()), true);
 
     // Display model provider debug info
-    println!("\n{} Model Providers:", "🔧".bright_cyan().bold());
-    println!("{} BluModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::BluModel));
-    println!("{} GrnModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::GrnModel));
-    println!("{} RedModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::RedModel));
+    print_heart_red(&format!("\n{} Model Providers:", "🔧".bright_cyan().bold()), true);
+    print_heart_red(&format!("{} BluModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::BluModel)), true);
+    print_heart_red(&format!("{} GrnModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::GrnModel)), true);
+    print_heart_red(&format!("{} RedModel: {:?}", "   ".bright_black(), chat.client_config.get_provider(ModelColor::RedModel)), true);
 
     // Function to get API key preview for a model based on its resolved configuration
     let get_api_key_preview = |model_color: ModelColor, _backend: &str| {
@@ -114,27 +116,27 @@ pub async fn run_repl_mode(
         };
         
         let star_suffix = if has_star { " ⭐" } else { "" };
-        println!("{} {} ({}){}", label, provider.model_name, backend_name.bright_black(), star_suffix);
-        println!("   {} {}", "API:".bright_black(), provider.api_url.as_ref().map(|s| s.as_str()).unwrap_or("https://api.groq.com/openai/v1/chat/completions").bright_black());
+        print_heart_red(&format!("{} {} ({}){}", label, provider.model_name, backend_name.bright_black(), star_suffix), true);
+        print_heart_red(&format!("   {} {}", "API:".bright_black(), provider.api_url.as_ref().map(|s| s.as_str()).unwrap_or("https://api.groq.com/openai/v1/chat/completions").bright_black()), true);
         if let Some(key_preview) = get_api_key_preview(model_color, backend_name) {
-            println!("   {} {}", "Key:".bright_black(), key_preview);
+            print_heart_red(&format!("   {} {}", "Key:".bright_black(), key_preview), true);
         }
     }
 
-    println!("{}", "═".repeat(80).bright_black());
+    print_heart_red(&format!("{}", "═".repeat(80).bright_black()), true);
 
     // Debug info (shown at debug level 1+)
     if chat.should_show_debug(1) {
-        println!("{}", format!("🔧 DEBUG: blu_model URL: {:?}", chat.client_config.get_api_url(ModelColor::BluModel)).bright_black());
-        println!("{}", format!("🔧 DEBUG: grn_model URL: {:?}", chat.client_config.get_api_url(ModelColor::GrnModel)).bright_black());
-        println!("{}", format!("🔧 DEBUG: Current model: {:?}", chat.current_model).bright_black());
+        print_heart_red(&format!("{}", format!("🔧 DEBUG: blu_model URL: {:?}", chat.client_config.get_api_url(ModelColor::BluModel)).bright_black()), true);
+        print_heart_red(&format!("{}", format!("🔧 DEBUG: grn_model URL: {:?}", chat.client_config.get_api_url(ModelColor::GrnModel)).bright_black()), true);
+        print_heart_red(&format!("{}", format!("🔧 DEBUG: Current model: {:?}", chat.current_model).bright_black()), true);
     }
 
     // Initialize logger (async) – logs go into the workspace directory
     chat.logger = match ConversationLogger::new(&chat.work_dir).await {
         Ok(l) => Some(l),
         Err(e) => {
-            eprintln!("Logging disabled: {}", e);
+            print_heart_yellow(&format!("Logging disabled: {}", e), true);
             None
         }
     };
@@ -176,17 +178,17 @@ pub async fn run_repl_mode(
                     });
 
                     if cli.verbose {
-                        println!("{}", "✓ Session-start hook executed".green());
+                        print_heart_red(&format!("{}", "✓ Session-start hook executed".green()), true);
                     }
                 }
             }
             Ok(output) => {
-                eprintln!("{} Session-start hook failed: {}",
+                print_heart_yellow(&format!("{} Session-start hook failed: {}",
                     "⚠️".yellow(),
-                    String::from_utf8_lossy(&output.stderr));
+                    String::from_utf8_lossy(&output.stderr)), true);
             }
             Err(e) => {
-                eprintln!("{} Failed to execute session-start hook: {}", "⚠️".yellow(), e);
+                print_heart_yellow(&format!("{} Failed to execute session-start hook: {}", "⚠️".yellow(), e), true);
             }
         }
     }
@@ -197,12 +199,12 @@ pub async fn run_repl_mode(
         match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
             Ok(_) => {
                 let history_len = crate::chat::readline_history::load_history(None)?.len();
-                println!("{} Loaded {} readline history entries",
+                print_heart_red(&format!("{} Loaded {} readline history entries",
                          "📖".bright_green(),
-                         history_len);
+                         history_len), true);
             }
             Err(e) => {
-                eprintln!("{} Failed to load readline history: {}", "⚠️".yellow(), e);
+                print_heart_yellow(&format!("{} Failed to load readline history: {}", "⚠️".yellow(), e), true);
             }
         }
         // Guard is automatically dropped here when scope ends
@@ -214,11 +216,11 @@ pub async fn run_repl_mode(
         if *timeout_secs < 1 || *timeout_secs > 86400 {
             anyhow::bail!("Idle timeout must be between 1 and 86400 seconds");
         }
-        println!("{} Idle timeout enabled: {} seconds -> \"{}\"",
+        print_heart_red(&format!("{} Idle timeout enabled: {} seconds -> \"{}\"",
             "⏱️".bright_yellow(),
             timeout_secs,
             input_text.bright_cyan()
-        );
+        ), true);
         Some((*timeout_secs, input_text.clone()))
     } else if cli.idle_timeout.is_some() || cli.idle_input.is_some() {
         anyhow::bail!("Both --idle-timeout and --idle-input must be specified together");
@@ -228,10 +230,10 @@ pub async fn run_repl_mode(
 
     // Read apchat.md if it exists to get project context
     let kimi_context = if let Ok(kimi_content) = chat.read_file("apchat.md") {
-        println!("{} {}", "📖".bright_cyan(), "Reading project context from apchat.md...".bright_black());
+        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "Reading project context from apchat.md...".bright_black()), true);
         kimi_content
     } else {
-        println!("{} {}", "📖".bright_cyan(), "No apchat.md found. Starting fresh.".bright_black());
+        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "No apchat.md found. Starting fresh.".bright_black()), true);
         String::new()
     };
 
@@ -265,7 +267,7 @@ pub async fn run_repl_mode(
             if tokio::signal::ctrl_c().await.is_ok() {
                 if let Ok(guard) = current_token_for_handler.lock() {
                     if let Some(ref token) = *guard {
-                        println!("\n{}", "^C - Interrupting...".bright_yellow());
+                        print_heart_red(&format!("\n{}", "^C - Interrupting...".bright_yellow()), true);
                         token.cancel();
                     }
                 }
@@ -309,7 +311,7 @@ pub async fn run_repl_mode(
                 Ok(Ok(Some(line))) => {
                     // Add to readline history immediately so up-arrow works in next readline() call
                     if let Err(e) = crate::chat::ReadlineInstance::add_history(&line) {
-                        eprintln!("{} Failed to add to history: {}", "⚠️".bright_yellow(), e);
+                        print_heart_yellow(&format!("{} Failed to add to history: {}", "⚠️".bright_yellow(), e), true);
                     }
 
                     let message = terminal_router.parse_input(&line);
@@ -337,7 +339,7 @@ pub async fn run_repl_mode(
                         continue;
                     } else {
                         // Other errors - exit
-                        eprintln!("{} {}", "Error reading input:".bright_red().bold(), e);
+                        print_heart_yellow(&format!("{} {}", "Error reading input:".bright_red().bold(), e), true);
                         break;
                     }
                 }
@@ -363,12 +365,12 @@ pub async fn run_repl_mode(
             Some(msg) => msg,
             None => {
                 // Channel closed, exit
-                println!("\n{}", "Goodbye!".bright_cyan());
+                print_heart_red(&format!("\n{}", "Goodbye!".bright_cyan()), true);
 
                 // Save readline history before exiting
                 if let Err(save_err) = crate::chat::ReadlineInstance::save_history() {
                     if chat.debug_level > 0 {
-                        eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err);
+                        print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err), true);
                     }
                 }
 
@@ -382,7 +384,7 @@ pub async fn run_repl_mode(
             MspcMessage::Command(content, _sender) => content,
             MspcMessage::InterruptSignal(_content, _sender) => {
                 // Interrupt without active operation - just show message and continue
-                println!("\n{}", "No operation in progress to interrupt".bright_yellow());
+                print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
                 continue;
             }
             _ => {
@@ -399,12 +401,12 @@ pub async fn run_repl_mode(
 
         // Handle exit commands
         if line == "exit" || line == "quit" {
-            println!("{}", "Goodbye!".bright_cyan());
+            print_heart_red(&format!("{}", "Goodbye!".bright_cyan()), true);
 
             // Save readline history before exiting
             if let Err(e) = crate::chat::ReadlineInstance::save_history() {
                 if chat.debug_level > 0 {
-                    eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
+                    print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);
                 }
             }
 
@@ -415,8 +417,8 @@ pub async fn run_repl_mode(
         if line.starts_with("/save ") {
             let file_path = line[6..].trim();
             match chat.save_state(file_path) {
-                Ok(msg) => println!("{} {}", "💾".bright_green(), msg),
-                Err(e) => eprintln!("{} Failed to save: {}", "❌".bright_red(), e),
+                Ok(msg) => print_heart_red(&format!("{} {}", "💾".bright_green(), msg), true),
+                Err(e) => print_heart_yellow(&format!("{} Failed to save: {}", "❌".bright_red(), e), true),
             }
             continue;
         }
@@ -424,8 +426,8 @@ pub async fn run_repl_mode(
         if line.starts_with("/load ") {
             let file_path = line[6..].trim();
             match chat.load_state(file_path) {
-                Ok(msg) => println!("{} {}", "📂".bright_green(), msg),
-                Err(e) => eprintln!("{} Failed to load: {}", "❌".bright_red(), e),
+                Ok(msg) => print_heart_red(&format!("{} {}", "📂".bright_green(), msg), true),
+                Err(e) => print_heart_yellow(&format!("{} Failed to load: {}", "❌".bright_red(), e), true),
             }
             continue;
         }
@@ -434,22 +436,22 @@ pub async fn run_repl_mode(
         if line == "/model" || line.starts_with("/model ") {
             if line == "/model" {
                 // Just display current model
-                println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                print_heart_red(&format!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name()), true);
             } else {
                 // Parse model argument
                 let model_arg = line[7..].trim(); // Remove "/model " prefix
                 
                 if model_arg.is_empty() {
-                    println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                    print_heart_red(&format!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name()), true);
                     continue;
                 }
                 
                 if model_arg == "help" || model_arg == "--help" || model_arg == "-h" {
-                    println!("{} Model switching commands:", "🤖".bright_cyan());
-                    println!("  /model              - Show current model");
-                    println!("  /model <color>      - Switch to model by color");
-                    println!("  Available colors: blu, grn, red");
-                    println!("  Example: /model blu");
+                    print_heart_red(&format!("{} Model switching commands:", "🤖".bright_cyan()), true);
+                    print_heart_red(&format!("  /model              - Show current model"), true);
+                    print_heart_red(&format!("  /model <color>      - Switch to model by color"), true);
+                    print_heart_red(&format!("  Available colors: blu, grn, red"), true);
+                    print_heart_red(&format!("  Example: /model blu"), true);
                     continue;
                 }
                 
@@ -459,7 +461,7 @@ pub async fn run_repl_mode(
                     "grn" | "green" => "grn_model", 
                     "red" => "red_model",
                     _ => {
-                        eprintln!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), model_arg);
+                        print_heart_yellow(&format!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), model_arg), true);
                         continue;
                     }
                 };
@@ -468,8 +470,8 @@ pub async fn run_repl_mode(
                 let reason = format!("User requested switch to {} model", model_arg);
                 match chat.switch_model(model_str, &reason) {
                     Ok(msg) => {
-                        println!("{} {}", "✓".bright_green(), msg);
-                        println!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name());
+                        print_heart_red(&format!("{} {}", "✓".bright_green(), msg), true);
+                        print_heart_red(&format!("{} Current model: {}", "🤖".bright_cyan(), chat.current_model.display_name()), true);
 
                         // Update shared model state for background input task
                         {
@@ -478,7 +480,7 @@ pub async fn run_repl_mode(
                         }
                     }
                     Err(e) => {
-                        eprintln!("{} Failed to switch model: {}", "❌".bright_red(), e);
+                        print_heart_yellow(&format!("{} Failed to switch model: {}", "❌".bright_red(), e), true);
                     }
                 }
             }
@@ -487,8 +489,8 @@ pub async fn run_repl_mode(
 
         // Handle /history command
         if line == "/history" {
-            println!("{}", "📜 Conversation History:".bright_cyan());
-            println!("{}", "═".repeat(80).bright_black());
+            print_heart_red(&format!("{}", "📜 Conversation History:".bright_cyan()), true);
+            print_heart_red(&format!("{}", "═".repeat(80).bright_black()), true);
 
             for (i, msg) in chat.messages.iter().enumerate() {
                 let role_label = match msg.role.as_str() {
@@ -534,23 +536,23 @@ pub async fn run_repl_mode(
                 // Replace newlines with spaces for single-line display
                 let content_preview = content_preview.replace('\n', " ");
 
-                println!("{:3}. [{}]{} {}", i, role_label, tool_indicator, content_preview.bright_black());
+                print_heart_red(&format!("{:3}. [{}]{} {}", i, role_label, tool_indicator, content_preview.bright_black()), true);
             }
 
-            println!("{}", "═".repeat(80).bright_black());
-            println!("{} Total messages: {}", "📊".bright_cyan(), chat.messages.len());
+            print_heart_red(&format!("{}", "═".repeat(80).bright_black()), true);
+            print_heart_red(&format!("{} Total messages: {}", "📊".bright_cyan(), chat.messages.len()), true);
             continue;
         }
 
         // Handle /debug command
         if line == "/debug" {
-            println!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level());
-            println!("{} Usage: /debug <level>", "💡".bright_yellow());
-            println!("  0 = off");
-            println!("  1 = basic (bit 0)");
-            println!("  2 = detailed (bit 1)");
-            println!("  4 = verbose (bit 2)");
-            println!("  Example: /debug 3 (enables basic + detailed)");
+            print_heart_red(&format!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level()), true);
+            print_heart_red(&format!("{} Usage: /debug <level>", "💡".bright_yellow()), true);
+            print_heart_red(&format!("  0 = off"), true);
+            print_heart_red(&format!("  1 = basic (bit 0)"), true);
+            print_heart_red(&format!("  2 = detailed (bit 1)"), true);
+            print_heart_red(&format!("  4 = verbose (bit 2)"), true);
+            print_heart_red(&format!("  Example: /debug 3 (enables basic + detailed)"), true);
             continue;
         }
 
@@ -559,10 +561,10 @@ pub async fn run_repl_mode(
             match level_str.parse::<u32>() {
                 Ok(level) => {
                     chat.set_debug_level(level);
-                    println!("{} Debug level set to {} (binary: {:b})", "🔧".bright_green(), level, level);
+                    print_heart_red(&format!("{} Debug level set to {} (binary: {:b})", "🔧".bright_green(), level, level), true);
                 }
                 Err(_) => {
-                    eprintln!("{} Invalid debug level: '{}'. Use a number like 0, 1, 3, 7, etc.", "❌".bright_red(), level_str);
+                    print_heart_yellow(&format!("{} Invalid debug level: '{}'. Use a number like 0, 1, 3, 7, etc.", "❌".bright_red(), level_str), true);
                 }
             }
             continue;
@@ -570,10 +572,10 @@ pub async fn run_repl_mode(
 
         // Handle /session commands
         if line == "/session" || line == "/session help" {
-            println!("{} Session commands:", "🖥️".bright_cyan());
-            println!("  /session list           - List all terminal sessions");
-            println!("  /session show <id>      - Show screen buffer of session");
-            println!("  /session help           - Show this help");
+            print_heart_red(&format!("{} Session commands:", "🖥️".bright_cyan()), true);
+            print_heart_red(&format!("  /session list           - List all terminal sessions"), true);
+            print_heart_red(&format!("  /session show <id>      - Show screen buffer of session"), true);
+            print_heart_red(&format!("  /session help           - Show this help"), true);
             continue;
         }
 
@@ -582,9 +584,9 @@ pub async fn run_repl_mode(
             match manager.list_sessions().await {
                 Ok(sessions) => {
                     if sessions.is_empty() {
-                        println!("{} No active terminal sessions", "ℹ️".bright_blue());
+                        print_heart_red(&format!("{} No active terminal sessions", "ℹ️".bright_blue()), true);
                     } else {
-                        println!("{} Active terminal sessions:", "🖥️".bright_cyan());
+                        print_heart_red(&format!("{} Active terminal sessions:", "🖥️".bright_cyan()), true);
                         for session in sessions {
                             let status_icon = if session.status.contains("Running") {
                                 "▶️"
@@ -593,19 +595,19 @@ pub async fn run_repl_mode(
                             } else {
                                 "⏸️"
                             };
-                            println!("  {} Session {}: {} ({}x{}) - {}",
+                            print_heart_red(&format!("  {} Session {}: {} ({}x{}) - {}",
                                 status_icon,
                                 session.id,
                                 session.command,
                                 session.cols,
                                 session.rows,
                                 session.status
-                            );
+                            ), true);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("{} Failed to list sessions: {}", "❌".bright_red(), e);
+                    print_heart_yellow(&format!("{} Failed to list sessions: {}", "❌".bright_red(), e), true);
                 }
             }
             continue;
@@ -626,13 +628,13 @@ pub async fn run_repl_mode(
                         80
                     };
 
-                    println!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id);
-                    println!("┌{}┐", "─".repeat(width));
-                    println!("{}", screen_contents);
-                    println!("└{}┘", "─".repeat(width));
+                    print_heart_red(&format!("{} Screen contents of session {}:", "📺".bright_cyan(), session_id), true);
+                    print_heart_red(&format!("┌{}┐", "─".repeat(width)), true);
+                    print_heart_red(&format!("{}", screen_contents), true);
+                    print_heart_red(&format!("└{}┘", "─".repeat(width)), true);
                 }
                 Err(e) => {
-                    eprintln!("{} Failed to get screen for session '{}': {}", "❌".bright_red(), session_id, e);
+                    print_heart_yellow(&format!("{} Failed to get screen for session '{}': {}", "❌".bright_red(), session_id, e), true);
                 }
             }
             continue;
@@ -640,15 +642,15 @@ pub async fn run_repl_mode(
 
         // Handle /skills command to show available skill commands
         if line == "/skills" || line == "/skills help" {
-            println!("{} Available Commands:", "🎯".bright_cyan());
-            println!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)");
-            println!("  /history                - Display conversation history with message roles");
-            println!("  /brainstorm             - Use brainstorming skill for interactive design refinement");
-            println!("  /write-plan             - Use writing-plans skill to create detailed implementation plan");
-            println!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints");
-            println!("  /compact               - Force immediate conversation compaction to reduce session size");
-            println!("  /confirm                - Toggle auto-confirm mode (enable/disable confirmation prompts)");
-            println!("  /skills help            - Show this help");
+            print_heart_red(&format!("{} Available Commands:", "🎯".bright_cyan()), true);
+            print_heart_red(&format!("  /model [color]          - Show current model or switch to model by color (blu/grn/red)"), true);
+            print_heart_red(&format!("  /history                - Display conversation history with message roles"), true);
+            print_heart_red(&format!("  /brainstorm             - Use brainstorming skill for interactive design refinement"), true);
+            print_heart_red(&format!("  /write-plan             - Use writing-plans skill to create detailed implementation plan"), true);
+            print_heart_red(&format!("  /execute-plan           - Use executing-plans skill to execute plan with checkpoints"), true);
+            print_heart_red(&format!("  /compact               - Force immediate conversation compaction to reduce session size"), true);
+            print_heart_red(&format!("  /confirm                - Toggle auto-confirm mode (enable/disable confirmation prompts)"), true);
+            print_heart_red(&format!("  /skills help            - Show this help"), true);
             continue;
         }
 
@@ -674,15 +676,15 @@ pub async fn run_repl_mode(
                             logger.log("system", &skill_msg.content, None, false).await;
                         }
 
-                        println!("{} {} Brainstorming skill activated! 🎯", "✓".bright_green(), "Skill:".bright_cyan());
-                        println!("{}", "Ask your question or describe what you want to brainstorm about.".bright_black());
+                        print_heart_red(&format!("{} {} Brainstorming skill activated! 🎯", "✓".bright_green(), "Skill:".bright_cyan()), true);
+                        print_heart_red(&format!("{}", "Ask your question or describe what you want to brainstorm about.".bright_black()), true);
                     }
                     None => {
-                        eprintln!("{} Brainstorming skill not found. Ensure skills/ directory contains brainstorming/SKILL.md", "❌".bright_red());
+                        print_heart_yellow(&format!("{} Brainstorming skill not found. Ensure skills/ directory contains brainstorming/SKILL.md", "❌".bright_red()), true);
                     }
                 }
             } else {
-                eprintln!("{} Skill registry not available", "❌".bright_red());
+                print_heart_yellow(&format!("{} Skill registry not available", "❌".bright_red()), true);
             }
             continue;
         }
@@ -709,15 +711,15 @@ pub async fn run_repl_mode(
                             logger.log("system", &skill_msg.content, None, false).await;
                         }
 
-                        println!("{} {} Writing-plans skill activated! 📋", "✓".bright_green(), "Skill:".bright_cyan());
-                        println!("{}", "Describe what you want to plan and I'll create a detailed implementation plan.".bright_black());
+                        print_heart_red(&format!("{} {} Writing-plans skill activated! 📋", "✓".bright_green(), "Skill:".bright_cyan()), true);
+                        print_heart_red(&format!("{}", "Describe what you want to plan and I'll create a detailed implementation plan.".bright_black()), true);
                     }
                     None => {
-                        eprintln!("{} Writing-plans skill not found. Ensure skills/ directory contains writing-plans/SKILL.md", "❌".bright_red());
+                        print_heart_yellow(&format!("{} Writing-plans skill not found. Ensure skills/ directory contains writing-plans/SKILL.md", "❌".bright_red()), true);
                     }
                 }
             } else {
-                eprintln!("{} Skill registry not available", "❌".bright_red());
+                print_heart_yellow(&format!("{} Skill registry not available", "❌".bright_red()), true);
             }
             continue;
         }
@@ -744,31 +746,31 @@ pub async fn run_repl_mode(
                             logger.log("system", &skill_msg.content, None, false).await;
                         }
 
-                        println!("{} {} Executing-plans skill activated! 🚀", "✓".bright_green(), "Skill:".bright_cyan());
-                        println!("{}", "I'll execute the plan in batches with review checkpoints.".bright_black());
+                        print_heart_red(&format!("{} {} Executing-plans skill activated! 🚀", "✓".bright_green(), "Skill:".bright_cyan()), true);
+                        print_heart_red(&format!("{}", "I'll execute the plan in batches with review checkpoints.".bright_black()), true);
                     }
                     None => {
-                        eprintln!("{} Executing-plans skill not found. Ensure skills/ directory contains executing-plans/SKILL.md", "❌".bright_red());
+                        print_heart_yellow(&format!("{} Executing-plans skill not found. Ensure skills/ directory contains executing-plans/SKILL.md", "❌".bright_red()), true);
                     }
                 }
             } else {
-                eprintln!("{} Skill registry not available", "❌".bright_red());
+                print_heart_yellow(&format!("{} Skill registry not available", "❌".bright_red()), true);
             }
             continue;
         }
 
         // Handle /compact command
         if line == "/compact" {
-            println!("{} Starting manual conversation compaction...", "🗜️".bright_blue());
+            print_heart_red(&format!("{} Starting manual conversation compaction...", "🗜️".bright_blue()), true);
             match intelligent_compaction(&mut chat, 0).await {
                 Ok(()) => {
                     let session_size = crate::chat::history::calculate_conversation_size(&chat.messages);
-                    println!("{} Compaction completed successfully!", "✓".bright_green());
-                    println!("{} Session size: {:.1} KB, Messages: {}", "📊".bright_cyan(), 
-                             session_size as f64 / 1024.0, chat.messages.len());
+                    print_heart_red(&format!("{} Compaction completed successfully!", "✓".bright_green()), true);
+                    print_heart_red(&format!("{} Session size: {:.1} KB, Messages: {}", "📊".bright_cyan(),
+                             session_size as f64 / 1024.0, chat.messages.len()), true);
                 }
                 Err(e) => {
-                    eprintln!("{} Failed to compact conversation: {}", "❌".bright_red(), e);
+                    print_heart_yellow(&format!("{} Failed to compact conversation: {}", "❌".bright_red(), e), true);
                 }
             }
             continue;
@@ -783,16 +785,16 @@ pub async fn run_repl_mode(
             if is_auto_confirm {
                 // Switch to regular policy manager that asks for confirmation
                 chat.policy_manager = PolicyManager::new();
-                println!("{} Auto-confirm mode disabled. Actions will now require confirmation.", "✓".bright_green());
+                print_heart_red(&format!("{} Auto-confirm mode disabled. Actions will now require confirmation.", "✓".bright_green()), true);
             } else {
                 // Switch to allow-all policy manager for auto-confirm
                 chat.policy_manager = PolicyManager::allow_all();
-                println!("{} Auto-confirm mode enabled. All actions will be approved automatically.", "✓".bright_green());
+                print_heart_red(&format!("{} Auto-confirm mode enabled. All actions will be approved automatically.", "✓".bright_green()), true);
             }
             
             // Print current state
             let current_state = chat.policy_manager.is_allow_all();
-            println!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"});
+            print_heart_red(&format!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"}), true);
             continue;
         }
 
@@ -805,12 +807,12 @@ pub async fn run_repl_mode(
         ) {
             Ok(_) => {
                         if chat.debug_level > 2 {
-                            println!("{} Saved to readline history", "✏️".bright_blue());
+                            print_heart_red(&format!("{} Saved to readline history", "✏️".bright_blue()), true);
                         }
                     }
                     Err(e) => {
                         if chat.debug_level > 0 {
-                            eprintln!("{} Failed to save readline history: {}", "⚠️".yellow(), e);
+                            print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);
                         }
                     }
                 }
@@ -825,13 +827,13 @@ pub async fn run_repl_mode(
                     Ok(_) => {
                         // Silently save in background (no output to user)
                         if chat.debug_level > 1 {
-                            println!("{} Auto-saved history to history-{}.json", 
-                                     "💾".bright_blue(), chat.process_id);
+                            print_heart_red(&format!("{} Auto-saved history to history-{}.json", 
+                                     "💾".bright_blue(), chat.process_id), true);
                         }
                     }
                     Err(e) => {
                         if chat.debug_level > 0 {
-                            eprintln!("{} Auto-save failed: {}", "⚠️".yellow(), e);
+                            print_heart_yellow(&format!("{} Auto-save failed: {}", "⚠️".yellow(), e), true);
                         }
                     }
                 }
@@ -858,7 +860,7 @@ pub async fn run_repl_mode(
                                     Err(e) if e.to_string().contains("cancelled") || e.to_string().contains("interrupted") => {
                                         // This shouldn't happen since interrupts are handled in select! branch
                                         // But if it does, treat it like an error
-                                        eprintln!("{} Unexpected interruption: {}", "⚠️".yellow(), e);
+                                        print_heart_yellow(&format!("{} Unexpected interruption: {}", "⚠️".yellow(), e), true);
                                         {
                                             let mut guard = current_token.lock().unwrap();
                                             *guard = None;
@@ -874,7 +876,7 @@ pub async fn run_repl_mode(
                                         continue 'outer;
                                     }
                                     Err(e) => {
-                                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                                        print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
                                         {
                                             let mut guard = current_token.lock().unwrap();
                                             *guard = None;
@@ -896,7 +898,7 @@ pub async fn run_repl_mode(
                                 if let Some(msg) = interrupt_msg {
                                     match msg {
                                         MspcMessage::InterruptSignal(_content, _sender) => {
-                                            println!("\n{}", "^C - Interrupting current operation...".bright_yellow());
+                                            print_heart_red(&format!("\n{}", "^C - Interrupting current operation...".bright_yellow()), true);
                                             cancel_token.cancel();
                                             {
                                                 let mut guard = current_token.lock().unwrap();
@@ -935,7 +937,7 @@ pub async fn run_repl_mode(
                                     Err(e) if e.to_string().contains("interrupted") => {
                                         // This shouldn't happen since interrupts are handled in select! branch
                                         // But if it does, treat it like an error
-                                        eprintln!("{} Unexpected interruption: {}", "⚠️".yellow(), e);
+                                        print_heart_yellow(&format!("{} Unexpected interruption: {}", "⚠️".yellow(), e), true);
                                         {
                                             let mut guard = current_token.lock().unwrap();
                                             *guard = None;
@@ -951,7 +953,7 @@ pub async fn run_repl_mode(
                                         continue 'outer;
                                     }
                                     Err(e) => {
-                                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                                        print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
                                         {
                                             let mut guard = current_token.lock().unwrap();
                                             *guard = None;
@@ -973,7 +975,7 @@ pub async fn run_repl_mode(
                                 if let Some(msg) = interrupt_msg {
                                     match msg {
                                         MspcMessage::InterruptSignal(_content, _sender) => {
-                                            println!("\n{}", "^C - Interrupting current operation...".bright_yellow());
+                                            print_heart_red(&format!("\n{}", "^C - Interrupting current operation...".bright_yellow()), true);
                                             cancel_token.cancel();
                                             {
                                                 let mut guard = current_token.lock().unwrap();
@@ -1016,7 +1018,7 @@ pub async fn run_repl_mode(
                 // Broadcast response to Webex if enabled
                 if let Some(ref webex) = webex_sink {
                     if let Err(e) = webex.send_response(&response).await {
-                        eprintln!("{} Failed to send to Webex: {}", "⚠️".yellow(), e);
+                        print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
                     }
                 }
 
@@ -1025,10 +1027,10 @@ pub async fn run_repl_mode(
                     let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
                     let model_label = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
                     let assistant_label = "Assistant:".bright_blue().bold();
-                    println!("\n{} {} {}\n", model_label, assistant_label, response);
+                    print_heart_red(&format!("\n{} {} {}\n", model_label, assistant_label, response), true);
                 } else {
                     // Add extra newline after streaming to separate from next prompt
-                    println!();
+                    print_heart_red(&format!(""), true);
                 }
     }
 
@@ -1043,7 +1045,7 @@ pub async fn run_repl_mode(
     // Cleanup readline instance (save history and release resources)
     if let Err(e) = crate::chat::ReadlineInstance::cleanup() {
         if chat.debug_level > 0 {
-            eprintln!("{} Failed to cleanup readline instance: {}", "⚠️".yellow(), e);
+            print_heart_yellow(&format!("{} Failed to cleanup readline instance: {}", "⚠️".yellow(), e), true);
         }
     }
 

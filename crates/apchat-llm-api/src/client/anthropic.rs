@@ -9,6 +9,7 @@ use futures::Stream;
 use futures::StreamExt;
 use async_stream::stream;
 use apchat_logging::get_logs_dir;
+use apchat_logging::vty_output::print_heart_yellow;
 
 /// Anthropic LLM client implementation using native Anthropic API
 pub struct AnthropicLlmClient {
@@ -297,7 +298,7 @@ impl LlmClient for AnthropicLlmClient {
             let mut last_chunk_time = start_time;
 
             if verbose {
-                eprintln!("🔍 [Anthropic Streaming] Starting stream at {:?}", start_time);
+                print_heart_yellow(format!("🔍 [Anthropic Streaming] Starting stream at {:?}", start_time).as_str(), true);
             }
 
             while let Some(chunk_result) = byte_stream.next().await {
@@ -311,12 +312,12 @@ impl LlmClient for AnthropicLlmClient {
 
                         // Print raw bytes received (before any conversion)
                         if verbose {
-                            eprintln!("🔍 [Anthropic Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
-                                chunk_counter, chunk.len(), elapsed_total, elapsed_since_last);
-                            eprintln!("🔍 [Anthropic Streaming] Raw bytes (hex): {}",
-                                chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
-                            eprintln!("🔍 [Anthropic Streaming] Raw bytes (debug): {:?}",
-                                &chunk[..chunk.len().min(200)]);
+                            print_heart_yellow(format!("🔍 [Anthropic Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
+                                chunk_counter, chunk.len(), elapsed_total, elapsed_since_last).as_str(), true);
+                            print_heart_yellow(format!("🔍 [Anthropic Streaming] Raw bytes (hex): {}",
+                                chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")).as_str(), true);
+                            print_heart_yellow(format!("🔍 [Anthropic Streaming] Raw bytes (debug): {:?}",
+                                &chunk[..chunk.len().min(200)]).as_str(), true);
                         }
 
                         // Convert bytes to string, handling UTF-8 errors gracefully
@@ -324,9 +325,9 @@ impl LlmClient for AnthropicLlmClient {
                             Ok(s) => s,
                             Err(e) => {
                                 if verbose {
-                                    eprintln!("❌ [Anthropic Streaming] Invalid UTF-8 in stream: {}", e);
-                                    eprintln!("❌ [Anthropic Streaming] Failed bytes (hex): {}",
-                                        chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+                                    print_heart_yellow(format!("❌ [Anthropic Streaming] Invalid UTF-8 in stream: {}", e).as_str(), true);
+                                    print_heart_yellow(format!("❌ [Anthropic Streaming] Failed bytes (hex): {}",
+                                        chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")).as_str(), true);
                                 }
                                 yield Err(anyhow::anyhow!("Invalid UTF-8 in stream: {}", e));
                                 break;
@@ -335,7 +336,7 @@ impl LlmClient for AnthropicLlmClient {
 
                         // Print raw chunk content after UTF-8 decoding
                         if verbose {
-                            eprintln!("🔍 [Anthropic Streaming] Decoded UTF-8 string ({} chars):\n[START]{}[END]", chunk_str.len(), chunk_str);
+                            print_heart_yellow(format!("🔍 [Anthropic Streaming] Decoded UTF-8 string ({} chars):\n[START]{}[END]", chunk_str.len(), chunk_str).as_str(), true);
                         }
 
                         buffer.push_str(&chunk_str);
@@ -349,26 +350,26 @@ impl LlmClient for AnthropicLlmClient {
 
                             // Print each line being processed
                             if verbose {
-                                eprintln!("🔍 [Anthropic Streaming] Processing line #{}: {:?}", line_num, line);
+                                print_heart_yellow(format!("🔍 [Anthropic Streaming] Processing line #{}: {:?}", line_num, line).as_str(), true);
                             }
 
                             // Parse SSE line and yield result (including errors)
                             match Self::parse_sse_line(&line) {
                                 Ok(Some(streaming_chunk)) => {
                                     if verbose {
-                                        eprintln!("✅ [Anthropic Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
-                                            streaming_chunk.delta.len(), streaming_chunk.finish_reason);
+                                        print_heart_yellow(format!("✅ [Anthropic Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
+                                            streaming_chunk.delta.len(), streaming_chunk.finish_reason).as_str(), true);
                                     }
                                     yield Ok(streaming_chunk);
                                 }
                                 Ok(None) => {
                                     if verbose {
-                                        eprintln!("⏭️  [Anthropic Streaming] No content in line (ping/metadata)");
+                                        print_heart_yellow(format!("⏭️  [Anthropic Streaming] No content in line (ping/metadata)").as_str(), true);
                                     }
                                 }
                                 Err(e) => {
                                     if verbose {
-                                        eprintln!("❌ [Anthropic Streaming] Parse error: {}", e);
+                                        print_heart_yellow(format!("❌ [Anthropic Streaming] Parse error: {}", e).as_str(), true);
                                     }
                                     yield Err(e);
                                     // Continue processing other lines instead of breaking
@@ -378,7 +379,7 @@ impl LlmClient for AnthropicLlmClient {
                     }
                     Err(e) => {
                         if verbose {
-                            eprintln!("❌ [Anthropic Streaming] Stream error: {}", e);
+                            print_heart_yellow(format!("❌ [Anthropic Streaming] Stream error: {}", e).as_str(), true);
                         }
                         yield Err(anyhow::anyhow!("Stream error: {}", e));
                         break;
@@ -389,23 +390,23 @@ impl LlmClient for AnthropicLlmClient {
             // Process any remaining complete line in the buffer
             if !buffer.is_empty() && !buffer.trim().is_empty() {
                 if verbose {
-                    eprintln!("🔍 [Anthropic Streaming] Processing remaining buffer: {:?}", buffer);
+                    print_heart_yellow(format!("🔍 [Anthropic Streaming] Processing remaining buffer: {:?}", buffer).as_str(), true);
                 }
                 match Self::parse_sse_line(&buffer) {
                     Ok(Some(streaming_chunk)) => {
                         if verbose {
-                            eprintln!("✅ [Anthropic Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len());
+                            print_heart_yellow(format!("✅ [Anthropic Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len()).as_str(), true);
                         }
                         yield Ok(streaming_chunk);
                     }
                     Ok(None) => {
                         if verbose {
-                            eprintln!("⏭️  [Anthropic Streaming] No content in remaining buffer");
+                            print_heart_yellow(format!("⏭️  [Anthropic Streaming] No content in remaining buffer").as_str(), true);
                         }
                     }
                     Err(e) => {
                         if verbose {
-                            eprintln!("❌ [Anthropic Streaming] Final parse error: {}", e);
+                            print_heart_yellow(format!("❌ [Anthropic Streaming] Final parse error: {}", e).as_str(), true);
                         }
                         yield Err(e);
                     }
@@ -414,7 +415,7 @@ impl LlmClient for AnthropicLlmClient {
 
             if verbose {
                 let total_duration = std::time::Instant::now().duration_since(start_time);
-                eprintln!("🏁 [Anthropic Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration);
+                print_heart_yellow(format!("🏁 [Anthropic Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration).as_str(), true);
             }
         };
 

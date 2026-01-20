@@ -2,6 +2,7 @@ use colored::Colorize;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use apchat_logging::vty_output::print_heart_red;
 
 /// Enhanced visibility system for agent operations
 #[derive(Debug, Clone)]
@@ -159,10 +160,10 @@ impl VisibilityManager {
             ExecutionPhase::Completed => ("✅", "Completed", "Request processing finished successfully"),
         };
         
-        println!();
-        println!("{}", format!("{} {}", icon, title).bright_cyan().bold());
-        println!("{} {}", "  ↳".bright_cyan(), description.cyan());
-        println!();
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{}", format!("{} {}", icon, title).bright_cyan().bold()), true);
+        print_heart_red(&format!("{} {}", "  ↳".bright_cyan(), description.cyan()), true);
+        print_heart_red(&format!(""), true);
     }
     
     /// Register an agent for visibility tracking
@@ -212,12 +213,12 @@ impl VisibilityManager {
             _ => format!("{}", status_icon).yellow(),
         };
         
-        print!("{} {} {}", status_color, agent.name.bright_white(), format!("({}%)", agent.progress_percentage).bright_blue());
+        print_heart_red(&format!("{} {} {}", status_color, agent.name.bright_white(), format!("({}%)", agent.progress_percentage).bright_blue()), false);
         
         if let Some(task) = &agent.current_task {
-            print!(" - {}", task.cyan());
+            print_heart_red(&format!(" - {}", task.cyan()), false);
         }
-        println!();
+        print_heart_red(&format!(""), true);
     }
     
     /// Record task start
@@ -276,11 +277,11 @@ impl VisibilityManager {
             
             if self.verbosity_level == VerbosityLevel::Detailed || self.verbosity_level == VerbosityLevel::Debug {
                 if let Some(msg) = message {
-                    println!("{} {} {}", 
+                    print_heart_red(&format!("{} {} {}", 
                         format!("[{}%]", (progress * 100.0) as u32).bright_blue(),
                         task.agent_name.bright_white(),
                         msg.cyan()
-                    );
+                    ), true);
                 }
             }
         }
@@ -346,27 +347,27 @@ impl VisibilityManager {
     
     /// Display current status summary
     pub fn display_status_summary(&self) {
-        println!("{}", "═".repeat(60).bright_blue());
-        println!("{}", "📊 SYSTEM STATUS SUMMARY".bright_blue().bold());
-        println!("{}", "═".repeat(60).bright_blue());
+        print_heart_red(&format!("{}", "═".repeat(60).bright_blue()), true);
+        print_heart_red(&format!("{}", "📊 SYSTEM STATUS SUMMARY".bright_blue().bold()), true);
+        print_heart_red(&format!("{}", "═".repeat(60).bright_blue()), true);
         
-        println!("{} {:?}", "Current Phase:".bright_cyan(), self.current_phase);
-        println!("{} {}", "Active Agents:".bright_cyan(), self.active_agents.len().to_string().bright_yellow());
-        println!("{} {}", "Total Tasks:".bright_cyan(), self.performance_metrics.total_tasks.to_string().bright_yellow());
-        println!("{} {:.1}%", "Success Rate:".bright_cyan(), 
+        print_heart_red(&format!("{} {:?}", "Current Phase:".bright_cyan(), self.current_phase), true);
+        print_heart_red(&format!("{} {}", "Active Agents:".bright_cyan(), self.active_agents.len().to_string().bright_yellow()), true);
+        print_heart_red(&format!("{} {}", "Total Tasks:".bright_cyan(), self.performance_metrics.total_tasks.to_string().bright_yellow()), true);
+        print_heart_red(&format!("{} {:.1}%", "Success Rate:".bright_cyan(), 
             (self.performance_metrics.successful_tasks as f32 / self.performance_metrics.total_tasks.max(1) as f32 * 100.0)
-        );
+        ), true);
         
         if self.verbosity_level == VerbosityLevel::Detailed || self.verbosity_level == VerbosityLevel::Debug {
-            println!();
-            println!("{}", "Active Agents:".bright_cyan().bold());
+            print_heart_red(&format!(""), true);
+            print_heart_red(&format!("{}", "Active Agents:".bright_cyan().bold()), true);
             for (_, agent) in &self.active_agents {
                 self.display_agent_update(agent);
             }
         }
         
-        println!("{}", "═".repeat(60).bright_blue());
-        println!();
+        print_heart_red(&format!("{}", "═".repeat(60).bright_blue()), true);
+        print_heart_red(&format!(""), true);
     }
     
     /// Get performance summary
@@ -396,13 +397,16 @@ impl VisibilityManager {
             format!("{}└─▶", "  ".repeat(depth.saturating_sub(1)))
         };
 
-        println!(
-            "{} {} {} {} {}",
-            prefix.green(),
-            format!("[L{}]", depth).bright_black(),
-            agent_name.bright_white(),
-            "→".bright_black(),
-            task_description.cyan()
+        print_heart_red(
+            &format!(
+                "{} {} {} {} {}",
+                prefix.green(),
+                format!("[L{}]", depth).bright_black(),
+                agent_name.bright_white(),
+                "→".bright_black(),
+                task_description.cyan()
+            ),
+            true
         );
     }
 
@@ -412,11 +416,11 @@ impl VisibilityManager {
             return;
         }
 
-        println!();
-        println!("{}", "═".repeat(80).bright_blue());
-        println!("{}", "📊 TASK EXECUTION HIERARCHY".bright_blue().bold());
-        println!("{}", "═".repeat(80).bright_blue());
-        println!();
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{}", "═".repeat(80).bright_blue()), true);
+        print_heart_red(&format!("{}", "📊 TASK EXECUTION HIERARCHY".bright_blue().bold()), true);
+        print_heart_red(&format!("{}", "═".repeat(80).bright_blue()), true);
+        print_heart_red(&format!(""), true);
 
         // Build parent-child mapping
         let mut children: HashMap<String, Vec<&TaskVisibilityEvent>> = HashMap::new();
@@ -435,9 +439,9 @@ impl VisibilityManager {
             self.display_task_node(root, &children, 0, true);
         }
 
-        println!();
-        println!("{}", "═".repeat(80).bright_blue());
-        println!();
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{}", "═".repeat(80).bright_blue()), true);
+        print_heart_red(&format!(""), true);
     }
 
     /// Display a single task node in the tree
@@ -475,15 +479,18 @@ impl VisibilityManager {
             "running".to_string()
         };
 
-        println!(
-            "{}{}{} {} {} {} {}",
-            indent,
-            connector,
-            status_icon,
-            task.agent_name.bright_white(),
-            format!("[{}]", duration).bright_black(),
-            "→".bright_black(),
-            task.task_description.cyan()
+        print_heart_red(
+            &format!(
+                "{}{}{} {} {} {} {}",
+                indent,
+                connector,
+                status_icon,
+                task.agent_name.bright_white(),
+                format!("[{}]", duration).bright_black(),
+                "→".bright_black(),
+                task.task_description.cyan()
+            ),
+            true
         );
 
         // Display children
@@ -507,9 +514,9 @@ impl VisibilityManager {
             return;
         }
 
-        println!();
-        println!("{}", "📍 ACTIVE TASK STACK".bright_yellow().bold());
-        println!("{}", "─".repeat(80).bright_yellow());
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{}", "📍 ACTIVE TASK STACK".bright_yellow().bold()), true);
+        print_heart_red(&format!("{}", "─".repeat(80).bright_yellow()), true);
 
         for task in &active_tasks {
             let depth_indicator = "  ".repeat(task.depth);
@@ -518,19 +525,22 @@ impl VisibilityManager {
                 _ => String::new(),
             };
 
-            println!(
-                "{}{} {} {} {}{}",
-                depth_indicator,
-                format!("[L{}]", task.depth).bright_black(),
-                task.agent_name.bright_white(),
-                "→".bright_black(),
-                task.task_description.cyan(),
-                progress.bright_yellow()
+            print_heart_red(
+                &format!(
+                    "{}{} {} {} {}{}",
+                    depth_indicator,
+                    format!("[L{}]", task.depth).bright_black(),
+                    task.agent_name.bright_white(),
+                    "→".bright_black(),
+                    task.task_description.cyan(),
+                    progress.bright_yellow()
+                ),
+                true
             );
         }
 
-        println!("{}", "─".repeat(80).bright_yellow());
-        println!();
+        print_heart_red(&format!("{}", "─".repeat(80).bright_yellow()), true);
+        print_heart_red(&format!(""), true);
     }
 
     /// Display task queue status
@@ -539,11 +549,14 @@ impl VisibilityManager {
             return;
         }
 
-        println!(
-            "{} Queue: {} pending | {} active",
-            "📋".bright_cyan(),
-            queue_size.to_string().bright_yellow(),
-            active_count.to_string().bright_green()
+        print_heart_red(
+            &format!(
+                "{} Queue: {} pending | {} active",
+                "📋".bright_cyan(),
+                queue_size.to_string().bright_yellow(),
+                active_count.to_string().bright_green()
+            ),
+            true
         );
     }
 
