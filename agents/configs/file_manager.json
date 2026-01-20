@@ -5,6 +5,7 @@
   "model": "blu_model",
   "tools": [
     "read_file",
+    "read_pdf",
     "write_file",
     "edit_file",
     "open_file",
