@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use apchat_models::Message as ChatMessage;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::{
     api::call_api,
     mspc::{MspcChannel, MspcMessage},
@@ -111,7 +112,7 @@ async fn handle_websocket(socket: WebSocket, state: AppState, session_id: Sessio
     let session = match state.session_manager.get_session(&session_id).await {
         Some(s) => s,
         None => {
-            eprintln!("WebSocket: Session {} not found", session_id);
+            print_heart_yellow(&format!("WebSocket: Session {} not found", session_id), true);
             return;
         }
     };
@@ -156,14 +157,14 @@ async fn handle_websocket(socket: WebSocket, state: AppState, session_id: Sessio
     // Handle incoming WebSocket messages
     while let Some(Ok(msg)) = ws_stream.next().await {
         if let WsMessage::Text(text) = msg {
-            eprintln!("📨 Received WebSocket message: {}", text);
+            print_heart_yellow(&format!("📨 Received WebSocket message: {}", text), true);
             match serde_json::from_str::<ClientMessage>(&text) {
                 Ok(client_msg) => {
-                    eprintln!("✅ Parsed message: {:?}", client_msg);
+                    print_heart_yellow(&format!("✅ Parsed message: {:?}", client_msg), true);
                     handle_client_message(client_id, client_msg, &session_clone, &state).await;
                 }
                 Err(e) => {
-                    eprintln!("❌ Failed to parse message: {} - Error: {}", text, e);
+                    print_heart_yellow(&format!("❌ Failed to parse message: {} - Error: {}", text, e), true);
                 }
             }
         }
@@ -198,10 +199,10 @@ async fn handle_client_message(
             tool_call_id,
             confirmed,
         } => {
-            eprintln!("🔔 Received ConfirmTool: id={}, confirmed={}", tool_call_id, confirmed);
+            print_heart_yellow(&format!("🔔 Received ConfirmTool: id={}, confirmed={}", tool_call_id, confirmed), true);
             // Respond to pending confirmation
             let found = session.respond_to_confirmation(&tool_call_id, confirmed).await;
-            eprintln!("🔔 Confirmation response sent: found={}", found);
+            print_heart_yellow(&format!("🔔 Confirmation response sent: found={}", found), true);
         }
         ListSessions => {
             let sessions = state.session_manager.list_sessions().await;
@@ -216,7 +217,7 @@ async fn handle_client_message(
         }
         _ => {
             // TODO: Implement other message handlers
-            eprintln!("Unhandled client message: {:?}", message);
+            print_heart_yellow(&format!("Unhandled client message: {:?}", message), true);
         }
     }
 }
@@ -331,7 +332,7 @@ async fn handle_chat_with_broadcast(
 
                 // If requires confirmation, wait for user response
                 if requires_confirmation {
-                    eprintln!("⏳ Registering confirmation for tool_call_id: {}", tool_call.id);
+                    print_heart_yellow(&format!("⏳ Registering confirmation for tool_call_id: {}", tool_call.id), true);
                     let confirmation_rx = session
                         .register_confirmation(
                             tool_call.id.clone(),
@@ -340,7 +341,7 @@ async fn handle_chat_with_broadcast(
                         )
                         .await;
 
-                    eprintln!("⏳ Waiting for user confirmation...");
+                    print_heart_yellow("⏳ Waiting for user confirmation...", true);
                     // Wait for confirmation (with timeout)
                     let confirmed = match tokio::time::timeout(
                         std::time::Duration::from_secs(300), // 5 minute timeout
@@ -349,16 +350,16 @@ async fn handle_chat_with_broadcast(
                     .await
                     {
                         Ok(Ok(confirmed)) => {
-                            eprintln!("✅ Received confirmation: {}", confirmed);
+                            print_heart_yellow(&format!("✅ Received confirmation: {}", confirmed), true);
                             confirmed
                         }
                         Ok(Err(_)) => {
-                            eprintln!("❌ Confirmation channel closed");
+                            print_heart_yellow("❌ Confirmation channel closed", true);
                             false
                         }
                         Err(_) => {
                             // Timeout
-                            eprintln!("⏱️  Confirmation timeout");
+                            print_heart_yellow("⏱️  Confirmation timeout", true);
                             let error_msg = ServerMessage::Error {
                                 message: "Tool confirmation timeout (5 minutes)".to_string(),
                                 recoverable: true,
@@ -369,7 +370,7 @@ async fn handle_chat_with_broadcast(
                     };
 
                     if !confirmed {
-                        eprintln!("🚫 Tool execution denied");
+                        print_heart_yellow("🚫 Tool execution denied", true);
 
                         // User denied, send error result
                         let error_str = "Tool execution cancelled by user".to_string();
@@ -503,7 +504,7 @@ async fn generate_session_title(
             Some(title)
         }
         Err(e) => {
-            eprintln!("⚠️  Failed to generate session title: {}", e);
+            print_heart_yellow(&format!("⚠️  Failed to generate session title: {}", e), true);
             None
         }
     }
@@ -522,7 +523,7 @@ async fn handle_send_message(
         let mspc_msg = MspcMessage::UserInput(content.clone(), Some("web_socket".to_string()));
         
         if mspc_channel.send(mspc_msg).await.is_err() {
-            eprintln!("⚠️  Failed to send WebSocket message to MSPC channel");
+            print_heart_yellow("⚠️  Failed to send WebSocket message to MSPC channel", true);
             // Fallback to direct processing if MSPC fails
         } else {
             // Message sent to MSPC, no further processing needed here
@@ -609,7 +610,7 @@ async fn handle_send_message(
     // Save session to disk after processing message
     let session_id = session.id;
     if let Err(e) = state.session_manager.save_session(&session_id).await {
-        eprintln!("⚠️  Failed to save session after message: {}", e);
+        print_heart_yellow(&format!("⚠️  Failed to save session after message: {}", e), true);
     }
 }
 
@@ -659,7 +660,7 @@ async fn handle_update_session_title(
     // Save the session to disk
     let session_id = session.id;
     if let Err(e) = state.session_manager.save_session(&session_id).await {
-        eprintln!("⚠️  Failed to save session after title update: {}", e);
+        print_heart_yellow(&format!("⚠️  Failed to save session after title update: {}", e), true);
     }
 }
 

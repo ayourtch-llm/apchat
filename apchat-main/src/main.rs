@@ -13,6 +13,7 @@ use apchat::cli::{Cli, Commands};
 use apchat::app::{setup_from_cli, run_task_mode, run_subagent_mode, run_repl_mode};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -51,7 +52,7 @@ async fn main() -> Result<()> {
             }
             _ => command.execute().await?
         };
-        println!("{}", result);
+        print_heart_red(&format!("{}", result), true);
         return Ok(());
     }
 
@@ -96,7 +97,7 @@ async fn main() -> Result<()> {
 
     // If interactive flag is not set and no subcommand, just exit
     if !cli.interactive {
-        println!("No subcommand provided and interactive mode not requested. Exiting.");
+        print_heart_red("No subcommand provided and interactive mode not requested. Exiting.", true);
         return Ok(());
     }
 
@@ -109,7 +110,7 @@ async fn main() -> Result<()> {
         match apchat_webex::load_webex_secret() {
             Ok(token) => {
                 if cli.webex_websocket {
-                    println!("{} Initializing Webex WebSocket bot for {}", "🌐".bright_cyan(), user_email);
+                    print_heart_red(&format!("{} Initializing Webex WebSocket bot for {}", "🌐".bright_cyan(), user_email), true);
 
                     // Initialize Webex WebSocket router
                     match apchat_webex::WebexWebSocketRouter::new(
@@ -124,21 +125,21 @@ async fn main() -> Result<()> {
                             // Spawn WebSocket router as background task
                             tokio::spawn(async move {
                                 if let Err(e) = router.run().await {
-                                    eprintln!("⚠️ Webex WebSocket router error: {}", e);
+                                    print_heart_yellow(&format!("⚠️ Webex WebSocket router error: {}", e), true);
                                 }
                             });
 
                             let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
-                            println!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green());
+                            print_heart_red(&format!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green()), true);
                             (Some(sink), Some(mspc_channel))
                         }
                         Err(e) => {
-                            eprintln!("{} Failed to initialize Webex WebSocket bot: {}", "⚠️".yellow(), e);
+                            print_heart_yellow(&format!("{} Failed to initialize Webex WebSocket bot: {}", "⚠️".yellow(), e), true);
                             (None, Some(mspc_channel))
                         }
                     }
                 } else {
-                    println!("{} Initializing Webex bot (polling mode) for {}", "🌐".bright_cyan(), user_email);
+                    print_heart_red(&format!("{} Initializing Webex bot (polling mode) for {}", "🌐".bright_cyan(), user_email), true);
 
                     // Initialize Webex input router (polling mode)
                     match apchat_webex::WebexInputRouter::new(
@@ -153,23 +154,23 @@ async fn main() -> Result<()> {
                             // Spawn Webex input router as background task
                             tokio::spawn(async move {
                                 if let Err(e) = router.run().await {
-                                    eprintln!("⚠️ Webex input router error: {}", e);
+                                    print_heart_yellow(&format!("⚠️ Webex input router error: {}", e), true);
                                 }
                             });
 
                             let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
-                            println!("{} Webex bot ready (polling mode)", "✓".bright_green());
+                            print_heart_red(&format!("{} Webex bot ready (polling mode)", "✓".bright_green()), true);
                             (Some(sink), Some(mspc_channel))
                         }
                         Err(e) => {
-                            eprintln!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e);
+                            print_heart_yellow(&format!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e), true);
                             (None, Some(mspc_channel))
                         }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("{} {}", "⚠️".yellow(), e);
+                print_heart_yellow(&format!("{} {}", "⚠️".yellow(), e), true);
                 (None, Some(mspc_channel))
             }
         }

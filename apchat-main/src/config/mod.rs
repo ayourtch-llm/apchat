@@ -9,6 +9,7 @@ use apchat_toolcore::ToolRegistry;
 use apchat_policy::PolicyManager;
 use apchat_tools::*;
 use apchat_models::{ModelColor, ModelProvider};
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 pub mod helpers;
 pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_client, create_client_for_model_color, create_client_for_model_color_with_verbose};
@@ -181,7 +182,7 @@ pub fn initialize_tool_registry() -> ToolRegistry {
 
 /// Initialize the agent system with configuration files
 pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry, policy_manager: &PolicyManager) -> Result<PlanningCoordinator> {
-    println!("{} Initializing agent system...", "🤖".blue());
+    print_heart_red(&format!("{} Initializing agent system...", "🤖".blue()), true);
 
     // Create agent factory
     let tool_registry_arc = Arc::new((*tool_registry).clone());
@@ -241,6 +242,6 @@ pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &Too
         )
     })?;
 
-    println!("{} Agent system initialized successfully!", "✅".green());
+    print_heart_red(&format!("{} Agent system initialized successfully!", "✅".green()), true);
     Ok(coordinator)
 }

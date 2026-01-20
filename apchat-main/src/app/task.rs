@@ -2,6 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::APChat;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
@@ -16,15 +17,15 @@ pub async fn run_task_mode(
     work_dir: PathBuf,
     policy_manager: PolicyManager,
 ) -> Result<()> {
-    println!("{}", "🤖 APChat - Task Mode".bright_cyan().bold());
-    println!("{}", format!("Working directory: {}", work_dir.display()).bright_black());
+    print_heart_red(&format!("{}", "🤖 APChat - Task Mode".bright_cyan().bold()), true);
+    print_heart_red(&format!("{}", format!("Working directory: {}", work_dir.display()).bright_black()), true);
 
     if cli.agents {
-        println!("{}", "🚀 Multi-Agent System ENABLED".green().bold());
+        print_heart_red(&format!("{}", "🚀 Multi-Agent System ENABLED".green().bold()), true);
     }
 
-    println!("{}", format!("Task: {}", task_text).bright_yellow());
-    println!();
+    print_heart_red(&format!("{}", format!("Task: {}", task_text).bright_yellow()), true);
+    print_heart_red("", true);
 
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
@@ -44,7 +45,7 @@ pub async fn run_task_mode(
     chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
         Ok(l) => Some(l),
         Err(e) => {
-            eprintln!("Task logging disabled: {}", e);
+            print_heart_yellow(&format!("Task logging disabled: {}", e), true);
             None
         }
     };
@@ -54,12 +55,12 @@ pub async fn run_task_mode(
         match chat.process_with_agents(&task_text, None).await {
             Ok(response) => response,
             Err(e) => {
-                eprintln!("{} {}\n", "Agent Error:".bright_red().bold(), e);
+                print_heart_yellow(&format!("{} {}\n", "Agent Error:".bright_red().bold(), e), true);
                 // Fallback to regular chat (no cancellation in task mode)
                 match crate::chat::session::chat(&mut chat, &task_text, None).await {
                     Ok(response) => response,
                     Err(e) => {
-                        eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                        print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
                         return Ok(());
                     }
                 }
@@ -70,23 +71,23 @@ pub async fn run_task_mode(
         match crate::chat::session::chat(&mut chat, &task_text, None).await {
             Ok(response) => response,
             Err(e) => {
-                eprintln!("{} {}\n", "Error:".bright_red().bold(), e);
+                print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
                 return Ok(());
             }
         }
     };
 
     if cli.pretty {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
+        print_heart_red(
+            &serde_json::to_string_pretty(&serde_json::json!({
                 "response": response,
                 "agents_used": chat.use_agents
             }))
-            .unwrap_or_else(|_| response.to_string())
+            .unwrap_or_else(|_| response.to_string()),
+            true
         );
     } else {
-        println!("{}", response);
+        print_heart_red(&response, true);
     }
 
     Ok(())

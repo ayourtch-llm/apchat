@@ -7,6 +7,7 @@ use std::str::FromStr;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
 use crate::web::protocol::{ServerMessage, SessionConfig, SessionInfo};
@@ -191,12 +192,12 @@ impl SessionManager {
         // Create persistence manager, log error if it fails but don't crash
         let persistence = match SessionPersistence::new(&sessions_dir) {
             Ok(p) => {
-                println!("📁 Session persistence enabled: {}", sessions_dir.display());
+                print_heart_red(&format!("📁 Session persistence enabled: {}", sessions_dir.display()), true);
                 Some(p)
             }
             Err(e) => {
-                eprintln!("⚠️  Failed to initialize session persistence: {}", e);
-                eprintln!("   Sessions will not be saved to disk");
+                print_heart_yellow(&format!("⚠️  Failed to initialize session persistence: {}", e), true);
+                print_heart_yellow("   Sessions will not be saved to disk", true);
                 None
             }
         };
@@ -272,7 +273,7 @@ impl SessionManager {
 
         // Save to disk
         if let Err(e) = self.save_session_to_disk(&session).await {
-            eprintln!("⚠️  Failed to save session to disk: {}", e);
+            print_heart_yellow(&format!("⚠️  Failed to save session to disk: {}", e), true);
         }
 
         Ok(session_id)
@@ -305,7 +306,7 @@ impl SessionManager {
         // Delete from disk
         if let Some(persistence) = &self.persistence {
             if let Err(e) = persistence.delete_session(session_id) {
-                eprintln!("⚠️  Failed to delete session from disk: {}", e);
+                print_heart_yellow(&format!("⚠️  Failed to delete session from disk: {}", e), true);
             }
         }
 
@@ -376,13 +377,13 @@ impl SessionManager {
                         loaded_count += 1;
                     }
                     Err(e) => {
-                        eprintln!("⚠️  Failed to load session {}: {}", session_id, e);
+                        print_heart_yellow(&format!("⚠️  Failed to load session {}: {}", session_id, e), true);
                     }
                 }
             }
 
             if loaded_count > 0 {
-                println!("📂 Loaded {} saved session(s)", loaded_count);
+                print_heart_red(&format!("📂 Loaded {} saved session(s)", loaded_count), true);
             }
 
             Ok(loaded_count)

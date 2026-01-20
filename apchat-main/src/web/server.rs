@@ -11,6 +11,7 @@ use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
 use crate::mspc::MspcChannel;
 use crate::web::{routes, session_manager::SessionManager};
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 /// Web server configuration
 pub struct WebServerConfig {
@@ -43,7 +44,7 @@ impl WebServer {
         let session_manager_clone = session_manager.clone();
         tokio::spawn(async move {
             if let Err(e) = session_manager_clone.load_saved_sessions().await {
-                eprintln!("⚠️  Failed to load saved sessions: {}", e);
+                print_heart_yellow(&format!("⚠️  Failed to load saved sessions: {}", e), true);
             }
         });
 
@@ -75,16 +76,16 @@ impl WebServer {
         // Serve static files if web_dir is provided
         if let Some(web_dir) = &self.config.web_dir {
             if web_dir.exists() {
-                println!("Serving static files from: {}", web_dir.display());
+                print_heart_red(&format!("Serving static files from: {}", web_dir.display()), true);
                 let serve_dir = ServeDir::new(web_dir);
                 app = app.fallback_service(serve_dir);
             }
         }
 
         // Start server
-        println!("🌐 Web server starting on http://{}", self.config.bind_addr);
-        println!("   WebSocket endpoint: ws://{}/ws/{{session_id}}", self.config.bind_addr);
-        println!("   API endpoints: http://{}/api/sessions", self.config.bind_addr);
+        print_heart_red(&format!("🌐 Web server starting on http://{}", self.config.bind_addr), true);
+        print_heart_red(&format!("   WebSocket endpoint: ws://{}/ws/{{session_id}}", self.config.bind_addr), true);
+        print_heart_red(&format!("   API endpoints: http://{}/api/sessions", self.config.bind_addr), true);
 
         let listener = tokio::net::TcpListener::bind(&self.config.bind_addr).await?;
         axum::serve(listener, app).await?;

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use anyhow::Result;
 use crate::mspc::MspcChannel;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 /// WebexInputRouter - Stub implementation for future Webex bot integration
 /// 
@@ -27,7 +28,7 @@ impl WebexInputRouter {
         // Stub implementation - no-op for now
         // Actual implementation will connect to Webex API
         
-        println!("WebexInputRouter: Stub implementation - Webex integration not yet implemented");
+        print_heart_red(&format!("WebexInputRouter: Stub implementation - Webex integration not yet implemented"), true);
         Ok(())
     }
 }

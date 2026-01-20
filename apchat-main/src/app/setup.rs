@@ -4,6 +4,7 @@ use std::env;
 use std::path::PathBuf;
 
 use crate::cli::Cli;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::config::{ClientConfig, BackendType};
 use apchat_models::{ModelColor, ModelProvider, ModelConfig};
 use crate::config::helpers::get_model_config_from_env;
@@ -227,14 +228,14 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
     );
 
     // Debug output to understand what's happening with model overrides
-    eprintln!("{} DEBUG: Final model overrides before client config:", "🔍".yellow());
+    print_heart_yellow(&format!("{} DEBUG: Final model overrides before client config:", "🔍".yellow()), true);
     for (i, color) in ModelColor::iter().enumerate() {
-        eprintln!("  {}_model_override_final: {:?}", color.as_str_lowercase(), model_names[i]);
+        print_heart_yellow(&format!("  {}_model_override_final: {:?}", color.as_str_lowercase(), model_names[i]), true);
         if let Some(ref backend) = backends[i] {
-            eprintln!("  {}_backend_override_final: {:?}", color.as_str_lowercase(), backend);
+            print_heart_yellow(&format!("  {}_backend_override_final: {:?}", color.as_str_lowercase(), backend), true);
         }
         if let Some(ref url) = api_urls[i] {
-            eprintln!("  {}_url_override_final: {:?}", color.as_str_lowercase(), url);
+            print_heart_yellow(&format!("  {}_url_override_final: {:?}", color.as_str_lowercase(), url), true);
         }
         if let Some(ref key) = api_keys[i] {
             // Show only first 4 chars of API key for security
@@ -243,12 +244,12 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
             } else {
                 "****".to_string()
             };
-            eprintln!("  {}_api_key_override_final: {:?}", color.as_str_lowercase(), key_preview);
+            print_heart_yellow(&format!("  {}_api_key_override_final: {:?}", color.as_str_lowercase(), key_preview), true);
         } else {
-            eprintln!("  {}_api_key_override_final: None", color.as_str_lowercase());
+            print_heart_yellow(&format!("  {}_api_key_override_final: None", color.as_str_lowercase()), true);
         }
     }
-    eprintln!("  CLI global model: {:?}", cli.model);
+    print_heart_yellow(&format!("  CLI global model: {:?}", cli.model), true);
 
     // API key is only required if at least one model uses Groq (no API URL specified and no per-model key)
     let needs_groq_key = api_urls.iter().zip(api_keys.iter())
@@ -291,28 +292,28 @@ pub fn setup_from_cli(cli: &Cli) -> Result<AppConfig> {
             || api_urls[i].as_ref().map(|url| url.contains("anthropic")).unwrap_or(false);
         
         if is_anthropic {
-            eprintln!("{} Anthropic detected for {}_model: using model '{}'", "🤖".cyan(), color.as_str_lowercase(), model_names[i]);
+            print_heart_yellow(&format!("{} Anthropic detected for {}_model: using model '{}'", "🤖".cyan(), color.as_str_lowercase(), model_names[i]), true);
         }
     }
 
     // Create policy manager based on CLI arguments
     let policy_manager = if cli.auto_confirm {
-        eprintln!("{} Auto-confirm mode enabled - all actions will be approved automatically", "🚀".green());
+        print_heart_yellow(&format!("{} Auto-confirm mode enabled - all actions will be approved automatically", "🚀".green()), true);
         PolicyManager::allow_all()
     } else if cli.policy_file.is_some() || cli.learn_policies {
         let policy_file = cli.policy_file.clone().unwrap_or_else(|| "policies.toml".to_string());
         let policy_path = work_dir.join(&policy_file);
         match PolicyManager::from_file(&policy_path, cli.learn_policies) {
             Ok(pm) => {
-                eprintln!("{} Loaded policy file: {}", "📋".cyan(), policy_path.display());
+                print_heart_yellow(&format!("{} Loaded policy file: {}", "📋".cyan(), policy_path.display()), true);
                 if cli.learn_policies {
-                    eprintln!("{} Policy learning enabled - user decisions will be saved to policy file", "📚".cyan());
+                    print_heart_yellow(&format!("{} Policy learning enabled - user decisions will be saved to policy file", "📚".cyan()), true);
                 }
                 pm
             }
             Err(e) => {
-                eprintln!("{} Failed to load policy file: {}", "⚠️".yellow(), e);
-                eprintln!("{} Using default policy (ask for confirmation)", "📋".cyan());
+                print_heart_yellow(&format!("{} Failed to load policy file: {}", "⚠️".yellow(), e), true);
+                print_heart_yellow(&format!("{} Using default policy (ask for confirmation)", "📋".cyan()), true);
                 PolicyManager::new()
             }
         }

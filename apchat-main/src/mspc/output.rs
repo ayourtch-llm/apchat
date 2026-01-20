@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::error::Error as StdError;
 use std::fmt;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 /// Custom error type for output operations
 #[derive(Debug)]
@@ -48,7 +49,7 @@ pub async fn broadcast_to_all(
     for dest in destinations {
         if dest.is_active() {
             if let Err(e) = dest.send_output(&message).await {
-                eprintln!("Failed to send to {}: {}", dest.dest_id(), e);
+                print_heart_yellow(&format!("Failed to send to {}: {}", dest.dest_id(), e), true);
             }
         }
     }

@@ -2,6 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 
 use crate::APChat;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
 
@@ -64,7 +65,7 @@ pub(crate) async fn chat(
             // This ensures fixes are permanent and consistent across requests (preserving cache)
             if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
                 if fixed {
-                    eprintln!("{} Tool calls were automatically fixed in conversation history", "✅".green());
+                    print_heart_yellow(&format!("{} Tool calls were automatically fixed in conversation history", "✅".green()), true);
                 }
             }
 
@@ -82,7 +83,7 @@ pub(crate) async fn chat(
                             if should_use_anthropic {
                                 // Use the new streaming implementation for Anthropic-compatible APIs
                                 if chat.should_show_debug(1) {
-                                    println!("🔧 DEBUG: Using Anthropic-compatible streaming with format translation");
+                                    print_heart_red("🔧 DEBUG: Using Anthropic-compatible streaming with format translation", true);
                                 }
                                 crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await
                             } else {
@@ -118,7 +119,7 @@ pub(crate) async fn chat(
                     if should_use_anthropic {
                         // Use the new streaming implementation for Anthropic-compatible APIs
                         if chat.should_show_debug(1) {
-                            println!("🔧 DEBUG: Using Anthropic-compatible streaming with format translation");
+                            print_heart_red("🔧 DEBUG: Using Anthropic-compatible streaming with format translation", true);
                         }
                         crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
                     } else {
@@ -140,7 +141,7 @@ pub(crate) async fn chat(
             };
 
             if chat.current_model != current_model {
-                println!("Forced model switch: {:?} -> {:?}", &chat.current_model, &current_model);
+                print_heart_red(&format!("Forced model switch: {:?} -> {:?}", &chat.current_model, &current_model), true);
                 chat.current_model = current_model.clone();
 
                 // Removed: Model switch message no longer added to conversation history
@@ -149,14 +150,14 @@ pub(crate) async fn chat(
             // Display token usage
             if let Some(usage) = &usage {
                 chat.total_tokens_used += usage.total_tokens;
-                println!(
+                print_heart_red(&format!(
                     "{} Prompt: {} | Completion: {} | Total: {} | Session: {}",
                     "📊".bright_black(),
                     usage.prompt_tokens.to_string().bright_black(),
                     usage.completion_tokens.to_string().bright_black(),
                     usage.total_tokens.to_string().bright_black(),
                     chat.total_tokens_used.to_string().cyan()
-                );
+                ), true);
             }
 
             // Display streaming metrics if streaming was used
@@ -174,16 +175,16 @@ pub(crate) async fn chat(
                 if tool_call_iterations % PROGRESSIVE_CHECK_INTERVAL == 0 {
                     let conversation_size = crate::chat::history::calculate_conversation_size(&chat.messages);
                     if conversation_size > MID_LOOP_SIZE_THRESHOLD {
-                        println!(
+                        print_heart_red(&format!(
                             "{} Session size reached {:.1} KB during tool execution (iteration {}), performing intelligent compaction...", 
                             "🗜️".yellow(), 
                             conversation_size as f64 / 1024.0,
                             tool_call_iterations
-                        );
+                        ), true);
                         
                         // Perform intelligent compaction that preserves recent tool context
                         if let Err(e) = crate::chat::history::intelligent_compaction(chat, tool_call_iterations).await {
-                            eprintln!("{} Intelligent compaction failed: {}", "⚠️".yellow(), e);
+                            print_heart_yellow(&format!("{} Intelligent compaction failed: {}", "⚠️".yellow(), e), true);
                             // Continue without compaction if it fails
                         }
                     }
@@ -242,11 +243,11 @@ pub(crate) async fn chat(
                         format!("{} identical calls in last {} operations", total_repetition_count, LOOP_DETECTION_WINDOW)
                     };
 
-                    eprintln!(
+                    print_heart_yellow(&format!(
                         "{} Detected repeated tool call pattern ({}). Likely stuck in a loop.",
                         "⚠️".red().bold(),
                         pattern_type
-                    );
+                    ), true);
                     chat.messages.push(Message {
                         role: "assistant".to_string(),
                         content: format!(
@@ -267,13 +268,13 @@ pub(crate) async fn chat(
                 if let Some(ref mut evaluator) = progress_evaluator {
                     // Debug: Show evaluation check
                     if tool_call_iterations % PROGRESS_EVAL_INTERVAL as usize == 0 && tool_call_iterations > 0 {
-                        eprintln!("[DEBUG] Checking if evaluation should trigger at iteration {} (interval: {})",
-                                 tool_call_iterations, PROGRESS_EVAL_INTERVAL);
+                        print_heart_yellow(&format!("[DEBUG] Checking if evaluation should trigger at iteration {} (interval: {})",
+                                 tool_call_iterations, PROGRESS_EVAL_INTERVAL), true);
                     }
 
                     if evaluator.should_evaluate(tool_call_iterations as u32) {
-                        println!("{}", format!("🧠 Evaluating progress after {} tool calls...", tool_call_iterations).bright_blue());
-                        eprintln!("[DEBUG] Progress evaluation triggered at iteration {}", tool_call_iterations);
+                        print_heart_red(&format!("{}", format!("🧠 Evaluating progress after {} tool calls...", tool_call_iterations).bright_blue()), true);
+                        print_heart_yellow(&format!("[DEBUG] Progress evaluation triggered at iteration {}", tool_call_iterations), true);
 
                         // Create tool call summary
                         let mut tool_usage = std::collections::HashMap::new();
@@ -294,18 +295,18 @@ pub(crate) async fn chat(
 
                         match evaluator.evaluate_progress(&summary).await {
                             Ok(evaluation) => {
-                                println!("{}", format!("🎯 Progress Evaluation: {:.0}% complete", evaluation.progress_percentage * 100.0).bright_green());
-                                println!("{}", format!("📊 Confidence: {:.0}%", evaluation.confidence * 100.0).bright_black());
+                                print_heart_red(&format!("{}", format!("🎯 Progress Evaluation: {:.0}% complete", evaluation.progress_percentage * 100.0).bright_green()), true);
+                                print_heart_red(&format!("{}", format!("📊 Confidence: {:.0}%", evaluation.confidence * 100.0).bright_black()), true);
 
                                 if !evaluation.recommendations.is_empty() {
-                                    println!("{}", "💡 Recommendations:".bright_cyan());
+                                    print_heart_red(&format!("{}", "💡 Recommendations:".bright_cyan()), true);
                                     for rec in &evaluation.recommendations {
-                                        println!("  • {}", rec);
+                                        print_heart_red(&format!("  • {}", rec), true);
                                     }
                                 }
 
                                 if !evaluation.should_continue {
-                                    println!("{}", "🛑 Agent evaluation suggests stopping or changing strategy".yellow());
+                                    print_heart_red(&format!("{}", "🛑 Agent evaluation suggests stopping or changing strategy".yellow()), true);
                                     chat.messages.push(Message {
                                         role: "assistant".to_string(),
                                         content: format!(
@@ -327,20 +328,20 @@ pub(crate) async fn chat(
                                 }
 
                                 if evaluation.change_strategy {
-                                    println!("{}", "🔄 Agent evaluation suggests changing strategy".bright_yellow());
+                                    print_heart_red(&format!("{}", "🔄 Agent evaluation suggests changing strategy".bright_yellow()), true);
                                     // Remove the progress evaluation system message to avoid breaking conversation flow
                                     // The evaluation is logged but not added to the conversation history
-                                    println!("{} Progress evaluation: {}", "📊".bright_cyan(), evaluation.reasoning);
+                                    print_heart_red(&format!("{} Progress evaluation: {}", "📊".bright_cyan(), evaluation.reasoning), true);
                                     if !evaluation.recommendations.is_empty() {
-                                        println!("{} Recommendations: {}", "💡".bright_yellow(), evaluation.recommendations.join(", "));
+                                        print_heart_red(&format!("{} Recommendations: {}", "💡".bright_yellow(), evaluation.recommendations.join(", ")), true);
                                     }
                                 } else {
                                     // should_continue is true and no strategy change needed
-                                    println!("{}", "✅ Progress evaluation: continuing execution with current approach".bright_green());
+                                    print_heart_red(&format!("{}", "✅ Progress evaluation: continuing execution with current approach".bright_green()), true);
                                 }
                             }
                             Err(e) => {
-                                eprintln!("{} Progress evaluation failed: {}", "⚠️".yellow(), e);
+                                print_heart_yellow(&format!("{} Progress evaluation failed: {}", "⚠️".yellow(), e), true);
                                 // Continue with conservative fallback
                             }
                         }
@@ -349,11 +350,11 @@ pub(crate) async fn chat(
 
                 // Conservative hard limit as final fallback
                 if tool_call_iterations > MAX_TOOL_ITERATIONS {
-                    eprintln!(
+                    print_heart_yellow(&format!(
                         "{} Reached maximum tool call limit ({} iterations).",
                         "⚠️".yellow(),
                         MAX_TOOL_ITERATIONS
-                    );
+                    ), true);
                     chat.messages.push(Message {
                         role: "assistant".to_string(),
                         content: format!(
@@ -386,7 +387,7 @@ pub(crate) async fn chat(
                         .collect();
 
                     if std::env::var("DEBUG_LOG").is_ok() {
-                        eprintln!("[DEBUG] Logging {} tool calls", tool_call_info.len());
+                        print_heart_yellow(&format!("[DEBUG] Logging {} tool calls", tool_call_info.len()), true);
                     }
 
                     let model_name = chat.current_model.as_str_default();
@@ -399,14 +400,14 @@ pub(crate) async fn chat(
                 }
 
                 for tool_call in tool_calls {
-                    println!(
+                    print_heart_red(&format!(
                         "{} {} with args: {} (iteration {}/{})",
                         "🔧 Calling tool:".yellow(),
                         tool_call.function.name.cyan(),
                         tool_call.function.arguments.bright_black(),
                         tool_call_iterations,
                         MAX_TOOL_ITERATIONS
-                    );
+                    ), true);
 
                     let tool_start_time = std::time::Instant::now();
                     let result = match chat.execute_tool(
@@ -467,12 +468,12 @@ pub(crate) async fn chat(
                         result.clone()
                     };
 
-                    println!("{} {}", "📋 Result:".green(), display_result.bright_black());
+                    print_heart_red(&format!("{} {}", "📋 Result:".green(), display_result.bright_black()), true);
 
                     // Log tool result
                     if let Some(logger) = &mut chat.logger {
                         if std::env::var("DEBUG_LOG").is_ok() {
-                            eprintln!("[DEBUG] Logging tool result for {}", tool_call.function.name);
+                            print_heart_yellow(&format!("[DEBUG] Logging tool result for {}", tool_call.function.name), true);
                         }
                         logger.log_tool_result(
                             &result,

@@ -9,6 +9,7 @@ use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
 use crate::mspc::{MspcChannel, MspcMessage, HistoryError};
 use crate::input_router::TerminalInputRouter;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 /// Types of interruptions that can occur
 #[derive(Debug, Clone, PartialEq)]
@@ -57,13 +58,13 @@ pub async fn chat_with_mspc(
                 if mspc_channel.is_interrupt(&message) {
                     // Handle interrupt immediately
                     if let MspcMessage::InterruptSignal(content, _sender) = message {
-                        eprintln!("{} Interrupt received: {}", "⚠️".yellow(), content);
+                        print_heart_yellow(&format!("{} Interrupt received: {}", "⚠️".yellow(), content), true);
                         
                         // Handle interruption with validation and repair
                         match mspc_channel.handle_interruption_with_validation().await {
                             Ok(interrupted) => {
                                 if !interrupted.is_empty() {
-                                    eprintln!("{} Interrupted message: {}", "ℹ️".blue(), safe_truncate(&interrupted, 100));
+                                    print_heart_yellow(&format!("{} Interrupted message: {}", "ℹ️".blue(), safe_truncate(&interrupted, 100)), true);
                                 }
                                 
                                 // Add interruption to message history
@@ -80,16 +81,16 @@ pub async fn chat_with_mspc(
                                 validate_and_log_history(&mspc_channel).await;
                             }
                             Err(errors) => {
-                                eprintln!("{} History validation errors after interruption:", "⚠️".yellow());
+                                print_heart_yellow(&format!("{} History validation errors after interruption:", "⚠️".yellow()), true);
                                 for error in errors {
-                                    eprintln!("  - {}", error);
+                                    print_heart_yellow(&format!("  - {}", error), true);
                                 }
                                 
                                 // Attempt to repair history
                                 if let Err(repair_errors) = mspc_channel.validate_and_repair_history().await {
-                                    eprintln!("{} Failed to repair history: {}", "❌".red(), repair_errors.len());
+                                    print_heart_yellow(&format!("{} Failed to repair history: {}", "❌".red(), repair_errors.len()), true);
                                 } else {
-                                    eprintln!("{} History repaired successfully", "✅".green());
+                                    print_heart_yellow(&format!("{} History repaired successfully", "✅".green()), true);
                                 }
                             }
                         }
@@ -99,7 +100,7 @@ pub async fn chat_with_mspc(
                 } else if mspc_channel.is_command(&message) {
                     // Handle command
                     if let MspcMessage::Command(content, _sender) = message {
-                        eprintln!("{} Command received: {}", "🔧".cyan(), content);
+                        print_heart_yellow(&format!("{} Command received: {}", "🔧".cyan(), content), true);
                         
                         // Process command (e.g., /model, /skills)
                         if content.starts_with("/model") {
@@ -107,14 +108,14 @@ pub async fn chat_with_mspc(
                             let model_part = content.trim_start_matches("/model").trim();
                             if let Some(new_model) = parse_model_command(model_part) {
                                 chat.current_model = new_model;
-                                eprintln!("{} Switched to model: {:?}", "✅".green(), chat.current_model);
+                                print_heart_yellow(&format!("{} Switched to model: {:?}", "✅".green(), chat.current_model), true);
                             }
                         } else if content == "/skills" {
                             // Display available skills
-                            eprintln!("{} Available commands:", "📋".bright_cyan());
-                            eprintln!("  /model <grn|blu|red> - Switch model");
-                            eprintln!("  /skills - Show this help");
-                            eprintln!("  !<command> - Interrupt current operation");
+                            print_heart_yellow(&format!("{} Available commands:", "📋".bright_cyan()), true);
+                            print_heart_yellow("  /model <grn|blu|red> - Switch model", true);
+                            print_heart_yellow("  /skills - Show this help", true);
+                            print_heart_yellow("  !<command> - Interrupt current operation", true);
                         } else if content == "/validate" {
                             // Validate history
                             validate_and_log_history(&mspc_channel).await;
@@ -122,12 +123,12 @@ pub async fn chat_with_mspc(
                             // Repair history
                             match mspc_channel.validate_and_repair_history().await {
                                 Ok(_) => {
-                                    eprintln!("{} History repaired successfully", "✅".green());
+                                    print_heart_yellow(&format!("{} History repaired successfully", "✅".green()), true);
                                 }
                                 Err(errors) => {
-                                    eprintln!("{} Failed to repair history:", "❌".red());
+                                    print_heart_yellow(&format!("{} Failed to repair history:", "❌".red()), true);
                                     for error in errors {
-                                        eprintln!("  - {}", error);
+                                        print_heart_yellow(&format!("  - {}", error), true);
                                     }
                                 }
                             }
@@ -138,23 +139,23 @@ pub async fn chat_with_mspc(
                 } else if mspc_channel.is_confirmation_request(&message) {
                     // Handle confirmation request
                     if let MspcMessage::ConfirmationRequest(content, _sender) = message {
-                        eprintln!("{} {}", "❓".yellow(), content);
-                        eprintln!("{} Type 'yes' or 'no': ", "👉".bright_black(),);
+                        print_heart_yellow(&format!("{} {}", "❓".yellow(), content), true);
+                        print_heart_yellow(&format!("{} Type 'yes' or 'no': ", "👉".bright_black()), true);
                         
                         // Wait for confirmation response
                         match mspc_channel.recv().await {
                             Some(MspcMessage::ConfirmationResponse(response, _sender)) => {
                                 if response {
-                                    eprintln!("{} Confirmed", "✅".green());
+                                    print_heart_yellow(&format!("{} Confirmed", "✅".green()), true);
                                 } else {
-                                    eprintln!("{} Cancelled", "❌".red());
+                                    print_heart_yellow(&format!("{} Cancelled", "❌".red()), true);
                                 }
                             }
                             Some(other) => {
-                                eprintln!("{} Unexpected response: {:?}", "⚠️".yellow(), other);
+                                print_heart_yellow(&format!("{} Unexpected response: {:?}", "⚠️".yellow(), other), true);
                             }
                             None => {
-                                eprintln!("{} No response received", "⚠️".yellow());
+                                print_heart_yellow(&format!("{} No response received", "⚠️".yellow()), true);
                             }
                         }
                         
@@ -171,7 +172,7 @@ pub async fn chat_with_mspc(
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
             Err(e) => {
-                eprintln!("{} Channel error: {}", "⚠️".yellow(), e);
+                print_heart_yellow(&format!("{} Channel error: {}", "⚠️".yellow(), e), true);
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         }
@@ -183,16 +184,16 @@ async fn validate_and_log_history(mspc_channel: &MspcChannel) {
     match mspc_channel.validate_history().await {
         Ok(errors) => {
             if errors.is_empty() {
-                eprintln!("{} History validation: OK", "✅".green());
+                print_heart_yellow(&format!("{} History validation: OK", "✅".green()), true);
             } else {
-                eprintln!("{} History validation: {} error(s)", "⚠️".yellow(), errors.len());
+                print_heart_yellow(&format!("{} History validation: {} error(s)", "⚠️".yellow(), errors.len()), true);
                 for error in errors {
-                    eprintln!("  - {}", error);
+                    print_heart_yellow(&format!("  - {}", error), true);
                 }
             }
         }
         Err(error) => {
-            eprintln!("{} History validation failed: {}", "❌".red(), error);
+            print_heart_yellow(&format!("{} History validation failed: {}", "❌".red(), error), true);
         }
     }
 }
@@ -259,7 +260,7 @@ async fn process_user_input(
     
     // Validate history after adding user message
     if let Err(errors) = mspc_channel.validate_history().await {
-        eprintln!("{} History validation warning: {}", "⚠️".yellow(), errors);
+        print_heart_yellow(&format!("{} History validation warning: {}", "⚠️".yellow(), errors), true);
     }
     
     // Summarize history before processing
@@ -273,7 +274,7 @@ async fn process_user_input(
     
     // Validate history after adding agent message
     if let Err(errors) = mspc_channel.validate_history().await {
-        eprintln!("{} History validation warning: {}", "⚠️".yellow(), errors);
+        print_heart_yellow(&format!("{} History validation warning: {}", "⚠️".yellow(), errors), true);
     }
     
     Ok(response)

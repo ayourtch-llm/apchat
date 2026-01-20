@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::collections::HashSet;
 
 use crate::APChat;
+use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
 use apchat_logging::{log_request_to_file, safe_truncate};
 
@@ -128,7 +129,7 @@ fn find_cutoff_preserving_tool_pairs(
 /// After system messages, conversation must alternate between user and assistant roles
 /// This function ensures that after system messages, the first non-system message is user
 fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
-    println!("in ensure_proper_role_alternation");
+    print_heart_red("in ensure_proper_role_alternation", true);
     if messages.len() <= 2 {
         return; // Not enough messages to have an issue
     }
@@ -140,7 +141,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
     let mut first_non_system_idx = 0;
     for (i, msg) in messages.iter().enumerate() {
         if msg.role != "system" {
-            println!("Found non system message at {} => {}", i, &msg.role);
+            print_heart_red(&format!("Found non system message at {} => {}", i, &msg.role), true);
             first_non_system_idx = i;
             break;
         }
@@ -212,10 +213,10 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         return Ok(());
     }
     
-    println!("🗜️ {} Starting intelligent compaction: {:.1} KB, {} messages", 
+    print_heart_red(&format!("🗜️ {} Starting intelligent compaction: {:.1} KB, {} messages", 
              "COMPACT".yellow(), 
              conversation_size as f64 / 1024.0, 
-             chat.messages.len());
+             chat.messages.len()), true);
     
     // Find recent tool calls to preserve context
     let mut recent_tool_call_indices = Vec::new();
@@ -380,7 +381,7 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     
     if !response.status().is_success() {
         // If summarization fails, do simple trimming
-        println!("{} Intelligent compaction failed, doing simple trim", "⚠️".yellow());
+        print_heart_red(&format!("{} Intelligent compaction failed, doing simple trim", "⚠️".yellow()), true);
         let mut new_history = vec![system_message.unwrap()];
         new_history.extend(recent_messages);
         
@@ -415,14 +416,14 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         // Calculate new size
         let new_size = calculate_conversation_size(&chat.messages);
         
-        println!(
+        print_heart_red(&format!(
             "{} Intelligent compaction complete: {} messages ({:.1} KB) → {} messages ({:.1} KB)",
             "✅".green(),
             conversation_size / 1000, // Approximate original message count
             conversation_size as f64 / 1024.0,
             chat.messages.len(),
             new_size as f64 / 1024.0
-        );
+        ), true);
     }
     
     Ok(())
@@ -450,7 +451,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         ModelColor::RedModel => ModelColor::BluModel, // Use BluModel for summarization when using RedModel
     };
 
-    println!(
+    print_heart_red(&format!(
         "{} History getting large ({:.1} KB, {} messages) - exceeds {} KB limit for {}. Asking {} to summarize...",
         "📝".yellow(),
         conversation_size as f64 / 1024.0,
@@ -458,7 +459,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         max_size as f64 / 1024.0,
         chat.current_model.display_name(),
         summary_model.display_name()
-    );
+    ), true);
 
     // Keep system message and recent messages
     let system_message = chat.messages.first().cloned();
@@ -555,7 +556,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
 
     if !response.status().is_success() {
         // If summarization fails, just trim without summarizing
-        println!("{} Summarization failed, doing simple trim", "⚠️".yellow());
+        print_heart_red(&format!("{} Summarization failed, doing simple trim", "⚠️".yellow()), true);
         let mut new_history = vec![system_message.unwrap()];
         new_history.extend(recent_messages);
         
@@ -577,7 +578,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             let summary = full_response[..rec_pos].trim().to_string();
             let recommendation = full_response[rec_pos..].trim().to_string();
 
-            println!("{} {}", "💡".bright_cyan(), recommendation);
+            print_heart_red(&format!("{} {}", "💡".bright_cyan(), recommendation), true);
             (summary, Some(recommendation))
         } else {
             (full_response, None)
@@ -603,22 +604,22 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             .map(|json| json.len())
             .unwrap_or(0);
 
-        println!(
+        print_heart_red(&format!(
             "{} History trimmed to {} messages ({:.1} KB)",
             "✅".green(),
             chat.messages.len(),
             new_size as f64 / 1024.0
-        );
+        ), true);
 
         // If there's a SWITCH recommendation, ask the current model to decide
         if let Some(rec_text) = recommendation_text {
             if rec_text.contains("SWITCH") {
-                println!(
+                print_heart_red(&format!(
                     "{} {} suggests switching. Asking {} to decide...",
                     "🤔".yellow(),
                     summary_model.display_name(),
                     chat.current_model.display_name()
-                );
+                ), true);
 
                 // Ask current model to decide
                 let decision_prompt = vec![
@@ -682,23 +683,23 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
                     if let Ok(decision_chat) = serde_json::from_str::<ChatResponse>(&decision_text) {
                         if let Some(decision_msg) = decision_chat.choices.into_iter().next().map(|c| c.message) {
                             let decision = decision_msg.content;
-                            println!("{} {} says: {}", "💬".bright_green(), chat.current_model.display_name(), decision);
+                            print_heart_red(&format!("{} {} says: {}", "💬".bright_green(), chat.current_model.display_name(), decision), true);
 
                             if decision.to_uppercase().contains("AGREE") {
-                                println!(
+                                print_heart_red(&format!(
                                     "{} Switching to {} by mutual agreement",
                                     "🔄".bright_cyan(),
                                     summary_model.display_name()
-                                );
+                                ), true);
                                 chat.current_model = summary_model.clone();
 
                                 // Removed: Model switch message no longer added to conversation history
                             } else {
-                                println!(
+                                print_heart_red(&format!(
                                     "{} Staying with {}",
                                     "✋".yellow(),
                                     chat.current_model.display_name()
-                                );
+                                ), true);
                             }
                         }
                     }

@@ -3,6 +3,7 @@ use serde_json::json;
 use std::path::PathBuf;
 
 use crate::APChat;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
@@ -111,9 +112,9 @@ pub async fn run_subagent_mode(
 
     // Output the JSON summary
     if cli.pretty {
-        println!("{}", serde_json::to_string_pretty(&summary_obj)?);
+        print_heart_red(&serde_json::to_string_pretty(&summary_obj)?, true);
     } else {
-        println!("{}", serde_json::to_string(&summary_obj)?);
+        print_heart_red(&serde_json::to_string(&summary_obj)?, true);
     }
 
     Ok(())

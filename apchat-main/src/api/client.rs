@@ -5,6 +5,7 @@ use tokio::time::sleep;
 
 use crate::APChat;
 use crate::MAX_RETRIES;
+use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, ChatResponse, ToolCall, FunctionCall};
 use apchat_agents::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
@@ -31,17 +32,17 @@ pub(crate) async fn call_api(
         (chat.client_config.get_api_url(ModelColor::RedModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
     if chat.should_show_debug(1) {
-        println!("🔧 DEBUG: current_model = {:?}", current_model);
-        println!("🔧 DEBUG: should_use_anthropic = {}", should_use_anthropic);
+        print_heart_red(&format!("🔧 DEBUG: current_model = {:?}", current_model), true);
+        print_heart_red(&format!("🔧 DEBUG: should_use_anthropic = {}", should_use_anthropic), true);
     }
     if should_use_anthropic {
         if chat.should_show_debug(1) {
-            println!("🔧 DEBUG: Using call_api_with_llm_client for Anthropic");
+            print_heart_red("🔧 DEBUG: Using call_api_with_llm_client for Anthropic", true);
         }
         return call_api_with_llm_client(chat, &messages, &current_model).await;
     } else {
         if chat.should_show_debug(1) {
-            println!("🔧 DEBUG: Using regular OpenAI-style call_api");
+            print_heart_red("🔧 DEBUG: Using regular OpenAI-style call_api", true);
         }
     }
 
@@ -126,13 +127,13 @@ pub(crate) async fn call_api(
             }
 
             let wait_time = Duration::from_secs(2u64.pow(retry_count));
-            println!(
+            print_heart_red(&format!(
                 "{} Rate limited. Waiting {} seconds before retry {}/{}...",
                 "⏳".yellow(),
                 wait_time.as_secs(),
                 retry_count + 1,
                 MAX_RETRIES
-            );
+            ), true);
             sleep(wait_time).await;
             retry_count += 1;
             continue;
@@ -149,27 +150,23 @@ pub(crate) async fn call_api(
 
             // Check if this is a tool-related error
             if status == 400 && error_body.contains("tool_use_failed") {
-                eprintln!("{}", "❌ Tool calling error detected!".red().bold());
-                eprintln!("{}", error_body.yellow());
+                print_heart_yellow(&format!("{}{}", "❌ Tool calling error detected!".red().bold(), error_body.yellow()), true);
                 // No automatic model switching - let the error propagate
             }
 
-            eprintln!("{}", "=== API Error Details ===".red());
-            eprintln!("Status: {}", status);
-            eprintln!("Error body: {}", error_body);
+            print_heart_yellow(&format!("{}\nStatus: {}\nError body: {}", "=== API Error Details ===".red(), status, error_body), true);
 
             // Try to show the request that caused the error
-            eprintln!("\n{}", "Request details:".yellow());
-            eprintln!("Messages count: {}", messages.len());
+            print_heart_yellow(&format!("\n{}\nMessages count: {}", "Request details:".yellow(), messages.len()), true);
             if let Ok(req_json) = serde_json::to_string_pretty(&request) {
                 // Truncate very long requests
                 if req_json.chars().count() > 2000 {
-                    eprintln!("Request (truncated): {}...", safe_truncate(&req_json, 2000));
+                    print_heart_yellow(&format!("Request (truncated): {}...", safe_truncate(&req_json, 2000)), true);
                 } else {
-                    eprintln!("Request: {}", req_json);
+                    print_heart_yellow(&format!("Request: {}", req_json), true);
                 }
             }
-            eprintln!("{}", "======================".red());
+            print_heart_yellow(&format!("{}", "======================".red()), true);
 
             return Err(anyhow::anyhow!("API request failed with status {}: {}", status, error_body));
         }
@@ -194,7 +191,7 @@ pub(crate) async fn call_api(
         // If no structured tool calls were received, check for XML format in content
         if message.tool_calls.is_none() {
             if let Some(parsed_calls) = parse_xml_tool_calls(&message.content) {
-                eprintln!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len());
+                print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
                 message.tool_calls = Some(parsed_calls);
                 // Clear the XML from content to avoid displaying it
                 message.content = String::new();
@@ -212,12 +209,12 @@ pub(crate) async fn call_api_with_llm_client(
     model: &ModelColor,
 ) -> Result<(Message, Option<Usage>, ModelColor)> {
     if chat.should_show_debug(1) {
-        println!("🔧 DEBUG: call_api_with_llm_client called with model: {:?}", model);
+        print_heart_red(&format!("🔧 DEBUG: call_api_with_llm_client called with model: {:?}", model), true);
     }
     if chat.should_show_debug(2) {
-        println!("🔧 DEBUG: client_config.get_api_url(BluModel): {:?}", chat.client_config.get_api_url(ModelColor::BluModel));
-        println!("🔧 DEBUG: client_config.get_api_url(GrnModel): {:?}", chat.client_config.get_api_url(ModelColor::GrnModel));
-        println!("🔧 DEBUG: client_config.get_api_url(RedModel): {:?}", chat.client_config.get_api_url(ModelColor::RedModel));
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(BluModel): {:?}", chat.client_config.get_api_url(ModelColor::BluModel)), true);
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(GrnModel): {:?}", chat.client_config.get_api_url(ModelColor::GrnModel)), true);
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(RedModel): {:?}", chat.client_config.get_api_url(ModelColor::RedModel)), true);
     }
 
     // Convert old Message format to new ChatMessage format

@@ -11,6 +11,7 @@ use rustyline::Editor;
 use rustyline::history::FileHistory;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 // Trait to provide `is_some` method for FileHistory, mirroring older API expectations
 pub trait HistoryExt {
@@ -147,7 +148,7 @@ impl ReadlineInstance {
     pub fn cleanup() -> Result<()> {
         // Save history before cleanup
         if let Err(e) = Self::save_history() {
-            eprintln!("Warning: Failed to save readline history: {}", e);
+            print_heart_yellow(&format!("Warning: Failed to save readline history: {}", e), true);
         }
         
         // Clear the history to free up resources
