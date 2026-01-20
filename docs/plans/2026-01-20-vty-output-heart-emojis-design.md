@@ -9,7 +9,7 @@ Create centralized terminal output functions that prepend heart emojis to every 
 
 ## Module Structure
 
-**File:** `apchat-main/src/app/vty_output.rs`
+**File:** `apchat-vty/src/vty_output.rs`
 
 ### Public Functions
 
@@ -64,18 +64,8 @@ print_heart_yellow("Warning!", false);
 
 ### Files Requiring Changes
 
-**Primary files (~200+ print statements):**
-- `crates/apchat-llm-api/src/client/anthropic.rs`
-- `crates/apchat-llm-api/src/client/llama_cpp.rs`
-- `crates/apchat-logging/src/request_logger.rs`
-- `crates/apchat-logging/src/conversation_logger.rs`
-- `apchat-main/src/api/streaming.rs`
-- `apchat-main/src/app/terminal_output.rs`
-- `apchat-main/src/input_router/terminal.rs`
-- `crates/apchat-tools/src/*.rs`
-- `crates/apchat-toolcore/src/tool_context.rs`
-- `crates/apchat-agents/src/visibility.rs`
-- And ~10 more files
+**Primary files **
+- any file in the project
 
 **Exclusions:**
 - Test files: Keep standard macros for clarity
