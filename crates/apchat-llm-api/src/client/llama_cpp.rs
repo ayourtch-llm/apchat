@@ -5,7 +5,7 @@ use futures::Stream;
 use futures::StreamExt;
 use async_stream::stream;
 use serde_json::Value;
-use apchat_logging::vty_output::print_heart_yellow;
+use apchat_vty::print_heart_yellow;
 
 /// llama.cpp server LLM client implementation with OpenAI-compatible API
 pub struct LlamaCppClient {

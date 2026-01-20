@@ -3,7 +3,7 @@ use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 /// Data structure representing a curly bracket pair
 /// Stores information about opening and closing brackets, their content, and preceding whitespace

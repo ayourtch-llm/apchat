@@ -9,7 +9,7 @@ use futures::Stream;
 use futures::StreamExt;
 use async_stream::stream;
 use apchat_logging::get_logs_dir;
-use apchat_logging::vty_output::print_heart_yellow;
+use apchat_vty::print_heart_yellow;
 
 /// Anthropic LLM client implementation using native Anthropic API
 pub struct AnthropicLlmClient {

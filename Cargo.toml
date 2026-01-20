@@ -12,6 +12,7 @@ members = [
     "crates/apchat-terminal",
     "crates/apchat-toolcore",
     "crates/apchat-tools",
+    "crates/apchat-vty",
     "crates/apchat-wasm",
     "crates/apchat-webex",
 ]

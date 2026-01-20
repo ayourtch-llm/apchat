@@ -3,7 +3,7 @@ use colored::Colorize;
 use regex::Regex;
 
 use crate::APChat;
-use crate::app::vty_output::{print_heart_yellow};
+use apchat_vty::{print_heart_yellow};
 use apchat_models::{ModelColor, Message, ToolCall, FunctionCall, ChatRequest, ChatResponse};
 use apchat_logging::{log_request_to_file, log_response_to_file, log_raw_response_to_file};
 

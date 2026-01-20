@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 use colored::Colorize;
 use chrono;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 /// Tool for opening files with optional line range
 pub struct OpenFileTool;

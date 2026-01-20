@@ -8,7 +8,7 @@ use apchat_agents::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
-use crate::app::vty_output::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red};
 
 /// Metrics for token generation rate tracking
 #[derive(Debug, Clone)]

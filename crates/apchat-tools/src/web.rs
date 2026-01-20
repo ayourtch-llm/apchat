@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use colored::Colorize;
 use std::io::Write as IoWrite;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 /// Maximum allowed response size (50MB)
 const MAX_RESPONSE_SIZE: usize = 50 * 1024 * 1024;

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
 use serde_json;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 
 /// Tool for launching a subagent to execute a task independently

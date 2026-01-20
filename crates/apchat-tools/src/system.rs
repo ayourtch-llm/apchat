@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tokio::process::Command as AsyncCommand;
 use colored::Colorize;
 use std::io::Write;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 /// Maximum allowed timeout (120 seconds)
 const MAX_TIMEOUT: u64 = 120;

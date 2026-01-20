@@ -4,7 +4,7 @@ use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 use std::sync::Mutex;
 use std::path::PathBuf;
 use apchat_logging::get_okaychat_dir;
-use apchat_logging::vty_output::print_heart_yellow;
+use apchat_vty::print_heart_yellow;
 use super::EmbeddingBackend;
 
 /// FastEmbed-based embedding backend

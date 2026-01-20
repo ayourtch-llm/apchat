@@ -9,7 +9,7 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use similar::{ChangeTag, TextDiff};
 use strsim::levenshtein;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct EditOperation {

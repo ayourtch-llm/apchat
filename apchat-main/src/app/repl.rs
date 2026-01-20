@@ -4,7 +4,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::vty_output::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red};
 
 use crate::APChat;
 use crate::cli::Cli;

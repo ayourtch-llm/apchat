@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
-use apchat_logging::vty_output::print_heart_yellow;
+use apchat_vty::print_heart_yellow;
 
 /// Types of actions that can be governed by policies
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

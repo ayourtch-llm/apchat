@@ -6,7 +6,7 @@ use apchat_policy::PolicyManager;
 use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
 use apchat_todo::TodoManager;
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 use crate::content_limiter::ContentLimiter;
 use apchat_models::types::ModelColor;
 

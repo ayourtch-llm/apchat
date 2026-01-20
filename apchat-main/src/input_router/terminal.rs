@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::io::{self, Write};
 use crate::mspc::{MspcChannel, MspcMessage};
-use crate::app::vty_output::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red};
 
 pub struct TerminalInputRouter {
     pub channel: Arc<MspcChannel>,

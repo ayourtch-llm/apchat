@@ -1,7 +1,7 @@
 [cfg(test)]
 mod detailed_test {
     use super::*;
-    use apchat_logging::vty_output::print_heart_red;
+    use apchat_vty::print_heart_red;
 
     #[test]
     fn test_unmatched_opening_at_eof_detailed() {

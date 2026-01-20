@@ -20,6 +20,7 @@ apchat-skills = { path = "../apchat-skills" }
 apchat-terminal = { path = "../apchat-terminal" }
 apchat-todo = { path = "../apchat-todo" }
 apchat-toolcore = { path = "../apchat-toolcore" }
+apchat-vty = { path = "../apchat-vty" }
 regex = "*"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustyline = "14.0"

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::cli::Cli;
-use super::vty_output::{print_heart_red};
+use apchat_vty::{print_heart_red};
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
 use crate::mspc::MspcChannel;

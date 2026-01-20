@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use anyhow::{Result, Context};
 use serde::{Deserialize, Serialize};
-use apchat_logging::vty_output::print_heart_yellow;
+use apchat_vty::print_heart_yellow;
 
 // Embedding support for semantic skill search
 pub mod embeddings;

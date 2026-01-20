@@ -2,7 +2,7 @@ use colored::Colorize;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use apchat_logging::vty_output::print_heart_red;
+use apchat_vty::print_heart_red;
 
 /// Enhanced visibility system for agent operations
 #[derive(Debug, Clone)]

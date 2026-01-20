@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use colored::Colorize;
 use crate::mspc::OutputMessage;
 use crate::mspc::OutputDestination;
-use super::vty_output::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red};
 
 /// Custom error type for terminal output
 #[derive(Debug)]
