@@ -23,6 +23,7 @@ pub mod memory;
 pub mod file_curly_glance;
 pub mod pdf_reader;
 pub mod pdf_tool;
+pub mod pdf_content_parser;
 
 pub use file_ops::*;
 pub use search::*;

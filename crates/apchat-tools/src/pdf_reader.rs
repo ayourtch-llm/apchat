@@ -1,7 +1,9 @@
 //! PDF reader tool for extracting text from PDF files
 
 use anyhow::{Context, Result};
+use serde::Serialize;
 use std::path::Path;
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -84,9 +86,11 @@ pub async fn extract_text_from_pdf(
         // Extract text from the page
         match extract_text_from_page(&doc, *page_id) {
             Ok(page_text) => {
-                text_content.push_str(&format!("--- Page {} ---\n", page_num));
-                text_content.push_str(&page_text);
-                text_content.push('\n');
+                if !page_text.is_empty() {
+                    text_content.push_str(&format!("--- Page {} ---\n", page_num));
+                    text_content.push_str(&page_text);
+                    text_content.push('\n');
+                }
             }
             Err(e) => {
                 // Continue on error, but note it
@@ -104,7 +108,42 @@ pub async fn extract_text_from_pdf(
 
 /// Extract text from a specific page in the PDF
 fn extract_text_from_page(doc: &lopdf::Document, page_id: (u32, u16)) -> Result<String> {
+    use crate::pdf_content_parser::{decompress_stream_raw, extract_text_from_content_bytes};
+
     let mut text = String::new();
+
+    // Get page object and build XObject map
+    let page_obj = doc.get_object(lopdf::ObjectId::from(page_id))
+        .context("Page object not found")?;
+
+    let page_dict = page_obj.as_dict()
+        .context("Page object is not a dictionary")?;
+
+    // Build XObject map from resources
+    let xobject_map = if let Ok(resources) = page_dict.get(b"Resources") {
+        if let Ok(res_dict) = resources.as_dict() {
+            if let Ok(xobjects) = res_dict.get(b"XObject") {
+                if let Ok(xobj_dict) = xobjects.as_dict() {
+                    let mut map = std::collections::HashMap::new();
+                    for (name, obj_ref) in xobj_dict.iter() {
+                        let name_str = String::from_utf8_lossy(name).to_string();
+                        if let Ok(ref_id) = obj_ref.as_reference() {
+                            map.insert(name_str, ref_id);
+                        }
+                    }
+                    map
+                } else {
+                    std::collections::HashMap::new()
+                }
+            } else {
+                std::collections::HashMap::new()
+            }
+        } else {
+            std::collections::HashMap::new()
+        }
+    } else {
+        std::collections::HashMap::new()
+    };
 
     // Get all content streams for this page
     let content_ids = doc.get_page_contents(page_id);
@@ -112,55 +151,23 @@ fn extract_text_from_page(doc: &lopdf::Document, page_id: (u32, u16)) -> Result<
     for content_id in content_ids {
         if let Ok(content_obj) = doc.get_object(content_id) {
             if let Ok(stream) = content_obj.as_stream() {
-                // Decompress and decode the content stream
-                if let Ok(decoded_content) = stream.decode_content() {
-                    let operations = decoded_content.operations;
-
-                    for op in operations {
-                        // Look for text show operations (Tj, TJ, ', ")
-                        // operator is a Vec<u8>, so we compare slices
-                        let op_name: &[u8] = op.operator.as_bytes();
-                        if op_name == b"Tj" || op_name == b"'" {
-                            // Tj: show single string
-                            if let Some(args) = op.operands.get(0) {
-                                if let Ok(bytes) = args.as_str() {
-                                    if let Ok(s) = std::str::from_utf8(bytes) {
-                                        text.push_str(s);
-                                    }
-                                }
-                            }
-                        } else if op_name == b"TJ" {
-                            // TJ: show array of strings with spacing adjustments
-                            for arg in &op.operands {
-                                if let Ok(arr) = arg.as_array() {
-                                    for item in arr {
-                                        if let Ok(bytes) = item.as_str() {
-                                            if let Ok(s) = std::str::from_utf8(bytes) {
-                                                text.push_str(s);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else if op_name == b"\"" {
-                            // \": move to next line and show text
-                            if op.operands.len() >= 3 {
-                                if let Ok(bytes) = op.operands[2].as_str() {
-                                    if let Ok(s) = std::str::from_utf8(bytes) {
-                                        text.push(' ');
-                                        text.push_str(s);
-                                    }
-                                }
-                            }
-                        }
+                // Use custom parser to work around lopdf's broken decode_content
+                match decompress_stream_raw(stream) {
+                    Ok(decompressed_bytes) => {
+                        let page_text = extract_text_from_content_bytes(&decompressed_bytes, doc, &xobject_map);
+                        text.push_str(&page_text);
+                        text.push(' ');
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to decompress stream: {}", e);
                     }
                 }
             }
         }
     }
 
-    // Basic cleanup: add spaces where appropriate
-    text = text.replace("  ", " ");
+    // Cleanup: normalize whitespace
+    text = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
     Ok(text)
 }
