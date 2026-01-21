@@ -276,15 +276,20 @@ impl WebexWebSocketRouter {
         while let Some(msg_result) = read.next().await {
             match msg_result {
                 Ok(Message::Text(text)) => {
+                    eprintln!("🔍 DEBUG: Received WebSocket text message ({} bytes)", text.len());
+                    eprintln!("🔍 DEBUG: Message preview: {}", text.chars().take(200).collect::<String>());
+
                     // Parse Mercury event
                     match serde_json::from_str::<MercuryEvent>(&text) {
                         Ok(event) => {
+                            eprintln!("🔍 DEBUG: Parsed event type: {}", event.data.event_type);
                             if let Err(e) = self.process_event(event).await {
                                 eprintln!("⚠️ Error processing event: {}", e);
                             }
                         }
                         Err(e) => {
                             eprintln!("⚠️ Failed to parse Mercury event: {}", e);
+                            eprintln!("🔍 DEBUG: Raw message: {}", text);
                         }
                     }
                 }
@@ -292,8 +297,17 @@ impl WebexWebSocketRouter {
                     eprintln!("🔍 DEBUG: WebSocket closed by server");
                     break;
                 }
-                Ok(_) => {
-                    // Ignore ping/pong/binary messages
+                Ok(Message::Ping(data)) => {
+                    eprintln!("🔍 DEBUG: Received ping ({} bytes)", data.len());
+                }
+                Ok(Message::Pong(data)) => {
+                    eprintln!("🔍 DEBUG: Received pong ({} bytes)", data.len());
+                }
+                Ok(Message::Binary(data)) => {
+                    eprintln!("🔍 DEBUG: Received binary message ({} bytes)", data.len());
+                }
+                Ok(msg) => {
+                    eprintln!("🔍 DEBUG: Received other message type: {:?}", msg);
                 }
                 Err(e) => {
                     return Err(anyhow::anyhow!("WebSocket error: {}", e));
