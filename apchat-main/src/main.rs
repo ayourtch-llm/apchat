@@ -121,6 +121,7 @@ async fn main() -> Result<()> {
                         Ok(router) => {
                             let room_id = router.room_id().to_string();
                             let client = router.client();
+                            let last_message_id = router.last_user_message_id();
 
                             // Spawn WebSocket router as background task
                             tokio::spawn(async move {
@@ -129,7 +130,7 @@ async fn main() -> Result<()> {
                                 }
                             });
 
-                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id, last_message_id));
                             print_heart_red(&format!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green()), true);
                             (Some(sink), Some(mspc_channel))
                         }
@@ -150,6 +151,7 @@ async fn main() -> Result<()> {
                         Ok(router) => {
                             let room_id = router.room_id().to_string();
                             let client = router.client();
+                            let last_message_id = router.last_user_message_id();
 
                             // Spawn Webex input router as background task
                             tokio::spawn(async move {
@@ -158,7 +160,7 @@ async fn main() -> Result<()> {
                                 }
                             });
 
-                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id));
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id, last_message_id));
                             print_heart_red(&format!("{} Webex bot ready (polling mode)", "✓".bright_green()), true);
                             (Some(sink), Some(mspc_channel))
                         }

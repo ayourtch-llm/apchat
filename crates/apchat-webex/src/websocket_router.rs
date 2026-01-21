@@ -20,6 +20,7 @@ pub struct WebexWebSocketRouter {
     websocket_url: String,
     room_id: String,
     seen_message_ids: Arc<Mutex<HashSet<String>>>,
+    last_user_message_id: Arc<Mutex<Option<String>>>,
 }
 
 impl WebexWebSocketRouter {
@@ -80,7 +81,13 @@ impl WebexWebSocketRouter {
             websocket_url: registration.web_socket_url,
             room_id,
             seen_message_ids: Arc::new(Mutex::new(seen_ids)),
+            last_user_message_id: Arc::new(Mutex::new(None)),
         })
+    }
+
+    /// Get a shared reference to the last user message ID (for threading replies)
+    pub fn last_user_message_id(&self) -> Arc<Mutex<Option<String>>> {
+        Arc::clone(&self.last_user_message_id)
     }
 
     /// Process a Mercury event and route to MSPC if it's a user message
@@ -100,52 +107,94 @@ impl WebexWebSocketRouter {
             return Ok(());
         }
 
-        // Extract message data from object
-        let obj = activity.object;
-        let message_id = obj.get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        // Check who posted the message
+        let actor_email = activity.actor
+            .as_ref()
+            .map(|a| a.id.as_str())
+            .unwrap_or("");
 
-        let person_email = obj.get("personEmail")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        eprintln!("🔍 DEBUG: Mercury notification - new activity from {}", actor_email);
 
-        let text = obj.get("text")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        // Check if already seen
-        {
-            let mut seen = self.seen_message_ids.lock().await;
-            if seen.contains(&message_id) {
-                eprintln!("🔍 DEBUG: Message {} already seen, skipping", message_id);
-                return Ok(());
-            }
-            // Mark as seen
-            seen.insert(message_id.clone());
+        // Skip Mercury notifications for bot's own messages
+        // This prevents unnecessary API calls and avoids triggering "new messages" indicator
+        if actor_email == self.authorized_user_email {
+            eprintln!("🔍 DEBUG: Actor is authorized user, processing...");
+        } else if actor_email == self.bot_email {
+            eprintln!("🔍 DEBUG: Skipping Mercury notification for bot's own message");
+            return Ok(());
+        } else {
+            eprintln!("🔍 DEBUG: Skipping Mercury notification from {}", actor_email);
+            return Ok(());
         }
 
-        eprintln!("🔍 DEBUG: New message from {} (authorized: {}, bot: {})",
-            person_email, self.authorized_user_email, self.bot_email);
+        // Mercury sends encrypted content - we need to fetch the actual messages via REST API
+        // Note: Mercury activity.id != REST API message.id (different ID formats)
+        // So we just fetch recent messages and process any unseen ones from authorized user
+        eprintln!("🔍 DEBUG: Fetching recent messages from REST API...");
+        let messages = self.client
+            .get_messages(&self.room_id)
+            .await
+            .context("Failed to fetch messages after Mercury notification")?;
 
-        // Filter: only messages from authorized user, not from bot
-        if person_email == self.authorized_user_email && person_email != self.bot_email {
-            if let Some(text) = text {
-                println!("📨 Received Webex message from {}: {}", person_email, text);
-
-                // Send to MSPC channel
-                let message = MspcMessage::UserInput(
-                    text,
-                    Some(format!("webex:{}", person_email)),
-                );
-
-                if let Err(e) = self.mspc_channel.send(message).await {
-                    eprintln!("⚠️ Failed to send message to MSPC channel: {}", e);
+        // Process all unseen messages from authorized user
+        let mut processed_count = 0;
+        for msg in messages {
+            // Check if already seen
+            let is_new = {
+                let mut seen = self.seen_message_ids.lock().await;
+                if seen.contains(&msg.id) {
+                    false
+                } else {
+                    seen.insert(msg.id.clone());
+                    true
                 }
+            };
+
+            if !is_new {
+                continue;
+            }
+
+            eprintln!("🔍 DEBUG: New message [{}] from {} @ {}: {}",
+                msg.id.chars().take(8).collect::<String>(),
+                msg.person_email,
+                msg.created,
+                msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())
+            );
+
+            // Filter: only messages from authorized user, not from bot
+            if msg.person_email == self.authorized_user_email && msg.person_email != self.bot_email {
+                if let Some(text) = msg.text {
+                    println!("📨 Received Webex message from {}: {}", msg.person_email, text);
+
+                    // Track this message ID for threading replies
+                    {
+                        let mut last_id = self.last_user_message_id.lock().await;
+                        *last_id = Some(msg.id.clone());
+                    }
+
+                    // Send to MSPC channel
+                    let message = MspcMessage::UserInput(
+                        text,
+                        Some(format!("webex:{}", msg.person_email)),
+                    );
+
+                    if let Err(e) = self.mspc_channel.send(message).await {
+                        eprintln!("⚠️ Failed to send message to MSPC channel: {}", e);
+                    }
+
+                    processed_count += 1;
+                }
+            } else if msg.person_email == self.bot_email {
+                eprintln!("🔍 DEBUG: Skipping bot's own message: {}",
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string()));
+            } else {
+                eprintln!("🔍 DEBUG: Skipping message from {}: {}",
+                    msg.person_email,
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string()));
             }
         }
+
+        eprintln!("🔍 DEBUG: Processed {} new messages from authorized user", processed_count);
 
         Ok(())
     }
@@ -247,6 +296,26 @@ impl WebexWebSocketRouter {
         }
     }
 
+    /// Handle a decoded Mercury message (text or binary converted to text)
+    async fn handle_mercury_message(&self, text: &str) {
+        eprintln!("🔍 DEBUG: Processing message ({} bytes)", text.len());
+        eprintln!("🔍 DEBUG: Message preview: {}", text.chars().take(200).collect::<String>());
+
+        // Parse Mercury event
+        match serde_json::from_str::<MercuryEvent>(text) {
+            Ok(event) => {
+                eprintln!("🔍 DEBUG: Parsed event type: {}", event.data.event_type);
+                if let Err(e) = self.process_event(event).await {
+                    eprintln!("⚠️ Error processing event: {}", e);
+                }
+            }
+            Err(e) => {
+                eprintln!("⚠️ Failed to parse Mercury event: {}", e);
+                eprintln!("🔍 DEBUG: Raw message: {}", text);
+            }
+        }
+    }
+
     /// Run a single WebSocket connection (extracted for reconnection logic)
     async fn run_connection(&self) -> Result<()> {
         // Connect to Mercury WebSocket
@@ -277,19 +346,17 @@ impl WebexWebSocketRouter {
             match msg_result {
                 Ok(Message::Text(text)) => {
                     eprintln!("🔍 DEBUG: Received WebSocket text message ({} bytes)", text.len());
-                    eprintln!("🔍 DEBUG: Message preview: {}", text.chars().take(200).collect::<String>());
-
-                    // Parse Mercury event
-                    match serde_json::from_str::<MercuryEvent>(&text) {
-                        Ok(event) => {
-                            eprintln!("🔍 DEBUG: Parsed event type: {}", event.data.event_type);
-                            if let Err(e) = self.process_event(event).await {
-                                eprintln!("⚠️ Error processing event: {}", e);
-                            }
+                    self.handle_mercury_message(&text).await;
+                }
+                Ok(Message::Binary(data)) => {
+                    eprintln!("🔍 DEBUG: Received binary message ({} bytes)", data.len());
+                    // Mercury sends messages as UTF-8 encoded binary
+                    match String::from_utf8(data) {
+                        Ok(text) => {
+                            self.handle_mercury_message(&text).await;
                         }
                         Err(e) => {
-                            eprintln!("⚠️ Failed to parse Mercury event: {}", e);
-                            eprintln!("🔍 DEBUG: Raw message: {}", text);
+                            eprintln!("⚠️ Failed to decode binary message as UTF-8: {}", e);
                         }
                     }
                 }
@@ -302,9 +369,6 @@ impl WebexWebSocketRouter {
                 }
                 Ok(Message::Pong(data)) => {
                     eprintln!("🔍 DEBUG: Received pong ({} bytes)", data.len());
-                }
-                Ok(Message::Binary(data)) => {
-                    eprintln!("🔍 DEBUG: Received binary message ({} bytes)", data.len());
                 }
                 Ok(msg) => {
                     eprintln!("🔍 DEBUG: Received other message type: {:?}", msg);

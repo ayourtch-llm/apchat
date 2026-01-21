@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::collections::HashSet;
+use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use apchat_mspc::{MspcChannel, MspcMessage};
 use crate::client::WebexClient;
@@ -15,6 +16,7 @@ pub struct WebexInputRouter {
     bot_email: String,
     mspc_channel: Arc<MspcChannel>,
     initial_seen_ids: HashSet<String>,
+    last_user_message_id: Arc<Mutex<Option<String>>>,
 }
 
 impl WebexInputRouter {
@@ -77,7 +79,13 @@ impl WebexInputRouter {
             bot_email,
             mspc_channel,
             initial_seen_ids: seen_message_ids,
+            last_user_message_id: Arc::new(Mutex::new(None)),
         })
+    }
+
+    /// Get a shared reference to the last user message ID (for threading replies)
+    pub fn last_user_message_id(&self) -> Arc<Mutex<Option<String>>> {
+        Arc::clone(&self.last_user_message_id)
     }
 
     /// Run the input router - polls Webex for new messages
@@ -131,6 +139,12 @@ impl WebexInputRouter {
                                     "📨 Received Webex message from {}: {}",
                                     msg.person_email, text
                                 );
+
+                                // Track this message ID for threading replies
+                                {
+                                    let mut last_id = self.last_user_message_id.lock().await;
+                                    *last_id = Some(msg.id.clone());
+                                }
 
                                 // Convert to MSPC message
                                 let message = MspcMessage::UserInput(

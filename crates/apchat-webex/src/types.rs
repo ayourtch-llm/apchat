@@ -38,6 +38,8 @@ pub struct SendMessageRequest {
     pub room_id: Option<String>,
     #[serde(rename = "toPersonEmail", skip_serializing_if = "Option::is_none")]
     pub to_person_email: Option<String>,
+    #[serde(rename = "parentId", skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
     pub text: String,
 }
 
@@ -97,6 +99,17 @@ pub struct MercuryEventData {
 
 #[derive(Debug, Deserialize)]
 pub struct Activity {
+    pub id: String,
     pub verb: String,
+    pub actor: Option<Actor>,
     pub object: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Actor {
+    pub id: String,
+    #[serde(rename = "objectType")]
+    pub object_type: String,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
 }

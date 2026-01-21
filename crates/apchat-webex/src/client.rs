@@ -140,14 +140,24 @@ impl WebexClient {
         Ok(room)
     }
 
-    /// Send a message to a room
+    /// Send a message to a room, optionally as a threaded reply
     pub async fn send_message(&self, room_id: &str, text: &str) -> Result<Message> {
+        self.send_message_with_parent(room_id, text, None).await
+    }
+
+    /// Send a message to a room with optional parent ID for threading
+    pub async fn send_message_with_parent(&self, room_id: &str, text: &str, parent_id: Option<String>) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
-        eprintln!("🔍 DEBUG: Sending message to room {}: {}", room_id, text.chars().take(50).collect::<String>());
+        eprintln!("🔍 DEBUG: Sending message to room {}{}: {}",
+            room_id,
+            parent_id.as_ref().map(|p| format!(" (reply to {})", p.chars().take(8).collect::<String>())).unwrap_or_default(),
+            text.chars().take(50).collect::<String>()
+        );
 
         let request = SendMessageRequest {
             room_id: Some(room_id.to_string()),
             to_person_email: None,
+            parent_id,
             text: text.to_string(),
         };
 
@@ -178,6 +188,7 @@ impl WebexClient {
         let request = SendMessageRequest {
             room_id: None,
             to_person_email: Some(email.to_string()),
+            parent_id: None,
             text: text.to_string(),
         };
 
@@ -232,6 +243,7 @@ impl WebexClient {
 
         eprintln!("🔍 DEBUG: Received {} messages from room {}", messages_response.items.len(), room_id);
 
+        // API returns newest first by default
         Ok(messages_response.items)
     }
 
