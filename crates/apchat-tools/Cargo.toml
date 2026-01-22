@@ -15,6 +15,7 @@ ignore = "0.4"
 apchat-logging = { path = "../apchat-logging" }
 apchat-models = { path = "../apchat-models" }
 apchat-llm-api = { path = "../apchat-llm-api" }
+apchat-mspc = { path = "../apchat-mspc" }
 apchat-policy = { path = "../apchat-policy" }
 apchat-skills = { path = "../apchat-skills" }
 apchat-terminal = { path = "../apchat-terminal" }
