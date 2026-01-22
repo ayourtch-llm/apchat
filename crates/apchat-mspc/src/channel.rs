@@ -77,6 +77,16 @@ impl MspcChannel {
         let mut receiver = self.receiver.lock().await;
         receiver.recv().await
     }
+
+    /// Get a clone of the sender for this channel
+    pub fn sender(&self) -> tokio_mpsc::Sender<MspcMessage> {
+        self.sender.clone()
+    }
+
+    /// Get a clone of the receiver for this channel
+    pub fn receiver(&self) -> Arc<TokioMutex<tokio_mpsc::Receiver<MspcMessage>>> {
+        Arc::clone(&self.receiver)
+    }
     
     /// Add a user message to history
     pub async fn add_user_message(&self, content: String) {

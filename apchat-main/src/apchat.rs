@@ -500,6 +500,12 @@ impl APChat {
                     context = context.with_content_limiter(Arc::clone(limiter));
                 }
 
+                // Add MSPC sender and receiver if available
+                if let Some(ref mspc_channel) = self.mspc_channel {
+                    context = context.with_mspc_sender(mspc_channel.sender());
+                    context = context.with_mspc_receiver(mspc_channel.receiver());
+                }
+
                 let context = context;
 
                 let result = self.tool_registry.execute_tool(name, params, &context).await;

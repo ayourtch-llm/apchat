@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc as tokio_mpsc};
 use apchat_policy::PolicyManager;
 use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
@@ -9,6 +9,7 @@ use apchat_todo::TodoManager;
 use apchat_vty::print_heart_red;
 use crate::content_limiter::ContentLimiter;
 use apchat_models::types::ModelColor;
+use apchat_mspc::MspcMessage;
 
 /// Tool execution context
 ///
@@ -23,6 +24,8 @@ use apchat_models::types::ModelColor;
 /// - Non-interactive flag for web/API mode
 /// - Current model string for subagent spawning (formatted as "modname@backend(url)")
 /// - LLM clients for making API calls
+/// - MSPC channel sender for broadcasting progress updates
+/// - MSPC channel receiver for listening to interrupt signals
 #[derive(Clone)]
 pub struct ToolContext {
     pub work_dir: PathBuf,
@@ -36,6 +39,8 @@ pub struct ToolContext {
     pub current_model_string: Option<String>,
     pub content_limiter: Option<Arc<ContentLimiter>>, // NEW
     pub llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>>, // NEW
+    pub mspc_sender: Option<tokio_mpsc::Sender<MspcMessage>>, // NEW - MSPC channel sender
+    pub mspc_receiver: Option<Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>>, // NEW - MSPC channel receiver
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -52,6 +57,8 @@ impl std::fmt::Debug for ToolContext {
             .field("current_model_string", &self.current_model_string)
             .field("content_limiter", &self.content_limiter)
             .field("llm_clients_count", &self.llm_clients.len())
+            .field("mspc_sender", &self.mspc_sender.is_some())
+            .field("mspc_receiver", &self.mspc_receiver.is_some())
             .finish()
     }
 }
@@ -70,6 +77,8 @@ impl ToolContext {
             current_model_string: None,
             content_limiter: None,
             llm_clients: HashMap::new(),
+            mspc_sender: None,
+            mspc_receiver: None,
         }
     }
 
@@ -110,6 +119,16 @@ impl ToolContext {
 
     pub fn with_llm_clients(mut self, llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>>) -> Self {
         self.llm_clients = llm_clients;
+        self
+    }
+
+    pub fn with_mspc_sender(mut self, sender: tokio_mpsc::Sender<MspcMessage>) -> Self {
+        self.mspc_sender = Some(sender);
+        self
+    }
+
+    pub fn with_mspc_receiver(mut self, receiver: Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>) -> Self {
+        self.mspc_receiver = Some(receiver);
         self
     }
 
