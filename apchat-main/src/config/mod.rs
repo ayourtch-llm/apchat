@@ -178,6 +178,9 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(DeleteMemoryTool, vec!["memory".to_string()]);
     registry.register_with_categories(ListMemoriesTool, vec!["memory".to_string()]);
 
+    // Register wait/sleep tools
+    registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
+
     registry
 }
 
