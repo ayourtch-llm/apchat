@@ -73,7 +73,7 @@ impl ReadlineInstance {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt)? {
+        match rl.readline(prompt, None)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)
@@ -83,6 +83,11 @@ impl ReadlineInstance {
             }
             ReadlineResult::Eof => Ok(None),
             ReadlineResult::Interrupt => Ok(None),
+            ReadlineResult::Signal(_msg) => {
+                // For now, ignore signals in the basic readline interface
+                // In Task 12, the REPL will handle signals properly
+                Ok(None)
+            }
         }
     }
 

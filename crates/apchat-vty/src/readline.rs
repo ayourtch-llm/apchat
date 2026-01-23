@@ -11,6 +11,8 @@ use crossterm::QueueableCommand;
 use std::io::{self, Write};
 use std::time::Duration;
 
+use apchat_mspc::MspcMessage;
+
 /// Result type for the readline operation.
 ///
 /// # Variants
@@ -18,6 +20,7 @@ use std::time::Duration;
 /// * `Input(String)` - User entered a line of text
 /// * `Eof` - End of file (Ctrl-D)
 /// * `Interrupt` - Interrupted (Ctrl-C)
+/// * `Signal(MspcMessage)` - MPSC signal received
 pub enum ReadlineResult {
     /// User entered a line of text
     Input(String),
@@ -25,6 +28,8 @@ pub enum ReadlineResult {
     Eof,
     /// Interrupted (Ctrl-C)
     Interrupt,
+    /// MPSC signal received
+    Signal(MspcMessage),
 }
 
 /// Internal result type for key event handling.
@@ -1037,21 +1042,31 @@ impl Readline {
     ///
     /// let mut readline = Readline::new().unwrap();
     ///
-    /// match readline.readline("> ") {
+    /// match readline.readline("> ", None) {
     ///     Ok(ReadlineResult::Input(line)) => println!("You entered: {}", line),
     ///     Ok(ReadlineResult::Eof) => println!("End of file"),
     ///     Ok(ReadlineResult::Interrupt) => println!("Interrupted"),
+    ///     Ok(ReadlineResult::Signal(msg)) => println!("Signal received: {:?}", msg),
     ///     Err(e) => eprintln!("Error: {}", e),
     /// }
     /// ```
-    pub fn readline(&mut self, prompt: &str) -> io::Result<ReadlineResult> {
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt string to display
+    /// * `mspc_receiver` - Optional mutable reference to tokio MPSC receiver
+    pub fn readline(
+        &mut self,
+        prompt: &str,
+        mut mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<MspcMessage>>,
+    ) -> io::Result<ReadlineResult> {
         // Display the initial prompt
         self.redraw(prompt);
 
         // Main event loop
         loop {
             // Poll for events with 100ms timeout
-            // This allows for future MPSC signal checking
+            // This allows for MPSC signal checking
             if poll(Duration::from_millis(100))? {
                 // Read the event
                 let event = read()?;
@@ -1077,8 +1092,20 @@ impl Readline {
                 }
             }
 
-            // Timeout occurred - can check MPSC signals here in future tasks
-            // For now, just continue the loop
+            // Timeout occurred - check MPSC signals if receiver provided
+            if let Some(ref mut receiver) = mspc_receiver {
+                // Try to receive a message without blocking
+                if let Ok(msg) = receiver.try_recv() {
+                    // Clear the line before returning
+                    let mut stdout = std::io::stdout();
+                    stdout.queue(MoveToColumn(0)).ok();
+                    stdout
+                        .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
+                        .ok();
+                    stdout.flush().ok();
+                    return Ok(ReadlineResult::Signal(msg));
+                }
+            }
         }
     }
 }
