@@ -1,5 +1,5 @@
 // Test to verify the corrupted history recovery works
-use apchat::chat::readline_history::load_history;
+use apchat_vty::history::load_history;
 
 fn main() {
     println!("Testing readline history loading with corrupted data...");

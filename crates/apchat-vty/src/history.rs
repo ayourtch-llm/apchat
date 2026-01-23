@@ -1,12 +1,11 @@
 // Readline history module - manages command history persistence
 use anyhow::Result;
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
-use std::path::Path;
-
-use apchat_logging::get_logs_dir;
+use std::path::{Path, PathBuf};
 
 /// A single readline entry representing a command from the REPL
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +75,36 @@ impl ReadlineHistory {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+}
+
+/// Get or create the base okaychat directory (~/.okaychat)
+fn get_okaychat_dir() -> Result<PathBuf> {
+    let home_dir = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .context("Failed to get home directory")?;
+
+    let okaychat_dir = PathBuf::from(home_dir).join(".okaychat");
+
+    // Create directory if it doesn't exist
+    if !okaychat_dir.exists() {
+        std::fs::create_dir_all(&okaychat_dir)
+            .context("Failed to create okaychat directory")?;
+    }
+
+    Ok(okaychat_dir)
+}
+
+/// Get or create the logs directory (~/.okaychat/logs)
+fn get_logs_dir() -> Result<PathBuf> {
+    let logs_dir = get_okaychat_dir()?.join("logs");
+    
+    // Create directory if it doesn't exist
+    if !logs_dir.exists() {
+        std::fs::create_dir_all(&logs_dir)
+            .context("Failed to create logs directory")?;
+    }
+
+    Ok(logs_dir)
 }
 
 /// Get the default path for the readline history file
@@ -333,7 +362,7 @@ pub fn save_to_file(entry: &ReadlineEntry) -> Result<String> {
 }
 
 /// Load history and add to crossterm readline editor
-pub fn load_and_add_to_editor(rl: &mut apchat_vty::Readline) -> Result<()> {
+pub fn load_and_add_to_editor(rl: &mut crate::readline::Readline) -> Result<()> {
     let history = load_history(None)?;
 
     for entry in history.get_entries() {

@@ -63,7 +63,7 @@ pub struct APChat {
     // Process ID
     pub(crate) process_id: u32,
     // Readline history for REPL
-    pub(crate) readline_history: Option<crate::chat::readline_history::ReadlineHistory>,
+    pub(crate) readline_history: Option<apchat_vty::history::ReadlineHistory>,
     // Content limiter
     pub(crate) content_limiter: Option<Arc<apchat_toolcore::content_limiter::ContentLimiter>>,
     // MSPC channel for multi-stream input processing

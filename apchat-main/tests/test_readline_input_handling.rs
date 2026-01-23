@@ -1,23 +1,25 @@
 // Tests for proper input handling
 // These tests verify that the readline fixes handle input correctly
 
+use apchat_vty::ReadlineInstance;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
+use std::ops::DerefMut;
 
 #[test]
 fn test_empty_input_handling() {
     println!("\n=== Testing Empty Input Handling ===\n");
     
     // Add an empty string - should not cause issues
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    
-    assert!(rl.add_history_entry("").is_ok());
+
+    rl.add_history_entry("");
     println!("✓ Empty string added without panic");
-    
+
     // Verify history still works
-    assert!(rl.add_history_entry("normal entry").is_ok());
+    rl.add_history_entry("normal entry");
     println!("✓ Normal entries still work after empty string");
 }
 
@@ -26,17 +28,17 @@ fn test_whitespace_input_handling() {
     println!("\n=== Testing Whitespace Input Handling ===\n");
     
     // Add various whitespace strings
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    
-    assert!(rl.add_history_entry("   ").is_ok());
-    assert!(rl.add_history_entry("\t").is_ok());
-    assert!(rl.add_history_entry("\n").is_ok());
-    assert!(rl.add_history_entry(" \t\n ").is_ok());
+
+    rl.add_history_entry("   ");
+    rl.add_history_entry("\t");
+    rl.add_history_entry("\n");
+    rl.add_history_entry(" \t\n ");
     println!("✓ Whitespace strings handled without issues");
-    
+
     // Verify history still works
-    assert_eq!(rl.history().len(), 4);
+    assert_eq!(rl.get_history_entries().len(), 4);
     println!("✓ All whitespace entries added to history");
 }
 
@@ -44,24 +46,24 @@ fn test_whitespace_input_handling() {
 fn test_special_characters_handling() {
     println!("\n=== Testing Special Characters Handling ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Add entries with special characters
     let special_entries = vec![
         "test with !@#$%^&*()",
-        "test with \\/""'|:;,.<>?",
+        "test with \\ /\"'|:;,.<>?",
         "test with \x00\x01\x02",
         "test with Unicode: 你好世界",
         "test with emoji: 😀🎉",
     ];
     
     for entry in &special_entries {
-        assert!(rl.add_history_entry(entry).is_ok(), "Failed to add: {}", entry);
+        rl.add_history_entry(entry);
     }
-    
+
     println!("✓ All special character entries handled");
-    assert_eq!(rl.history().len(), 5);
+    assert_eq!(rl.get_history_entries().len(), 5);
     println!("✓ All entries added to history");
 }
 
@@ -69,21 +71,21 @@ fn test_special_characters_handling() {
 fn test_long_input_handling() {
     println!("\n=== Testing Long Input Handling ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Add a very long string
     let long_string = "a".repeat(10000);
-    assert!(rl.add_history_entry(&long_string).is_ok());
+    rl.add_history_entry(&long_string);
     println!("✓ Long string (10,000 chars) handled");
-    
+
     // Add another long string
     let long_string2 = "b".repeat(5000);
-    assert!(rl.add_history_entry(&long_string2).is_ok());
+    rl.add_history_entry(&long_string2);
     println!("✓ Another long string (5,000 chars) handled");
     
     // Verify both are in history
-    assert_eq!(rl.history().len(), 2);
+    assert_eq!(rl.get_history_entries().len(), 2);
     println!("✓ Long entries added to history");
 }
 
@@ -100,22 +102,22 @@ fn test_concurrent_input_handling() {
             barrier.wait();
             
             // Each thread adds various types of input
-            let guard = crate::chat::ReadlineInstance::get().unwrap();
+            let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
             let rl = guard.deref_mut();
             
             // Normal input
             let entry1 = format!("thread {} normal", i);
-            assert!(rl.add_history_entry(&entry1).is_ok());
-            
+            rl.add_history_entry(&entry1);
+
             // Empty input
-            assert!(rl.add_history_entry("").is_ok());
-            
+            rl.add_history_entry("");
+
             // Whitespace input
-            assert!(rl.add_history_entry("   ").is_ok());
-            
+            rl.add_history_entry("   ");
+
             // Special characters
             let entry4 = format!("thread {} special: !@#$", i);
-            assert!(rl.add_history_entry(&entry4).is_ok());
+            rl.add_history_entry(&entry4);
             
             println!("Thread {}: Completed", i);
         })
@@ -127,9 +129,9 @@ fn test_concurrent_input_handling() {
     }
     
     // Verify final state
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history_len = rl.history().len();
+    let history_len = rl.get_history_entries().len();
     
     println!("\n✓ All {} threads completed", num_threads);
     println!("✓ History contains {} entries", history_len);
@@ -142,26 +144,26 @@ fn test_concurrent_input_handling() {
 fn test_input_validation() {
     println!("\n=== Testing Input Validation ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Test various inputs that should be accepted
-    let valid_inputs = vec![
-        "",
-        "   ",
-        "a",
+    let valid_inputs: Vec<String> = vec![
+        "".to_string(),
+        "   ".to_string(),
+        "a".to_string(),
         "a".repeat(1000),
-        "Unicode: 你好",
-        "Special: !@#$%",
-        "Mixed: abc123 !@# 你好",
+        "Unicode: 你好".to_string(),
+        "Special: !@#$%".to_string(),
+        "Mixed: abc123 !@# 你好".to_string(),
     ];
-    
+
     for input in &valid_inputs {
-        assert!(rl.add_history_entry(input).is_ok(), "Failed to add valid input: {:?}", input);
+        rl.add_history_entry(input);
     }
-    
+
     println!("✓ All valid inputs accepted");
-    assert_eq!(rl.history().len(), valid_inputs.len());
+    assert_eq!(rl.get_history_entries().len(), valid_inputs.len());
     println!("✓ All valid inputs added to history");
 }
 
@@ -169,23 +171,23 @@ fn test_input_validation() {
 fn test_history_boundary_conditions() {
     println!("\n=== Testing History Boundary Conditions ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Test with zero-length string
-    assert!(rl.add_history_entry("").is_ok());
+    rl.add_history_entry("");
     println!("✓ Zero-length string handled");
-    
+
     // Test with single character
-    assert!(rl.add_history_entry("a").is_ok());
+    rl.add_history_entry("a");
     println!("✓ Single character handled");
-    
+
     // Test with maximum reasonable length
-    assert!(rl.add_history_entry(&"x".repeat(20000)).is_ok());
+    rl.add_history_entry(&"x".repeat(20000));
     println!("✓ Maximum length string handled");
     
     // Verify all are in history
-    assert_eq!(rl.history().len(), 3);
+    assert_eq!(rl.get_history_entries().len(), 3);
     println!("✓ All boundary condition inputs in history");
 }
 
@@ -212,9 +214,9 @@ fn test_input_thread_safety() {
             ];
             
             for input in inputs {
-                let guard = crate::chat::ReadlineInstance::get().unwrap();
+                let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
                 let rl = guard.deref_mut();
-                assert!(rl.add_history_entry(&input).is_ok());
+                rl.add_history_entry(&input);
             }
             
             // Increment counter
@@ -230,9 +232,9 @@ fn test_input_thread_safety() {
     let final_count = counter.load(Ordering::SeqCst);
     
     // Verify final state
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history_len = rl.history().len();
+    let history_len = rl.get_history_entries().len();
     
     println!("\n✓ All {} threads completed", final_count);
     println!("✓ History contains {} entries", history_len);
@@ -247,27 +249,27 @@ fn test_input_after_cleanup() {
     println!("\n=== Testing Input After Cleanup ===\n");
     
     // Add some initial entries
-    let guard1 = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
     let rl1 = guard1.deref_mut();
-    rl1.add_history_entry("initial entry").unwrap();
+    rl1.add_history_entry("initial entry");
     println!("✓ Initial entry added");
-    
+
     // Clean up
-    crate::chat::ReadlineInstance::cleanup().unwrap();
+    apchat_vty::ReadlineInstance::cleanup().unwrap();
     println!("✓ Cleanup performed");
-    
+
     // Verify history is cleared
-    let guard2 = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard2 = apchat_vty::ReadlineInstance::get().unwrap();
     let rl2 = guard2.deref_mut();
-    assert_eq!(rl2.history().len(), 0);
+    assert_eq!(rl2.get_history_entries().len(), 0);
     println!("✓ History cleared after cleanup");
-    
+
     // Add new entries after cleanup
-    assert!(rl2.add_history_entry("after cleanup entry").is_ok());
+    rl2.add_history_entry("after cleanup entry");
     println!("✓ New entries can be added after cleanup");
-    
+
     // Verify the new entry is there
-    assert_eq!(rl2.history().len(), 1);
+    assert_eq!(rl2.get_history_entries().len(), 1);
     println!("✓ New entry is in history");
 }
 
@@ -275,19 +277,19 @@ fn test_input_after_cleanup() {
 fn test_duplicate_input_handling() {
     println!("\n=== Testing Duplicate Input Handling ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Add the same entry multiple times
     for _ in 0..5 {
-        assert!(rl.add_history_entry("duplicate entry").is_ok());
+        rl.add_history_entry("duplicate entry");
     }
     
     println!("✓ Duplicate entries handled without issues");
     
     // Verify all are in history (rustyline doesn't automatically deduplicate)
-    let history = rl.history();
-    let duplicate_count = history.iter().filter(|&&entry| entry == "duplicate entry").count();
+    let history = rl.get_history_entries();
+    let duplicate_count = history.iter().filter(|entry| entry.as_str() == "duplicate entry").count();
     assert_eq!(duplicate_count, 5);
     println!("✓ All {} duplicates present in history", duplicate_count);
 }
@@ -296,25 +298,25 @@ fn test_duplicate_input_handling() {
 fn test_mixed_input_types() {
     println!("\n=== Testing Mixed Input Types ===\n");
     
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     
     // Add various types of input
-    let inputs = vec![
-        "", // empty
-        "   ", // whitespace
-        "normal", // normal
-        "!@#$%", // special chars
-        "你好", // unicode
-        "😀", // emoji
+    let inputs: Vec<String> = vec![
+        "".to_string(), // empty
+        "   ".to_string(), // whitespace
+        "normal".to_string(), // normal
+        "!@#$%".to_string(), // special chars
+        "你好".to_string(), // unicode
+        "😀".to_string(), // emoji
         "a".repeat(10000), // long
     ];
-    
+
     for input in &inputs {
-        assert!(rl.add_history_entry(input).is_ok());
+        rl.add_history_entry(input);
     }
     
     println!("✓ All mixed input types handled");
-    assert_eq!(rl.history().len(), inputs.len());
+    assert_eq!(rl.get_history_entries().len(), inputs.len());
     println!("✓ All {} entries in history", inputs.len());
 }

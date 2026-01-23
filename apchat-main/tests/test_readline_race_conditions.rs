@@ -1,9 +1,11 @@
 // Integration tests specifically for race condition fixes
 // These tests verify that the readline fixes prevent race conditions
 
+use apchat_vty::ReadlineInstance;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::ops::DerefMut;
 
 #[test]
 fn test_no_race_condition_in_history_addition() {
@@ -21,7 +23,7 @@ fn test_no_race_condition_in_history_addition() {
             // All threads try to add history simultaneously
             for j in 0..10 {
                 let entry = format!("thread_{}_entry_{}", i, j);
-                crate::chat::ReadlineInstance::add_history(&entry).unwrap();
+                apchat_vty::ReadlineInstance::add_history(&entry).unwrap();
             }
             
             println!("Thread {}: Completed", i);
@@ -34,9 +36,9 @@ fn test_no_race_condition_in_history_addition() {
     }
     
     // Verify final state
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history_len = rl.history().len();
+    let history_len = rl.get_history_entries().len();
     
     println!("\n✓ All {} threads completed successfully", num_threads);
     println!("✓ History contains {} entries", history_len);
@@ -63,7 +65,7 @@ fn test_no_race_condition_in_concurrent_readline_calls() {
             barrier.wait();
             
             // Each thread gets the readline instance and performs operations
-            let guard = crate::chat::ReadlineInstance::get().unwrap();
+            let guard = apchat_vty::ReadlineInstance::get().unwrap();
             let rl = guard.deref_mut();
             
             // Add history entry
@@ -71,7 +73,7 @@ fn test_no_race_condition_in_concurrent_readline_calls() {
             rl.add_history_entry(&entry).unwrap();
             
             // Verify we can still access history
-            let history_len = rl.history().len();
+            let history_len = rl.get_history_entries().len();
             
             // Increment counter to track successful operations
             let mut count = counter.lock().unwrap();
@@ -105,14 +107,14 @@ fn test_lock_acquisition_order() {
     let handles: Vec<_> = (0..num_threads).map(|i| {
         thread::spawn(move || {
             // Each thread acquires the lock multiple times
-            for _ in 0..3 {
-                let guard1 = crate::chat::ReadlineInstance::get().unwrap();
+            for j in 0..3 {
+                let guard1 = apchat_vty::ReadlineInstance::get().unwrap();
                 let rl = guard1.deref_mut();
-                
+
                 // Perform some operation
-                let entry = format!("order_test_{}_iteration_{}", i, _);
+                let entry = format!("order_test_{}_iteration_{}", i, j);
                 rl.add_history_entry(&entry).unwrap();
-                
+
                 // Drop the guard to release the lock
                 drop(guard1);
                 
@@ -130,9 +132,9 @@ fn test_lock_acquisition_order() {
     }
     
     // Verify final state
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history_len = rl.history().len();
+    let history_len = rl.get_history_entries().len();
     
     println!("\n✓ All {} threads completed successfully", num_threads);
     println!("✓ History contains {} entries", history_len);
@@ -160,10 +162,10 @@ fn test_high_concurrency_stress_test() {
                 // Alternate between adding history and saving
                 if j % 2 == 0 {
                     let entry = format!("stress_{}_{}", i, j);
-                    crate::chat::ReadlineInstance::add_history(&entry).unwrap();
+                    apchat_vty::ReadlineInstance::add_history(&entry).unwrap();
                 } else {
                     // Save history - this should be thread-safe
-                    crate::chat::ReadlineInstance::save_history().unwrap();
+                    apchat_vty::ReadlineInstance::save_history().unwrap();
                 }
             }
         })
@@ -177,9 +179,9 @@ fn test_high_concurrency_stress_test() {
     let duration = start_time.elapsed();
     
     // Verify final state
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history_len = rl.history().len();
+    let history_len = rl.get_history_entries().len();
     
     println!("\n✓ All {} threads completed successfully", num_threads);
     println!("✓ Completed in {:?}", duration);
@@ -204,7 +206,7 @@ fn test_history_consistency_across_threads() {
             // Add 5 entries with this prefix
             for j in 0..5 {
                 let entry = format!("{}{}", prefix, j);
-                crate::chat::ReadlineInstance::add_history(&entry).unwrap();
+                apchat_vty::ReadlineInstance::add_history(&entry).unwrap();
             }
         })
     }).collect();
@@ -215,9 +217,9 @@ fn test_history_consistency_across_threads() {
     }
     
     // Verify the history
-    let guard = crate::chat::ReadlineInstance::get().unwrap();
+    let guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
-    let history = rl.history();
+    let history = rl.get_history_entries();
     
     println!("\n✓ All threads completed");
     println!("✓ History length: {}", history.len());
@@ -254,7 +256,7 @@ fn test_lock_fairness() {
         let counter = Arc::clone(&counter);
         thread::spawn(move || {
             for _ in 0..operations_per_thread {
-                let guard = crate::chat::ReadlineInstance::get().unwrap();
+                let guard = apchat_vty::ReadlineInstance::get().unwrap();
                 let rl = guard.deref_mut();
                 
                 // Perform operation

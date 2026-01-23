@@ -195,10 +195,10 @@ pub async fn run_repl_mode(
 
     // Load readline history (in a scope to ensure guard is dropped)
     {
-        let mut rl = crate::chat::ReadlineInstance::get()?;
-        match crate::chat::readline_history::load_and_add_to_editor(&mut rl) {
+        let mut rl = apchat_vty::ReadlineInstance::get()?;
+        match apchat_vty::history::load_and_add_to_editor(&mut rl) {
             Ok(_) => {
-                let history_len = crate::chat::readline_history::load_history(None)?.len();
+                let history_len = apchat_vty::history::load_history(None)?.len();
                 print_heart_red(&format!("{} Loaded {} readline history entries",
                          "📖".bright_green(),
                          history_len), true);
@@ -307,13 +307,13 @@ pub async fn run_repl_mode(
             // TokioMutex which can't be easily used in sync context.
             // External signal handling will be addressed in a future update.
             let line_result = tokio::task::spawn_blocking(move || {
-                crate::chat::ReadlineInstance::readline(&prompt_string)
+                apchat_vty::ReadlineInstance::readline(&prompt_string)
             }).await;
 
             match line_result {
                 Ok(Ok(Some(line))) => {
                     // Add to readline history immediately so up-arrow works in next readline() call
-                    if let Err(e) = crate::chat::ReadlineInstance::add_history(&line) {
+                    if let Err(e) = apchat_vty::ReadlineInstance::add_history(&line) {
                         print_heart_yellow(&format!("{} Failed to add to history: {}", "⚠️".bright_yellow(), e), true);
                     }
 
@@ -371,7 +371,7 @@ pub async fn run_repl_mode(
                 print_heart_red(&format!("\n{}", "Goodbye!".bright_cyan()), true);
 
                 // Save readline history before exiting
-                if let Err(save_err) = crate::chat::ReadlineInstance::save_history() {
+                if let Err(save_err) = apchat_vty::ReadlineInstance::save_history() {
                     if chat.debug_level > 0 {
                         print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err), true);
                     }
@@ -407,7 +407,7 @@ pub async fn run_repl_mode(
             print_heart_red(&format!("{}", "Goodbye!".bright_cyan()), true);
 
             // Save readline history before exiting
-            if let Err(e) = crate::chat::ReadlineInstance::save_history() {
+            if let Err(e) = apchat_vty::ReadlineInstance::save_history() {
                 if chat.debug_level > 0 {
                     print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);
                 }
@@ -802,8 +802,8 @@ pub async fn run_repl_mode(
         }
 
         // Save to persistent history file (in-memory history already added in background task)
-        match crate::chat::readline_history::save_to_file(&
-            crate::chat::readline_history::ReadlineEntry::with_session(
+        match apchat_vty::history::save_to_file(&
+            apchat_vty::history::ReadlineEntry::with_session(
                 line,
                 format!("session_{}", chat.process_id)
             )
@@ -1046,7 +1046,7 @@ pub async fn run_repl_mode(
     }
 
     // Cleanup readline instance (save history and release resources)
-    if let Err(e) = crate::chat::ReadlineInstance::cleanup() {
+    if let Err(e) = apchat_vty::ReadlineInstance::cleanup() {
         if chat.debug_level > 0 {
             print_heart_yellow(&format!("{} Failed to cleanup readline instance: {}", "⚠️".yellow(), e), true);
         }

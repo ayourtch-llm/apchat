@@ -4,8 +4,12 @@
 //! to every line of output for consistent formatting across APChat.
 
 pub mod readline;
+pub mod history;
+pub mod instance;
 
 pub use readline::{Readline, ReadlineResult};
+pub use history::{ReadlineEntry, ReadlineHistory, load_history, save_history, load_and_add_to_editor, save_to_file};
+pub use instance::ReadlineInstance;
 
 use std::io::{self, Write};
 

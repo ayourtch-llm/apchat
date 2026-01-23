@@ -6,11 +6,12 @@
 // All access should be serialized through the main REPL loop.
 
 use anyhow::Result;
-use apchat_vty::{print_heart_red, print_heart_yellow, Readline, ReadlineResult};
+use crate::{print_heart_red, print_heart_yellow};
+use crate::readline::{Readline, ReadlineResult};
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};
 
-use crate::chat::readline_history;
+use super::history;
 
 /// Global readline instance wrapped in synchronization primitives
 static READLINE_INSTANCE: Lazy<Mutex<Readline>> = Lazy::new(|| {

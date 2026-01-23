@@ -1,5 +1,5 @@
 // Test startup to verify readline history loads without errors
-use apchat::chat::readline_history::load_and_add_to_editor;
+use apchat_vty::history::load_and_add_to_editor;
 use apchat_vty::Readline;
 
 fn main() {

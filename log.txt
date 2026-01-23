@@ -1,0 +1,46 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   /Users/ayourtch/llm-rust/a/apchat/crates/apchat-wasm/Cargo.toml
+workspace: /Users/ayourtch/llm-rust/a/apchat/Cargo.toml
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `target/debug/apchat --llama-cpp-url 'http://100.72.206.67:8080' --stream -i`
+💛 [33m🔍[0m DEBUG: Final model overrides before client config:
+💛   blu_model_override_final: "some-model"
+💛   blu_url_override_final: "http://100.72.206.67:8080"
+💛   blu_api_key_override_final: None
+💛   grn_model_override_final: "some-model"
+💛   grn_url_override_final: "http://100.72.206.67:8080"
+💛   grn_api_key_override_final: None
+💛   red_model_override_final: "some-model"
+💛   red_url_override_final: "http://100.72.206.67:8080"
+💛   red_api_key_override_final: None
+💛   CLI global model: None
+💛 Loaded 20 embedded skills
+💛   ↳ Overriding embedded skill with filesystem version: using-git-worktrees
+💛   ↳ Overriding embedded skill with filesystem version: test-driven-development
+💛   ↳ Overriding embedded skill with filesystem version: testing-anti-patterns
+💛   ↳ Overriding embedded skill with filesystem version: systematic-debugging
+💛   ↳ Overriding embedded skill with filesystem version: sharing-skills
+💛   ↳ Overriding embedded skill with filesystem version: using-superpowers
+💛   ↳ Overriding embedded skill with filesystem version: dispatching-parallel-agents
+💛   ↳ Overriding embedded skill with filesystem version: executing-plans
+💛   ↳ Overriding embedded skill with filesystem version: finishing-a-development-branch
+💛   ↳ Overriding embedded skill with filesystem version: root-cause-tracing
+💛   ↳ Overriding embedded skill with filesystem version: condition-based-waiting
+💛   ↳ Overriding embedded skill with filesystem version: brainstorming
+💛   ↳ Overriding embedded skill with filesystem version: testing-skills-with-subagents
+💛   ↳ Overriding embedded skill with filesystem version: writing-plans
+💛   ↳ Overriding embedded skill with filesystem version: requesting-code-review
+💛   ↳ Overriding embedded skill with filesystem version: receiving-code-review
+💛   ↳ Overriding embedded skill with filesystem version: writing-skills
+💛   ↳ Overriding embedded skill with filesystem version: verification-before-completion
+💛   ↳ Overriding embedded skill with filesystem version: subagent-driven-development
+💛   ↳ Overriding embedded skill with filesystem version: defense-in-depth
+💛 Total skills available: 20
+💛 Loading FastEmbed model: AllMiniLML6V2
+💛 Using cache directory: "/Users/ayourtch/.okaychat/fastembed"
+💛 FastEmbed model loaded successfully (dimension: 384)
+💛 Initializing skill embeddings...
+💛 Successfully embedded 20 skills
+Terminal backend: pty
+⚠️  Recovered 2 entries from corrupted line 31 (multiple JSON objects on one line)
+⚠️  Recovered 2 entries from corrupted line 31 (multiple JSON objects on one line)
