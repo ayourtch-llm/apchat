@@ -4,10 +4,44 @@
 //! using "semi-raw" mode: raw input with normal output (like rustyline).
 
 use crossterm::cursor::MoveToColumn;
+use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::Clear;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled};
 use crossterm::QueueableCommand;
 use std::io::{self, Write};
+use std::time::Duration;
+
+/// Result type for the readline operation.
+///
+/// # Variants
+///
+/// * `Input(String)` - User entered a line of text
+/// * `Eof` - End of file (Ctrl-D)
+/// * `Interrupt` - Interrupted (Ctrl-C)
+pub enum ReadlineResult {
+    /// User entered a line of text
+    Input(String),
+    /// End of file (Ctrl-D)
+    Eof,
+    /// Interrupted (Ctrl-C)
+    Interrupt,
+}
+
+/// Internal result type for key event handling.
+///
+/// # Variants
+///
+/// * `Continue` - Continue reading input
+/// * `Redraw` - Redraw the screen and continue
+/// * `Return(ReadlineResult)` - Return the specified result
+enum KeyResult {
+    /// Continue reading input
+    Continue,
+    /// Redraw the screen and continue
+    Redraw,
+    /// Return the specified result
+    Return(ReadlineResult),
+}
 
 /// Readline struct that manages terminal mode, input state, and command history.
 ///
@@ -670,6 +704,200 @@ impl Readline {
 
         // Flush all queued commands
         stdout.flush().ok();
+    }
+
+    /// Handles a key event from the terminal.
+    ///
+    /// This is the main dispatch function for key events. It maps
+    /// keyboard input to the appropriate handler function.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key event to handle
+    ///
+    /// # Returns
+    ///
+    /// * `KeyResult` - The result of handling the key event
+    fn handle_key_event(&mut self, key: KeyEvent) -> KeyResult {
+        match key.code {
+            // Enter: Submit the current line
+            KeyCode::Enter => {
+                let line = self.line.clone();
+                // Add to history if not empty
+                if !line.trim().is_empty() {
+                    self.add_history_entry(&line);
+                }
+                // Reset the line buffer
+                self.line.clear();
+                self.cursor = 0;
+                self.history_index = None;
+                self.saved_line.clear();
+                KeyResult::Return(ReadlineResult::Input(line))
+            }
+
+            // Ctrl-C: Interrupt
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyResult::Return(ReadlineResult::Interrupt)
+            }
+
+            // Ctrl-D: EOF (only if line is empty)
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.line.is_empty() {
+                    KeyResult::Return(ReadlineResult::Eof)
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Backspace: Delete character before cursor
+            KeyCode::Backspace => {
+                if self.handle_backspace() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Delete: Delete character at cursor
+            KeyCode::Delete => {
+                if self.handle_delete() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Left arrow: Move cursor left
+            KeyCode::Left => {
+                if self.handle_left() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Right arrow: Move cursor right
+            KeyCode::Right => {
+                if self.handle_right() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Up arrow: Navigate history up
+            KeyCode::Up => {
+                if self.history_up() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Down arrow: Navigate history down
+            KeyCode::Down => {
+                if self.history_down() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Home: Move cursor to start
+            KeyCode::Home => {
+                if self.handle_home() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // End: Move cursor to end
+            KeyCode::End => {
+                if self.handle_end() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Regular character: Insert at cursor
+            KeyCode::Char(c) => {
+                self.handle_char(c);
+                KeyResult::Redraw
+            }
+
+            // Ignore other keys (Tab, Esc, F-keys, etc.)
+            _ => KeyResult::Continue,
+        }
+    }
+
+    /// Reads a line of input from the user.
+    ///
+    /// This is the main readline loop. It displays a prompt, reads keyboard
+    /// input, handles editing keys, and returns when the user submits the line.
+    ///
+    /// The loop polls for events with a 100ms timeout, allowing for future
+    /// integration with MPSC signal checking.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt string to display (e.g., "> ")
+    ///
+    /// # Returns
+    ///
+    /// * `ReadlineResult` - The result of the readline operation
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    ///
+    /// match readline.readline("> ") {
+    ///     Ok(ReadlineResult::Input(line)) => println!("You entered: {}", line),
+    ///     Ok(ReadlineResult::Eof) => println!("End of file"),
+    ///     Ok(ReadlineResult::Interrupt) => println!("Interrupted"),
+    ///     Err(e) => eprintln!("Error: {}", e),
+    /// }
+    /// ```
+    pub fn readline(&mut self, prompt: &str) -> io::Result<ReadlineResult> {
+        // Display the initial prompt
+        self.redraw(prompt);
+
+        // Main event loop
+        loop {
+            // Poll for events with 100ms timeout
+            // This allows for future MPSC signal checking
+            if poll(Duration::from_millis(100))? {
+                // Read the event
+                let event = read()?;
+
+                // Handle keyboard events
+                if let Event::Key(key) = event {
+                    match self.handle_key_event(key) {
+                        KeyResult::Continue => {}
+                        KeyResult::Redraw => {
+                            self.redraw(prompt);
+                        }
+                        KeyResult::Return(result) => {
+                            // Redraw to clear the line before returning
+                            let mut stdout = std::io::stdout();
+                            stdout.queue(MoveToColumn(0)).ok();
+                            stdout
+                                .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
+                                .ok();
+                            stdout.flush().ok();
+                            return Ok(result);
+                        }
+                    }
+                }
+            }
+
+            // Timeout occurred - can check MPSC signals here in future tasks
+            // For now, just continue the loop
+        }
     }
 }
 
