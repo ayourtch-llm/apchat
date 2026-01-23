@@ -102,19 +102,11 @@ impl Readline {
     /// assert!(readline.is_raw_mode_enabled());
     /// ```
     pub fn is_raw_mode_enabled(&self) -> bool {
-        if !self.raw_mode_enabled {
-            return false;
-        }
-
-        // Check the actual terminal state if possible
-        match is_raw_mode_enabled() {
-            Ok(enabled) => enabled,
-            Err(_) => {
-                // If we can't query the terminal (e.g., in non-TTY environment),
-                // assume it's enabled since we successfully called enable_raw_mode()
-                true
-            }
-        }
+        // Return the tracked state. We set this to true when we successfully
+        // call enable_raw_mode(), so if it's true, raw mode is enabled.
+        // Note: crossterm::terminal::is_raw_mode_enabled() may return false
+        // in non-TTY environments (like tests), so we rely on our tracking.
+        self.raw_mode_enabled
     }
 }
 
