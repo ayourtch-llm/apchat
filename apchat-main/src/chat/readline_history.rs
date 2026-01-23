@@ -138,7 +138,9 @@ pub fn load_history(file_path: Option<&str>) -> Result<ReadlineHistory> {
     let reader = BufReader::new(file);
     
     let mut history = ReadlineHistory::new();
-    for line in reader.lines() {
+    let mut corrupted_lines = Vec::new();
+    
+    for (line_num, line) in reader.lines().enumerate() {
         let line = line.map_err(|e| anyhow::anyhow!("Failed to read line from history file: {}", e))?;
         let trimmed = line.trim();
 
@@ -147,12 +149,168 @@ pub fn load_history(file_path: Option<&str>) -> Result<ReadlineHistory> {
             continue;
         }
 
-        let entry: ReadlineEntry = serde_json::from_str(&line)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize ReadlineEntry from line: {}", e))?;
-        history.add_entry(entry);
+        // Try to parse the line as JSON
+        match serde_json::from_str::<ReadlineEntry>(&trimmed) {
+            Ok(entry) => {
+                history.add_entry(entry);
+            }
+            Err(e) => {
+                // Check if this is a "trailing characters" error, which suggests
+                // multiple JSON objects concatenated on one line
+                let error_msg = e.to_string().to_lowercase();
+                if error_msg.contains("trailing character") {
+                    // Try to extract valid JSON objects from the corrupted line
+                    // by manually parsing the JSON objects (finding matching braces)
+                    let mut recovered_count = 0;
+                    let mut pos = 0;
+
+                    while pos < trimmed.len() {
+                        // Skip leading whitespace
+                        while pos < trimmed.len() && trimmed.as_bytes()[pos].is_ascii_whitespace() {
+                            pos += 1;
+                        }
+
+                        if pos >= trimmed.len() {
+                            break;
+                        }
+
+                        // Find the next JSON object by matching braces
+                        let bytes = trimmed.as_bytes();
+                        if bytes[pos] != b'{' {
+                            // Not a JSON object start, skip to next
+                            pos += 1;
+                            continue;
+                        }
+
+                        // Find matching closing brace
+                        let mut brace_count = 0;
+                        let mut end_pos = pos;
+                        let mut found = false;
+
+                        for i in pos..trimmed.len() {
+                            match bytes[i] {
+                                b'{' => brace_count += 1,
+                                b'}' => {
+                                    brace_count -= 1;
+                                    if brace_count == 0 {
+                                        end_pos = i + 1;
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        if !found {
+                            // Couldn't find matching brace, give up
+                            break;
+                        }
+
+                        // Try to parse the JSON object
+                        let json_str = &trimmed[pos..end_pos];
+                        match serde_json::from_str::<ReadlineEntry>(json_str) {
+                            Ok(entry) => {
+                                history.add_entry(entry);
+                                recovered_count += 1;
+                                pos = end_pos;
+
+                                // Skip any whitespace/commas between objects
+                                while pos < trimmed.len() {
+                                    let next_char = bytes[pos];
+                                    if next_char.is_ascii_whitespace() || next_char == b',' {
+                                        pos += 1;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Not a valid ReadlineEntry, skip this position
+                                pos += 1;
+                            }
+                        }
+                    }
+
+                    if recovered_count > 0 {
+                        eprintln!(
+                            "⚠️  Recovered {} entries from corrupted line {} (multiple JSON objects on one line)",
+                            recovered_count,
+                            line_num + 1
+                        );
+                    } else {
+                        // If we haven't recovered anything yet, this line is truly corrupted
+                        corrupted_lines.push((line_num + 1, trimmed.to_string(), e.to_string()));
+                    }
+                } else {
+                    // Other type of parsing error
+                    corrupted_lines.push((line_num + 1, trimmed.to_string(), e.to_string()));
+                }
+            }
+        }
+    }
+    
+    // Report corrupted lines if any (excluding recovered ones)
+    if !corrupted_lines.is_empty() {
+        eprintln!(
+            "⚠️  Found {} corrupted line(s) in readline history file:",
+            corrupted_lines.len()
+        );
+        for (line_num, content, error) in &corrupted_lines {
+            eprintln!("  Line {}: {}", line_num, error);
+            // Truncate for display
+            let display = if content.len() > 80 {
+                format!("{}...", &content[..80])
+            } else {
+                content.clone()
+            };
+            eprintln!("    Content: {}", display);
+        }
+        eprintln!("  These lines have been skipped.");
     }
     
     Ok(history)
+}
+
+/// Clean up corrupted entries from the history file by rewriting it with only valid entries
+/// This is useful if the history file has corrupted lines that need to be removed
+pub fn cleanup_history_file(file_path: Option<&str>) -> Result<String> {
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => get_default_history_path()?,
+    };
+    
+    // Load the history (which will handle corruption recovery)
+    let history = load_history(Some(&path))?;
+    
+    // Rewrite the entire file with only valid entries
+    let temp_path = format!("{}.clean", path);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&temp_path)
+        .map_err(|e| anyhow::anyhow!("Failed to create temp file: {}: {}", temp_path, e))?;
+    
+    for entry in history.get_entries() {
+        let json_line = serde_json::to_string(entry)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize ReadlineEntry: {}", e))?;
+        writeln!(file, "{}", json_line)
+            .map_err(|e| anyhow::anyhow!("Failed to write to temp file: {}: {}", temp_path, e))?;
+    }
+    
+    // Drop the file handle to ensure it's flushed
+    drop(file);
+    
+    // Replace the original file with the cleaned version
+    std::fs::rename(&temp_path, &path)
+        .map_err(|e| anyhow::anyhow!("Failed to replace history file: {}: {}", path, e))?;
+    
+    Ok(format!(
+        "Cleaned up history file {} ({} valid entries)",
+        path,
+        history.len()
+    ))
 }
 
 /// Save a single readline entry to file (append mode)
