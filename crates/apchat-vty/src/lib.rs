@@ -3,6 +3,10 @@
 //! Provides centralized terminal output functions that prepend heart emojis
 //! to every line of output for consistent formatting across APChat.
 
+pub mod readline;
+
+pub use readline::Readline;
+
 use std::io::{self, Write};
 
 /// Prints text with a red heart emoji (❤️) prepended to each line.
