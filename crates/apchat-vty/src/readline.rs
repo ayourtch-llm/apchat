@@ -43,6 +43,15 @@ enum KeyResult {
     Return(ReadlineResult),
 }
 
+/// Edit mode for the readline interface.
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum EditMode {
+    /// Normal editing mode
+    Normal,
+    /// Reverse search mode (Ctrl-R)
+    Search,
+}
+
 /// Readline struct that manages terminal mode, input state, and command history.
 ///
 /// This struct enables raw mode on construction (for character-by-character input)
@@ -83,6 +92,18 @@ pub struct Readline {
     history_index: Option<usize>,
     /// Saved line when entering history navigation
     saved_line: String,
+    /// Current edit mode (Normal or Search)
+    mode: EditMode,
+    /// Search pattern in search mode
+    search_pattern: String,
+    /// Indices of matching history entries
+    search_matches: Vec<usize>,
+    /// Current position in search matches
+    search_match_index: usize,
+    /// Original line before entering search mode
+    original_line: String,
+    /// Original cursor position before entering search mode
+    original_cursor: usize,
 }
 
 impl Readline {
@@ -110,6 +131,12 @@ impl Readline {
             history: Vec::new(),
             history_index: None,
             saved_line: String::new(),
+            mode: EditMode::Normal,
+            search_pattern: String::new(),
+            search_matches: Vec::new(),
+            search_match_index: 0,
+            original_line: String::new(),
+            original_cursor: 0,
         })
     }
 
@@ -363,6 +390,78 @@ impl Readline {
     pub fn exit_history_navigation(&mut self) {
         self.history_index = None;
         self.saved_line.clear();
+    }
+
+    /// Enters reverse search mode (Ctrl-R).
+    ///
+    /// Saves the current line and cursor position, then switches to search mode.
+    fn enter_search_mode(&mut self) {
+        self.original_line = self.line.clone();
+        self.original_cursor = self.cursor;
+        self.search_pattern.clear();
+        self.search_matches.clear();
+        self.search_match_index = 0;
+        self.mode = EditMode::Search;
+
+        // If there's history, show the most recent entry when pattern is empty
+        if !self.history.is_empty() {
+            self.update_search();
+        }
+    }
+
+    /// Exits reverse search mode.
+    ///
+    /// Restores the original line and cursor position, then switches back to normal mode.
+    fn exit_search_mode(&mut self) {
+        self.mode = EditMode::Normal;
+        self.line = self.original_line.clone();
+        self.cursor = self.original_cursor;
+        self.search_pattern.clear();
+        self.search_matches.clear();
+    }
+
+    /// Updates the search pattern and finds matching history entries.
+    ///
+    /// Searches for history entries containing the current pattern (case-sensitive).
+    /// Matches are ordered from newest to oldest.
+    fn update_search(&mut self) {
+        self.search_matches.clear();
+        self.search_match_index = 0;
+
+        // Search through history from newest to oldest
+        for (idx, entry) in self.history.iter().enumerate().rev() {
+            if entry.contains(&self.search_pattern) {
+                self.search_matches.push(idx);
+            }
+        }
+
+        // Display the first match if any
+        if !self.search_matches.is_empty() {
+            self.search_match_index = 0;
+            let match_idx = self.search_matches[0];
+            self.line = self.history[match_idx].clone();
+            self.cursor = self.line.chars().count();
+        } else {
+            // No matches, clear the line
+            self.line.clear();
+            self.cursor = 0;
+        }
+    }
+
+    /// Cycles to the next search match.
+    ///
+    /// In reverse search mode, Ctrl-R cycles through matches from newest to oldest.
+    /// When reaching the oldest match, wraps around to the newest.
+    fn cycle_search_match(&mut self) {
+        if self.search_matches.is_empty() {
+            return;
+        }
+
+        // Move to next match (with wraparound)
+        self.search_match_index = (self.search_match_index + 1) % self.search_matches.len();
+        let match_idx = self.search_matches[self.search_match_index];
+        self.line = self.history[match_idx].clone();
+        self.cursor = self.line.chars().count();
     }
 
     /// Handles a character input event.
@@ -691,16 +790,31 @@ impl Readline {
         // Clear the current line
         stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
 
-        // Write prompt and input
-        write!(stdout, "{}{}", prompt, self.line).ok();
+        // In search mode, display the search interface
+        if self.mode == EditMode::Search {
+            // Format: (reverse-i-search)`pattern': matched_command
+            let matched_text = if self.search_matches.is_empty() {
+                ""
+            } else {
+                &self.line
+            };
+            write!(stdout, "(reverse-i-search)`{}': {}", self.search_pattern, matched_text).ok();
 
-        // Calculate cursor position (in characters, not bytes)
-        // Use chars() to handle multi-byte Unicode characters correctly
-        let prompt_len = prompt.chars().count();
-        let cursor_pos = prompt_len + self.cursor;
+            // Move cursor to end of line (after the matched command)
+            let display_len = format!("(reverse-i-search)`{}': {}", self.search_pattern, matched_text);
+            stdout.queue(MoveToColumn(display_len.chars().count() as u16)).ok();
+        } else {
+            // Normal mode: display prompt and input
+            write!(stdout, "{}{}", prompt, self.line).ok();
 
-        // Move cursor to correct position
-        stdout.queue(MoveToColumn(cursor_pos as u16)).ok();
+            // Calculate cursor position (in characters, not bytes)
+            // Use chars() to handle multi-byte Unicode characters correctly
+            let prompt_len = prompt.chars().count();
+            let cursor_pos = prompt_len + self.cursor;
+
+            // Move cursor to correct position
+            stdout.queue(MoveToColumn(cursor_pos as u16)).ok();
+        }
 
         // Flush all queued commands
         stdout.flush().ok();
@@ -719,6 +833,15 @@ impl Readline {
     ///
     /// * `KeyResult` - The result of handling the key event
     fn handle_key_event(&mut self, key: KeyEvent) -> KeyResult {
+        // Dispatch based on current mode
+        match self.mode {
+            EditMode::Normal => self.handle_normal_mode(key),
+            EditMode::Search => self.handle_search_mode(key),
+        }
+    }
+
+    /// Handles key events in normal editing mode.
+    fn handle_normal_mode(&mut self, key: KeyEvent) -> KeyResult {
         match key.code {
             // Enter: Submit the current line
             KeyCode::Enter => {
@@ -747,6 +870,12 @@ impl Readline {
                 } else {
                     KeyResult::Continue
                 }
+            }
+
+            // Ctrl-R: Enter reverse search mode
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.enter_search_mode();
+                KeyResult::Redraw
             }
 
             // Backspace: Delete character before cursor
@@ -828,6 +957,59 @@ impl Readline {
             }
 
             // Ignore other keys (Tab, Esc, F-keys, etc.)
+            _ => KeyResult::Continue,
+        }
+    }
+
+    /// Handles key events in reverse search mode.
+    fn handle_search_mode(&mut self, key: KeyEvent) -> KeyResult {
+        match key.code {
+            // Enter: Accept current match and exit search mode
+            KeyCode::Enter => {
+                // Exit search mode (keeping the matched line)
+                self.mode = EditMode::Normal;
+                KeyResult::Redraw
+            }
+
+            // Ctrl-C or Ctrl-G: Exit search mode, restore original line
+            KeyCode::Char('c') | KeyCode::Char('g')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.exit_search_mode();
+                KeyResult::Redraw
+            }
+
+            // Escape: Exit search mode, restore original line
+            KeyCode::Esc => {
+                self.exit_search_mode();
+                KeyResult::Redraw
+            }
+
+            // Ctrl-R: Cycle to next match
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.cycle_search_match();
+                KeyResult::Redraw
+            }
+
+            // Backspace: Delete character from search pattern
+            KeyCode::Backspace => {
+                if !self.search_pattern.is_empty() {
+                    self.search_pattern.pop();
+                    self.update_search();
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Regular character: Add to search pattern
+            KeyCode::Char(c) => {
+                self.search_pattern.push(c);
+                self.update_search();
+                KeyResult::Redraw
+            }
+
+            // Ignore other keys in search mode
             _ => KeyResult::Continue,
         }
     }
