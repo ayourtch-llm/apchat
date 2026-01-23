@@ -1707,7 +1707,7 @@ impl Readline {
             // Up arrow: Navigate history up OR move cursor up (if not in history mode)
             KeyCode::Up => {
                 // If in history mode, navigate history
-                if self.history_index.is_some() {
+                if self.history_index.is_some() || (self.lines.len() == 1 && self.lines[0].len() == 0) {
                     if self.history_up() {
                         KeyResult::Redraw
                     } else {
