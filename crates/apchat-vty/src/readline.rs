@@ -1467,28 +1467,23 @@ impl Readline {
                 // For lines after the first, move to next line
                 println!();
             }
-            
+
             // Clear the line and move to column 0
             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
             stdout.queue(MoveToColumn(0)).ok();
-            
+
             // Display prompt only on the first line (line 0)
             if i == 0 {
                 write!(stdout, "{}", prompt).ok();
             }
-            
+
             // Display the line content
             write!(stdout, "{}", self.lines[i]).ok();
         }
 
-        // Clear any remaining lines that might have content from before
+        // Note: We don't need to clear extra lines beyond what we're displaying
+        // The display_count lines we printed are sufficient
         let display_count = end - start;
-        if display_count < self.max_lines {
-            for _ in display_count..self.max_lines {
-                println!();
-                stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-            }
-        }
 
         // Position cursor at the correct location
         // We need to move back up to the correct line
