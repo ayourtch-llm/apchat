@@ -292,8 +292,13 @@ pub async fn run_repl_mode(
     let (signal_sender, signal_receiver) = tokio::sync::mpsc::channel::<MspcMessage>(10);
     let signal_sender_for_main = signal_sender.clone();
 
+    // Create an interrupt channel for tools to receive interrupt signals
+    let (interrupt_sender, interrupt_receiver) = tokio::sync::mpsc::channel::<MspcMessage>(10);
+    let interrupt_receiver_mutex = Arc::new(tokio::sync::Mutex::new(interrupt_receiver));
+
     // Set signal sender on chat so tools can send confirmation requests
     chat.signal_sender = Some(signal_sender);
+    chat.signal_receiver = Some(interrupt_receiver_mutex);
 
     // Create output destinations
     let mut output_destinations: Vec<Box<dyn OutputDestination>> = vec![];
@@ -308,6 +313,7 @@ pub async fn run_repl_mode(
     terminal_router = terminal_router.with_signal_receiver(signal_receiver);
     let client_config_for_router = chat.client_config.clone();
     let confirmation_registry_for_router = confirmation_registry.clone(); // Clone for router task
+    let interrupt_sender_for_router = interrupt_sender.clone(); // Clone for router task
 
     let router_handle = tokio::spawn(async move {
         // Wrap the signal receiver in a Tokio Mutex so it can be shared across spawn_blocking calls
@@ -406,6 +412,9 @@ pub async fn run_repl_mode(
     });
 
 
+    // Clone interrupt sender for main loop
+    let interrupt_sender_for_main = interrupt_sender.clone();
+
     // Helper function to get model name for a color from client config
     fn get_model_name_for_prompt(color: &ModelColor, client_config: &crate::config::ClientConfig) -> String {
         if let Some(override_model) = client_config.get_model_override(*color) {
@@ -439,7 +448,10 @@ pub async fn run_repl_mode(
         let line = match message {
             MspcMessage::UserInput(content, _sender) => content,
             MspcMessage::Command(content, _sender) => content,
-            MspcMessage::InterruptSignal(_content, _sender) => {
+            MspcMessage::InterruptSignal(content, sender) => {
+                // Forward interrupt signal to tools
+                let _ = interrupt_sender_for_main.send(MspcMessage::InterruptSignal(content, sender)).await;
+
                 // Interrupt without active operation - just show message and continue
                 print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
                 continue;
@@ -1196,6 +1208,8 @@ mod repl_compact_tests {
             content_limiter: None,
             mspc_channel: None,
             signal_sender: None,
+            signal_receiver: None,
+            confirmation_registry: None,
         }
     }
 

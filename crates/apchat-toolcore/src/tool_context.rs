@@ -41,7 +41,7 @@ pub struct ToolContext {
     pub mspc_sender: Option<tokio_mpsc::Sender<MspcMessage>>, // NEW - MSPC channel sender
     pub mspc_receiver: Option<Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>>, // NEW - MSPC channel receiver
     pub signal_sender: Option<tokio_mpsc::Sender<MspcMessage>>, // NEW - Signal channel sender (for confirmation requests)
-    pub signal_receiver: Option<tokio_mpsc::Receiver<MspcMessage>>, // NEW - Signal channel receiver (for confirmation responses)
+    pub signal_receiver: Option<Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>>, // NEW - Signal channel receiver (for interrupts)
     pub confirmation_registry: Option<Arc<crate::confirmation::ConfirmationRegistry>>, // NEW - Confirmation registry
 }
 
@@ -168,7 +168,7 @@ impl ToolContext {
         self
     }
 
-    pub fn with_signal_receiver(mut self, receiver: tokio_mpsc::Receiver<MspcMessage>) -> Self {
+    pub fn with_signal_receiver(mut self, receiver: Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>) -> Self {
         self.signal_receiver = Some(receiver);
         self
     }

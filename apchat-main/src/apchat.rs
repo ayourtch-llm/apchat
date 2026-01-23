@@ -70,6 +70,8 @@ pub struct APChat {
     pub(crate) mspc_channel: Option<Arc<crate::mspc::MspcChannel>>,
     // Signal channel for sending confirmation requests to readline
     pub(crate) signal_sender: Option<tokio::sync::mpsc::Sender<crate::mspc::MspcMessage>>,
+    // Signal channel receiver for receiving interrupt signals
+    pub(crate) signal_receiver: Option<Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<crate::mspc::MspcMessage>>>>,
     // Confirmation registry for managing tool confirmation requests
     pub(crate) confirmation_registry: Option<Arc<apchat_toolcore::confirmation::ConfirmationRegistry>>,
 }
@@ -91,6 +93,11 @@ impl APChat {
 
     pub fn with_signal_sender(mut self, sender: tokio::sync::mpsc::Sender<crate::mspc::MspcMessage>) -> Self {
         self.signal_sender = Some(sender);
+        self
+    }
+
+    pub fn with_signal_receiver(mut self, receiver: Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<crate::mspc::MspcMessage>>>) -> Self {
+        self.signal_receiver = Some(receiver);
         self
     }
 
@@ -247,6 +254,7 @@ impl APChat {
             content_limiter,
             mspc_channel: None,
             signal_sender: None,
+            signal_receiver: None,
             confirmation_registry: None,
         };
 
@@ -526,6 +534,11 @@ impl APChat {
                 // Add signal sender and confirmation registry if available
                 if let Some(ref signal_sender) = self.signal_sender {
                     context = context.with_signal_sender(signal_sender.clone());
+                }
+
+                // Add signal receiver if available (for interruptible tools)
+                if let Some(ref signal_receiver) = self.signal_receiver {
+                    context = context.with_signal_receiver(signal_receiver.clone());
                 }
 
                 if let Some(ref confirmation_registry) = self.confirmation_registry {

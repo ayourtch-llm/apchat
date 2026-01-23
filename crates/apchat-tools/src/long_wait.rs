@@ -118,20 +118,23 @@ async fn wait_with_progress(duration: f64, message: &str, context: &ToolContext)
     Ok(format!("Waited for {:.1} seconds: {}", duration, message))
 }
 
-/// Check for interrupt signals via ToolContext.mspc_receiver
+/// Check for interrupt signals via ToolContext.signal_receiver
 async fn check_for_interrupts(context: &ToolContext) -> Result<bool, Box<dyn std::error::Error>> {
-    // Only check if receiver is available
-    let receiver_ref = match &context.mspc_receiver {
+    use tokio::sync::Mutex;
+    use std::sync::Arc;
+
+    // Only check if signal receiver is available
+    let receiver_ref = match &context.signal_receiver {
         Some(rx) => rx,
         None => return Ok(false), // No receiver configured, no interrupts possible
     };
-    
+
     // Try to lock the receiver
     let mut receiver = match receiver_ref.try_lock() {
         Ok(guard) => guard,
         Err(_) => return Ok(false), // Lock failed, continue without checking
     };
-    
+
     // Try to receive a message without blocking
     match receiver.try_recv() {
         Ok(msg) => {
