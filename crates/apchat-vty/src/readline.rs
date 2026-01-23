@@ -129,7 +129,12 @@ fn enable_raw_mode_on_stdin() -> io::Result<termios> {
         if tcsetattr(STDIN_FILENO, TCSANOW, &term) != 0 {
             return Err(io::Error::last_os_error());
         }
-        
+
+        // Enable bracketed paste mode
+        // This allows us to distinguish paste events from regular typing
+        print!("\x1b[?2004h");
+        io::stdout().flush()?;
+
         Ok(original)
     }
 }
@@ -144,6 +149,11 @@ fn restore_terminal_settings(original: &termios) -> io::Result<()> {
         if tcsetattr(STDIN_FILENO, TCSANOW, original) != 0 {
             return Err(io::Error::last_os_error());
         }
+
+        // Disable bracketed paste mode
+        print!("\x1b[?2004l");
+        io::stdout().flush()?;
+
         Ok(())
     }
 }
@@ -1031,6 +1041,57 @@ impl Readline {
         true
     }
 
+    /// Inserts a string at the cursor position.
+    ///
+    /// Helper method to insert multiple characters at once.
+    /// This is used by paste handling to insert multiple characters efficiently.
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - The string to insert
+    fn insert_str(&mut self, s: &str) {
+        for c in s.chars() {
+            self.handle_char(c);
+        }
+    }
+
+    /// Handles paste events from bracketed paste mode.
+    ///
+    /// When text is pasted, we need to decide how to handle newlines.
+    /// The default behavior is to replace newlines with spaces to keep
+    /// the input on a single line.
+    ///
+    /// # Arguments
+    ///
+    /// * `content` - The pasted content (may contain newlines)
+    ///
+    /// # Returns
+    ///
+    /// * `true` - The line was modified, a redraw is needed
+    /// * `false` - Nothing to insert
+    pub fn handle_paste(&mut self, content: String) -> bool {
+        if content.is_empty() {
+            return false;
+        }
+
+        // Exit history navigation if we were in it
+        if self.history_index.is_some() {
+            self.exit_history_navigation();
+        }
+
+        // Replace newlines with spaces for single-line input
+        // This converts multiline paste into a single line
+        let content = content.replace('\n', " ").replace('\r', " ");
+
+        // Collapse multiple spaces into single space
+        let content = content.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        // Insert the cleaned content at cursor position
+        self.insert_str(&content);
+
+        true
+    }
+
     /// Moves cursor left by one word (Ctrl-Left or Alt-B).
     ///
     /// Words are sequences of alphanumeric characters.
@@ -1510,23 +1571,34 @@ impl Readline {
                 // Read the event
                 let event = read()?;
 
-                // Handle keyboard events
-                if let Event::Key(key) = event {
-                    match self.handle_key_event(key) {
-                        KeyResult::Continue => {}
-                        KeyResult::Redraw => {
+                // Handle different event types
+                match event {
+                    Event::Key(key) => {
+                        match self.handle_key_event(key) {
+                            KeyResult::Continue => {}
+                            KeyResult::Redraw => {
+                                self.redraw(prompt);
+                            }
+                            KeyResult::Return(result) => {
+                                // Redraw to clear the line before returning
+                                let mut stdout = std::io::stdout();
+                                stdout.queue(MoveToColumn(0)).ok();
+                                stdout
+                                    .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
+                                    .ok();
+                                stdout.flush().ok();
+                                return Ok(result);
+                            }
+                        }
+                    }
+                    Event::Paste(content) => {
+                        // Handle paste events from bracketed paste mode
+                        if self.handle_paste(content) {
                             self.redraw(prompt);
                         }
-                        KeyResult::Return(result) => {
-                            // Redraw to clear the line before returning
-                            let mut stdout = std::io::stdout();
-                            stdout.queue(MoveToColumn(0)).ok();
-                            stdout
-                                .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
-                                .ok();
-                            stdout.flush().ok();
-                            return Ok(result);
-                        }
+                    }
+                    _ => {
+                        // Ignore other events (mouse, resize, focus, etc.)
                     }
                 }
             }
