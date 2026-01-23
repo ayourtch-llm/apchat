@@ -1,7 +1,7 @@
 warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   /Users/ayourtch/llm-rust/a/apchat/crates/apchat-wasm/Cargo.toml
 workspace: /Users/ayourtch/llm-rust/a/apchat/Cargo.toml
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
      Running `target/debug/apchat --llama-cpp-url 'http://100.72.206.67:8080' --stream -i`
 💛 [33m🔍[0m DEBUG: Final model overrides before client config:
 💛   blu_model_override_final: "some-model"
