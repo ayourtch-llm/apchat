@@ -3,7 +3,7 @@
 //! This module provides a `Readline` struct that manages terminal I/O
 //! using "semi-raw" mode: raw input with normal output.
 
-use crossterm::cursor::MoveToColumn;
+use crossterm::cursor::{MoveTo, MoveToColumn};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::Clear;
 use crossterm::QueueableCommand;
@@ -216,18 +216,20 @@ fn restore_terminal_settings(original: &termios) -> io::Result<()> {
 /// drop(readline);  // Terminal mode is restored automatically
 /// ```
 pub struct Readline {
-    /// The current input line buffer
-    line: String,
-    /// Current cursor position in the line (0-based, from start of line)
-    cursor: usize,
+    /// The current input line buffer (now multiline)
+    lines: Vec<String>,
+    /// Current cursor line (0-based)
+    cursor_line: usize,
+    /// Current cursor column within the current line (0-based)
+    cursor_col: usize,
     /// Original terminal settings before enabling raw mode
     original_termios: Option<termios>,
     /// Command history (previous commands)
     history: Vec<String>,
     /// Current position in history navigation (None = editing current line)
     history_index: Option<usize>,
-    /// Saved line when entering history navigation
-    saved_line: String,
+    /// Saved lines when entering history navigation
+    saved_lines: Vec<String>,
     /// Current edit mode (Normal or Search)
     mode: EditMode,
     /// Search pattern in search mode
@@ -236,16 +238,29 @@ pub struct Readline {
     search_matches: Vec<usize>,
     /// Current position in search matches
     search_match_index: usize,
-    /// Original line before entering search mode
-    original_line: String,
-    /// Original cursor position before entering search mode
-    original_cursor: usize,
+    /// Original lines before entering search mode
+    original_lines: Vec<String>,
+    /// Original cursor line before entering search mode
+    original_cursor_line: usize,
+    /// Original cursor column before entering search mode
+    original_cursor_col: usize,
     /// Kill ring (circular buffer for killed text)
     kill_ring: Vec<String>,
     /// Current position in kill ring
     kill_ring_index: usize,
     /// Maximum size of kill ring (Emacs default is 16)
     max_kill_ring_size: usize,
+    /// Maximum number of lines to display
+    max_lines: usize,
+    /// Scroll offset for displaying lines
+    scroll_offset: usize,
+    // Compatibility fields for transition (deprecated)
+    #[deprecated(note = "Use lines[0] instead")]
+    line: String,
+    #[deprecated(note = "Use cursor_col instead")]
+    cursor: usize,
+    #[deprecated(note = "Use saved_lines instead")]
+    saved_line: String,
 }
 
 impl Readline {
@@ -267,21 +282,29 @@ impl Readline {
         let original_termios = Some(enable_raw_mode_on_stdin()?);
 
         Ok(Readline {
-            line: String::new(),
-            cursor: 0,
+            lines: vec![String::new()],
+            cursor_line: 0,
+            cursor_col: 0,
             original_termios,
             history: Vec::new(),
             history_index: None,
-            saved_line: String::new(),
+            saved_lines: Vec::new(),
             mode: EditMode::Normal,
             search_pattern: String::new(),
             search_matches: Vec::new(),
             search_match_index: 0,
-            original_line: String::new(),
-            original_cursor: 0,
+            original_lines: Vec::new(),
+            original_cursor_line: 0,
+            original_cursor_col: 0,
             kill_ring: Vec::new(),
             kill_ring_index: 0,
             max_kill_ring_size: 16,
+            max_lines: 10,
+            scroll_offset: 0,
+            // Compatibility fields
+            line: String::new(),
+            cursor: 0,
+            saved_line: String::new(),
         })
     }
 
@@ -403,12 +426,15 @@ impl Readline {
             return false;
         }
 
-        // If we're not currently navigating history, save the current line
+        // If we're not currently navigating history, save the current multiline state
         if self.history_index.is_none() {
-            self.saved_line = self.line.clone();
+            self.saved_lines = self.lines.clone();
             self.history_index = Some(self.history.len().saturating_sub(1));
-            self.line = self.history[self.history_index.unwrap()].clone();
-            self.cursor = self.line.len();
+            let entry = &self.history[self.history_index.unwrap()];
+            self.lines = entry.split('\n').map(String::from).collect();
+            // Position cursor at end of last line
+            self.cursor_line = self.lines.len().saturating_sub(1);
+            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
             return true;
         }
 
@@ -416,8 +442,11 @@ impl Readline {
         if let Some(idx) = self.history_index {
             if idx > 0 {
                 self.history_index = Some(idx - 1);
-                self.line = self.history[idx - 1].clone();
-                self.cursor = self.line.len();
+                let entry = &self.history[idx - 1];
+                self.lines = entry.split('\n').map(String::from).collect();
+                // Position cursor at end of last line
+                self.cursor_line = self.lines.len().saturating_sub(1);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
                 return true;
             }
         }
@@ -469,15 +498,20 @@ impl Readline {
             if idx < self.history.len() - 1 {
                 // Move to newer entry
                 self.history_index = Some(idx + 1);
-                self.line = self.history[idx + 1].clone();
-                self.cursor = self.line.len();
+                let entry = &self.history[idx + 1];
+                self.lines = entry.split('\n').map(String::from).collect();
+                // Position cursor at end of last line
+                self.cursor_line = self.lines.len().saturating_sub(1);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
                 return true;
             } else {
-                // Exit history navigation, restore saved line
+                // Exit history navigation, restore saved multiline state
                 self.history_index = None;
-                self.line = self.saved_line.clone();
-                self.cursor = self.line.len();
-                self.saved_line.clear();
+                self.lines = self.saved_lines.clone();
+                // Restore cursor to end of last line
+                self.cursor_line = self.lines.len().saturating_sub(1);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.saved_lines.clear();
                 return true;
             }
         }
@@ -531,15 +565,24 @@ impl Readline {
     /// ```
     pub fn exit_history_navigation(&mut self) {
         self.history_index = None;
-        self.saved_line.clear();
+        // Restore the complete multiline state from saved_lines
+        self.lines = self.saved_lines.clone();
+        // Restore cursor to end of last line
+        self.cursor_line = self.lines.len().saturating_sub(1);
+        self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+        self.saved_lines.clear();
     }
 
     /// Enters reverse search mode (Ctrl-R).
     ///
     /// Saves the current line and cursor position, then switches to search mode.
     fn enter_search_mode(&mut self) {
-        self.original_line = self.line.clone();
-        self.original_cursor = self.cursor;
+        self.original_lines = self.lines.clone();
+        self.original_cursor_line = self.cursor_line;
+        self.original_cursor_col = self.cursor_col;
+        // Also save to compatibility fields for now
+        self.line = self.lines.get(0).cloned().unwrap_or_default();
+        self.cursor = self.cursor_col;
         self.search_pattern.clear();
         self.search_matches.clear();
         self.search_match_index = 0;
@@ -556,8 +599,12 @@ impl Readline {
     /// Restores the original line and cursor position, then switches back to normal mode.
     fn exit_search_mode(&mut self) {
         self.mode = EditMode::Normal;
-        self.line = self.original_line.clone();
-        self.cursor = self.original_cursor;
+        self.lines = self.original_lines.clone();
+        self.cursor_line = self.original_cursor_line;
+        self.cursor_col = self.original_cursor_col;
+        // Update compatibility fields
+        self.line = self.lines.get(0).cloned().unwrap_or_default();
+        self.cursor = self.cursor_col;
         self.search_pattern.clear();
         self.search_matches.clear();
     }
@@ -683,26 +730,39 @@ impl Readline {
     /// assert_eq!(readline.line(), "hell");
     /// ```
     pub fn handle_backspace(&mut self) -> bool {
-        if self.cursor == 0 {
-            return false;
-        }
-
         // Exit history navigation if we were in it
         if self.history_index.is_some() {
             self.exit_history_navigation();
         }
 
-        self.cursor -= 1;
-        // Remove the character at the current cursor position
-        // Use remove on bytes is safe because we decremented cursor
-        // and cursor is now at a valid character boundary
-        let line_chars: Vec<char> = self.line.chars().collect();
-        let new_line: String = line_chars[..self.cursor]
-            .iter()
-            .chain(line_chars[self.cursor + 1..].iter())
-            .collect();
-        self.line = new_line;
-        true
+        if self.cursor_col > 0 {
+            // Delete character within current line
+            self.cursor_col -= 1;
+            let line_chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+            let new_line: String = line_chars[..self.cursor_col]
+                .iter()
+                .chain(line_chars[self.cursor_col + 1..].iter())
+                .collect();
+            self.lines[self.cursor_line] = new_line;
+            true
+        } else if self.cursor_col == 0 && self.cursor_line > 0 {
+            // Join current line with end of previous line
+            let current_line = self.lines[self.cursor_line].clone();
+            let prev_line_len = self.lines[self.cursor_line - 1].chars().count();
+            self.lines[self.cursor_line - 1].push_str(&current_line);
+            self.lines.remove(self.cursor_line);
+            self.cursor_line -= 1;
+            self.cursor_col = prev_line_len;
+
+            // Update scroll_offset if needed
+            if self.cursor_line < self.scroll_offset {
+                self.scroll_offset = self.cursor_line;
+            }
+
+            true
+        } else {
+            false
+        }
     }
 
     /// Handles the Delete key.
@@ -734,23 +794,35 @@ impl Readline {
     /// assert_eq!(readline.line(), "hllo");
     /// ```
     pub fn handle_delete(&mut self) -> bool {
-        if self.cursor >= self.line.chars().count() {
-            return false;
-        }
-
         // Exit history navigation if we were in it
         if self.history_index.is_some() {
             self.exit_history_navigation();
         }
 
-        // Remove the character at the current cursor position
-        let line_chars: Vec<char> = self.line.chars().collect();
-        let new_line: String = line_chars[..self.cursor]
-            .iter()
-            .chain(line_chars[self.cursor + 1..].iter())
-            .collect();
-        self.line = new_line;
-        true
+        let current_line_len = self.lines[self.cursor_line].chars().count();
+
+        if self.cursor_col < current_line_len {
+            // Delete character within current line
+            let line_chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+            let new_line: String = line_chars[..self.cursor_col]
+                .iter()
+                .chain(line_chars[self.cursor_col + 1..].iter())
+                .collect();
+            self.lines[self.cursor_line] = new_line;
+            true
+        } else if self.cursor_col == current_line_len && self.cursor_line < self.lines.len() - 1 {
+            // Join next line with current line
+            let next_line = self.lines[self.cursor_line + 1].clone();
+            self.lines[self.cursor_line].push_str(&next_line);
+            self.lines.remove(self.cursor_line + 1);
+
+            // Update scroll_offset if needed (shouldn't need adjustment in this case
+            // since we're removing a line after the cursor)
+
+            true
+        } else {
+            false
+        }
     }
 
     /// Handles the Left arrow key.
@@ -784,12 +856,22 @@ impl Readline {
     /// assert_eq!(readline.cursor(), 0);
     /// ```
     pub fn handle_left(&mut self) -> bool {
-        if self.cursor == 0 {
-            return false;
+        // If cursor_col > 0: move cursor left within current line
+        if self.cursor_col > 0 {
+            self.cursor_col -= 1;
+            self.update_scroll_offset();
+            return true;
         }
 
-        self.cursor -= 1;
-        true
+        // If cursor_col == 0 and cursor_line > 0: move to end of previous line
+        if self.cursor_col == 0 && self.cursor_line > 0 {
+            self.cursor_line -= 1;
+            self.cursor_col = self.lines[self.cursor_line].chars().count();
+            self.update_scroll_offset();
+            return true;
+        }
+
+        false
     }
 
     /// Handles the Right arrow key.
@@ -823,12 +905,24 @@ impl Readline {
     /// assert_eq!(readline.cursor(), 2);
     /// ```
     pub fn handle_right(&mut self) -> bool {
-        if self.cursor >= self.line.chars().count() {
-            return false;
+        let current_line_len = self.lines[self.cursor_line].chars().count();
+
+        // If cursor_col < current line length: move cursor right within current line
+        if self.cursor_col < current_line_len {
+            self.cursor_col += 1;
+            self.update_scroll_offset();
+            return true;
         }
 
-        self.cursor += 1;
-        true
+        // If cursor_col == current line length and cursor_line < lines.len() - 1: move to start of next line
+        if self.cursor_col == current_line_len && self.cursor_line < self.lines.len() - 1 {
+            self.cursor_line += 1;
+            self.cursor_col = 0;
+            self.update_scroll_offset();
+            return true;
+        }
+
+        false
     }
 
     /// Handles the Home key.
@@ -1089,9 +1183,8 @@ impl Readline {
 
     /// Handles paste events from bracketed paste mode.
     ///
-    /// When text is pasted, we need to decide how to handle newlines.
-    /// The default behavior is to replace newlines with spaces to keep
-    /// the input on a single line.
+    /// When text is pasted, we preserve newlines to support multiline paste.
+    /// This allows pasting multiple lines of text at once.
     ///
     /// # Arguments
     ///
@@ -1111,15 +1204,47 @@ impl Readline {
             self.exit_history_navigation();
         }
 
-        // Replace newlines with spaces for single-line input
-        // This converts multiline paste into a single line
-        let content = content.replace('\n', " ").replace('\r', " ");
+        // Split the pasted content by newlines
+        let pasted_lines: Vec<&str> = content.split('\n').collect();
 
-        // Collapse multiple spaces into single space
-        let content = content.split_whitespace().collect::<Vec<_>>().join(" ");
+        if pasted_lines.len() == 1 {
+            // Single line paste: insert at cursor position in current line
+            let current = self.lines[self.cursor_line].clone();
+            let byte_pos = current.chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+            self.lines[self.cursor_line].insert_str(byte_pos, pasted_lines[0]);
+            self.cursor_col += pasted_lines[0].chars().count();
+        } else {
+            // Multi-line paste: preserve newlines
+            let current = self.lines[self.cursor_line].clone();
+            let byte_pos = current.chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
 
-        // Insert the cleaned content at cursor position
-        self.insert_str(&content);
+            // Split current line at cursor position
+            let before = &current[..byte_pos];
+            let after = &current[byte_pos..];
+
+            // Insert first line of pasted content at cursor position
+            self.lines[self.cursor_line] = format!("{}{}", before, pasted_lines[0]);
+
+            // Insert middle lines as new lines
+            for (i, line) in pasted_lines.iter().skip(1).take(pasted_lines.len() - 2).enumerate() {
+                self.lines.insert(self.cursor_line + 1 + i, line.to_string());
+            }
+
+            // Insert last line and append the rest of the original line
+            let last_line = pasted_lines.last().unwrap();
+            let final_line = format!("{}{}", last_line, after);
+            self.lines.insert(self.cursor_line + pasted_lines.len() - 1, final_line);
+
+            // Remove the original line that we split
+            self.lines.remove(self.cursor_line + pasted_lines.len() - 1);
+
+            // Move cursor to end of last pasted line
+            self.cursor_line += pasted_lines.len() - 1;
+            self.cursor_col = last_line.chars().count();
+
+            // Update scroll offset if needed
+            self.update_scroll_offset();
+        }
 
         true
     }
@@ -1202,6 +1327,77 @@ impl Readline {
         }
     }
 
+    /// Inserts a new line at the current cursor position.
+    ///
+    /// This method splits the current line at the cursor position and creates
+    /// a new line with the text after the cursor. The cursor is then moved to
+    /// the start of the new line.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - A redraw is needed
+    pub fn handle_newline(&mut self) -> bool {
+        // Get the current line content
+        let current = self.lines[self.cursor_line].clone();
+        
+        // Find byte positions for slicing
+        let byte_pos = current.chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        let before = &current[..byte_pos];
+        let after = &current[byte_pos..];
+        
+        // Update current line and insert new line
+        self.lines[self.cursor_line] = before.to_string();
+        self.lines.insert(self.cursor_line + 1, after.to_string());
+        
+        // Move cursor to start of new line
+        self.cursor_line += 1;
+        self.cursor_col = 0;
+        
+        // Update scroll offset to keep cursor visible
+        self.update_scroll_offset();
+        true
+    }
+
+    /// Updates the scroll offset to ensure the cursor line is visible.
+    ///
+    /// This method adjusts `scroll_offset` so that the current cursor line
+    /// is always within the visible display range (max_lines).
+    fn update_scroll_offset(&mut self) {
+        if self.cursor_line < self.scroll_offset {
+            // Cursor is above visible area, scroll up
+            self.scroll_offset = self.cursor_line;
+        } else if self.cursor_line >= self.scroll_offset + self.max_lines {
+            // Cursor is below visible area, scroll down
+            self.scroll_offset = self.cursor_line - self.max_lines + 1;
+        }
+    }
+
+    /// Checks if the cursor is at the very end of all text.
+    ///
+    /// Returns true if the cursor is on the last line and at the end of that line.
+    fn is_at_end(&self) -> bool {
+        self.cursor_line == self.lines.len() - 1
+            && self.cursor_col == self.lines[self.cursor_line].chars().count()
+    }
+
+    /// Returns the full text with newlines.
+    ///
+    /// Joins all lines with "\n" to create the complete text content.
+    pub fn text(&self) -> String {
+        self.lines.join("\n")
+    }
+
+    /// Clears input and resets cursor to the beginning.
+    ///
+    /// Resets all lines to a single empty line, moves cursor to the start,
+    /// and resets the scroll offset to zero.
+    pub fn reset_input(&mut self) {
+        self.lines = vec![String::new()];
+        self.cursor_line = 0;
+        self.cursor_col = 0;
+        self.scroll_offset = 0;
+    }
+
     /// Redraws the current line to the terminal.
     ///
     /// This function clears the current line and redraws it with the prompt
@@ -1224,41 +1420,80 @@ impl Readline {
     /// readline.redraw("> ");
     /// ```
     pub fn redraw(&mut self, prompt: &str) {
-        let mut stdout = std::io::stdout();
+        let stdout = &mut std::io::stdout();
 
-        // Move cursor to start of line (column 0)
-        stdout.queue(MoveToColumn(0)).ok();
-
-        // Clear the current line
-        stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-
-        // In search mode, display the search interface
+        // In search mode, display the search interface on a single line
         if self.mode == EditMode::Search {
+            // Move cursor to start of line (column 0)
+            stdout.queue(MoveToColumn(0)).ok();
+
+            // Clear the current line
+            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+
             // Format: (reverse-i-search)`pattern': matched_command
             let matched_text = if self.search_matches.is_empty() {
                 ""
             } else {
-                &self.line
+                // Use the multiline text joined with newlines
+                &self.text()
             };
             write!(stdout, "(reverse-i-search)`{}': {}", self.search_pattern, matched_text).ok();
 
             // Move cursor to end of line (after the matched command)
             let display_len = format!("(reverse-i-search)`{}': {}", self.search_pattern, matched_text);
             stdout.queue(MoveToColumn(display_len.chars().count() as u16)).ok();
-        } else {
-            // Normal mode: display prompt and input
-            write!(stdout, "{}{}", prompt, self.line).ok();
 
-            // Calculate cursor position (in characters, not bytes)
-            // Use chars() to handle multi-byte Unicode characters correctly
-            // IMPORTANT: Strip ANSI codes from prompt when calculating position
-            let prompt_visible = strip_ansi_codes(prompt);
-            let prompt_len = prompt_visible.chars().count();
-            let cursor_pos = prompt_len + self.cursor;
-
-            // Move cursor to correct position
-            stdout.queue(MoveToColumn(cursor_pos as u16)).ok();
+            // Flush all queued commands
+            stdout.flush().ok();
+            return;
         }
+
+        // Normal mode: display multiline input with scrolling
+        
+        // Calculate visible range based on scroll_offset and max_lines
+        let start = self.scroll_offset;
+        let end = (start + self.max_lines).min(self.lines.len());
+
+        // Get the prompt visible length (excluding ANSI codes)
+        let prompt_visible = strip_ansi_codes(prompt);
+        let prompt_len = prompt_visible.chars().count();
+
+        // Clear and redraw each visible line
+        for i in start..end {
+            // Move to the beginning of this line (column 0, row i - start)
+            stdout.queue(MoveTo(0, (i - start) as u16)).ok();
+
+            // Clear the entire line
+            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+
+            // Display prompt only on the first line (line 0)
+            if i == 0 {
+                write!(stdout, "{}", prompt).ok();
+            }
+
+            // Display the line content
+            write!(stdout, "{}", self.lines[i]).ok();
+        }
+
+        // Clear any remaining lines that might have content from before
+        // (in case we had more lines displayed previously)
+        for i in end..(start + self.max_lines) {
+            stdout.queue(MoveTo(0, (i - start) as u16)).ok();
+            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+        }
+
+        // Position cursor at the correct location
+        // The visual line is cursor_line - scroll_offset (relative to where we started drawing)
+        let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
+        let mut visual_col = self.cursor_col;
+
+        // Add prompt length to column if we're on the first line
+        if visual_line == 0 {
+            visual_col += prompt_len;
+        }
+
+        // Move cursor to the correct position
+        stdout.queue(MoveTo(visual_col as u16, visual_line as u16)).ok();
 
         // Flush all queued commands
         stdout.flush().ok();
@@ -1287,19 +1522,36 @@ impl Readline {
     /// Handles key events in normal editing mode.
     fn handle_normal_mode(&mut self, key: KeyEvent) -> KeyResult {
         match key.code {
-            // Enter: Submit the current line
+            // Enter: Submit or insert newline
             KeyCode::Enter => {
-                let line = self.line.clone();
-                // Add to history if not empty
-                if !line.trim().is_empty() {
-                    self.add_history_entry(&line);
+                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                    // Shift-Enter always inserts newline
+                    if self.handle_newline() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
+                } else if self.is_at_end() {
+                    // Regular Enter at end submits the input
+                    let line = self.text();
+                    // Add to history if not empty
+                    if !line.trim().is_empty() {
+                        self.add_history_entry(&line);
+                    }
+                    // Reset the line buffer
+                    self.line.clear();
+                    self.cursor = 0;
+                    self.history_index = None;
+                    self.saved_line.clear();
+                    KeyResult::Return(ReadlineResult::Input(line))
+                } else {
+                    // Regular Enter not at end inserts newline
+                    if self.handle_newline() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
                 }
-                // Reset the line buffer
-                self.line.clear();
-                self.cursor = 0;
-                self.history_index = None;
-                self.saved_line.clear();
-                KeyResult::Return(ReadlineResult::Input(line))
             }
 
             // Ctrl-A: Move cursor to start of line
@@ -1388,18 +1640,48 @@ impl Readline {
                 }
             }
 
-            // Up arrow: Navigate history up
+            // Up arrow: Navigate history up OR move cursor up (if not in history mode)
             KeyCode::Up => {
-                if self.history_up() {
+                // If in history mode, navigate history
+                if self.history_index.is_some() {
+                    if self.history_up() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
+                } else if self.cursor_line > 0 {
+                    // Not in history mode: move cursor up one line
+                    self.cursor_line -= 1;
+                    // Adjust cursor_col to fit within the line above
+                    let line_len = self.lines[self.cursor_line].chars().count();
+                    if self.cursor_col > line_len {
+                        self.cursor_col = line_len;
+                    }
+                    self.update_scroll_offset();
                     KeyResult::Redraw
                 } else {
                     KeyResult::Continue
                 }
             }
 
-            // Down arrow: Navigate history down
+            // Down arrow: Navigate history down OR move cursor down (if not in history mode)
             KeyCode::Down => {
-                if self.history_down() {
+                // If in history mode, navigate history
+                if self.history_index.is_some() {
+                    if self.history_down() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
+                } else if self.cursor_line < self.lines.len() - 1 {
+                    // Not in history mode: move cursor down one line
+                    self.cursor_line += 1;
+                    // Adjust cursor_col to fit within the line below
+                    let line_len = self.lines[self.cursor_line].chars().count();
+                    if self.cursor_col > line_len {
+                        self.cursor_col = line_len;
+                    }
+                    self.update_scroll_offset();
                     KeyResult::Redraw
                 } else {
                     KeyResult::Continue
