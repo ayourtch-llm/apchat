@@ -6,36 +6,22 @@
 // All access should be serialized through the main REPL loop.
 
 use anyhow::Result;
+use apchat_vty::{print_heart_red, print_heart_yellow, Readline, ReadlineResult};
 use once_cell::sync::Lazy;
-use rustyline::Editor;
-use rustyline::history::FileHistory;
-use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard};
-use apchat_vty::{print_heart_red, print_heart_yellow};
-
-// Trait to provide `is_some` method for FileHistory, mirroring older API expectations
-pub trait HistoryExt {
-    fn is_some(&self) -> bool;
-}
-
-impl HistoryExt for FileHistory {
-    fn is_some(&self) -> bool { true }
-}
-
 
 use crate::chat::readline_history;
 
+/// Global readline instance wrapped in synchronization primitives
+static READLINE_INSTANCE: Lazy<Mutex<Readline>> = Lazy::new(|| {
+    let rl = Readline::new()
+        .expect("Failed to create readline editor");
+    Mutex::new(rl)
+});
 
 /// Singleton readline instance manager
 #[derive(Debug)]
 pub struct ReadlineInstance;
-
-/// Global readline instance wrapped in synchronization primitives
-static READLINE_INSTANCE: Lazy<Mutex<Editor<(), FileHistory>>> = Lazy::new(|| {
-    let mut rl = Editor::<(), FileHistory>::new()
-        .expect("Failed to create readline editor");
-    Mutex::new(rl)
-});
 
 impl ReadlineInstance {
     /// Get the singleton readline instance
@@ -45,7 +31,7 @@ impl ReadlineInstance {
     ///
     /// # Returns
     ///
-    /// * `Result<MutexGuard<Editor<(), FileHistory>>>` - A guard providing exclusive access to the readline editor
+    /// * `Result<MutexGuard<'static, Readline>>` - A guard providing exclusive access to the readline editor
     ///
     /// # Safety
     ///
@@ -55,17 +41,17 @@ impl ReadlineInstance {
     /// # Examples
     ///
     /// ```
-    /// let guard = ReadlineInstance::get()?;
-    /// let rl = guard.deref_mut();
-    /// let line = rl.readline("Prompt: ")?;
+    /// let mut guard = ReadlineInstance::get()?;
+    /// let line = guard.readline("Prompt: ")?;
     /// // guard is dropped here, releasing the lock
     /// ```
-    pub fn get() -> Result<MutexGuard<'static, Editor<(), FileHistory>>> {
-        let guard = READLINE_INSTANCE.lock()
+    pub fn get() -> Result<MutexGuard<'static, Readline>> {
+        let guard = READLINE_INSTANCE
+            .lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire readline lock: {}", e))?;
         Ok(guard)
     }
-    
+
     /// Read a line using the singleton readline instance
     ///
     /// This is a convenience method that handles the lock internally and ensures
@@ -77,7 +63,7 @@ impl ReadlineInstance {
     ///
     /// # Returns
     ///
-    /// * `Result<Option<String>>` - The input line, or None if EOF
+    /// * `Result<Option<String>>` - The input line, or None if EOF or Interrupt
     ///
     /// # Safety
     ///
@@ -86,13 +72,20 @@ impl ReadlineInstance {
     pub fn readline(prompt: &str) -> Result<Option<String>> {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
-        
+
         match rl.readline(prompt)? {
-            line if line.is_empty() => Ok(None),
-            line => Ok(Some(line)),
+            ReadlineResult::Input(line) => {
+                if line.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(line))
+                }
+            }
+            ReadlineResult::Eof => Ok(None),
+            ReadlineResult::Interrupt => Ok(None),
         }
     }
-    
+
     /// Add an entry to the readline history
     ///
     /// This method ensures thread-safe access to the history.
@@ -107,11 +100,10 @@ impl ReadlineInstance {
     pub fn add_history(entry: &str) -> Result<()> {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
-        rl.add_history_entry(entry)
-            .map_err(|e| anyhow::anyhow!("Failed to add history entry: {}", e))?;
+        rl.add_history_entry(entry);
         Ok(())
     }
-    
+
     /// Check if the readline instance has been initialized
     ///
     /// # Returns
@@ -120,12 +112,11 @@ impl ReadlineInstance {
     pub fn is_initialized() -> bool {
         true // Lazy always initializes on first access
     }
-    
+
     /// Save the readline history to file
     ///
     /// This method is a no-op because we use a custom JSON-based history system
-    /// (see readline_history.rs) that saves after each command. Rustyline's native
-    /// save format conflicts with our JSON format, so we disable it here.
+    /// (see readline_history.rs) that saves after each command.
     ///
     /// # Returns
     ///
@@ -133,14 +124,13 @@ impl ReadlineInstance {
     pub fn save_history() -> Result<()> {
         // No-op: We use custom JSON-based history saving in readline_history.rs
         // which is called after each command in repl.rs (line ~797).
-        // Rustyline's native save would overwrite our JSON with plain text format.
         Ok(())
     }
-    
+
     /// Clean up the readline instance
     ///
-    /// This method performs cleanup operations including saving history and
-    /// clearing resources. Should be called before application exit.
+    /// This method performs cleanup operations including saving history.
+    /// Should be called before application exit.
     ///
     /// # Returns
     ///
@@ -148,22 +138,23 @@ impl ReadlineInstance {
     pub fn cleanup() -> Result<()> {
         // Save history before cleanup
         if let Err(e) = Self::save_history() {
-            print_heart_yellow(&format!("Warning: Failed to save readline history: {}", e), true);
+            print_heart_yellow(
+                &format!("Warning: Failed to save readline history: {}", e),
+                true,
+            );
         }
-        
-        // Clear the history to free up resources
-        let mut guard = Self::get()?;
-        let rl = &mut *guard;
-        rl.clear_history()
-            .map_err(|e| anyhow::anyhow!("Failed to clear readline history: {}", e))?;
-        
+
+        // Note: We don't clear the history here because:
+        // 1. The Readline struct will be dropped when the app exits
+        // 2. History is stored in-memory and will be freed automatically
+        // 3. Our JSON-based history is already saved
+
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::chat::readline_instance::HistoryExt;
     use super::*;
     use std::thread;
     use std::time::Duration;
@@ -173,97 +164,83 @@ mod tests {
         // Get the instance twice
         let guard1 = ReadlineInstance::get().unwrap();
         let guard2 = ReadlineInstance::get().unwrap();
-        
+
         // Both should be initialized
         assert!(ReadlineInstance::is_initialized());
-        
+
         // Verify they're different guards (proper locking)
         assert_ne!(&*guard1 as *const _, &*guard2 as *const _);
     }
-    
+
     #[test]
     fn test_instance_initialization() {
         // Get the instance
-        let mut guard = ReadlineInstance::get().unwrap();
+        let _guard = ReadlineInstance::get().unwrap();
 
         // Should be initialized
         assert!(ReadlineInstance::is_initialized());
-
-        // Verify it's a valid editor
-        assert!(guard.history().is_some());
     }
-    
+
     #[test]
     fn test_thread_safety() {
         // Test concurrent access from multiple threads
-        let handles: Vec<_> = (0..10).map(|i| {
-            thread::spawn(move || {
-                let mut guard = ReadlineInstance::get().unwrap();
-                let rl = &mut *guard;
-                rl.add_history_entry(&format!("test command {}", i)).unwrap();
+        let handles: Vec<_> = (0..10)
+            .map(|i| {
+                thread::spawn(move || {
+                    ReadlineInstance::add_history(&format!("test command {}", i)).unwrap();
+                })
             })
-        }).collect();
-        
+            .collect();
+
         // Wait for all threads to complete
         for handle in handles {
             handle.join().unwrap();
         }
-        
-        // Verify all history entries were added (history should not be empty)
-        let mut guard = ReadlineInstance::get().unwrap();
-        let rl = &mut *guard;
-        // Just verify that history exists, not the exact count
-        assert!(rl.history().is_some());
+
+        // Verify all history entries were added
+        let guard = ReadlineInstance::get().unwrap();
+        let rl = &*guard;
+        // Verify history exists and has entries
+        assert!(!rl.get_history_entries().is_empty());
     }
-    
+
     #[test]
     fn test_history_addition() {
         ReadlineInstance::add_history("command 1").unwrap();
         ReadlineInstance::add_history("command 2").unwrap();
-        
-        let mut guard = ReadlineInstance::get().unwrap();
-        let rl = &mut *guard;
-        // Just verify that history exists
-        assert!(rl.history().is_some());
+
+        let guard = ReadlineInstance::get().unwrap();
+        let rl = &*guard;
+        // Verify history has entries
+        let entries = rl.get_history_entries();
+        assert!(!entries.is_empty());
     }
-    
+
     #[test]
     fn test_save_history() {
         // Add some history entries
         ReadlineInstance::add_history("test command 1").unwrap();
         ReadlineInstance::add_history("test command 2").unwrap();
-        
+
         // Save history should succeed
         let result = ReadlineInstance::save_history();
         assert!(result.is_ok());
-        
+
         // History should still be there after save
-        let mut guard = ReadlineInstance::get().unwrap();
-        let rl = &mut *guard;
-        // Just verify that history exists
-        assert!(rl.history().is_some());
+        let guard = ReadlineInstance::get().unwrap();
+        let rl = &*guard;
+        // Verify history still exists
+        assert!(!rl.get_history_entries().is_empty());
     }
-    
+
     #[test]
     fn test_cleanup() {
         // Add some history entries
         ReadlineInstance::add_history("cleanup test 1").unwrap();
         ReadlineInstance::add_history("cleanup test 2").unwrap();
-        
-        // Verify entries were added
-        let mut guard = ReadlineInstance::get().unwrap();
-        let rl = &mut *guard;
-        // Just verify that history exists
-        assert!(rl.history().is_some());
-        
+
         // Cleanup should succeed
         let result = ReadlineInstance::cleanup();
         assert!(result.is_ok());
-        
-        // After cleanup, history should be cleared
-        let mut guard2 = ReadlineInstance::get().unwrap();
-        let rl2 = &mut *guard2;
-        // Just verify that history still exists (it might be empty but not None)
-        assert!(rl2.history().is_some());
     }
 }
