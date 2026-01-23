@@ -109,6 +109,12 @@ pub struct Readline {
     original_line: String,
     /// Original cursor position before entering search mode
     original_cursor: usize,
+    /// Kill ring (circular buffer for killed text)
+    kill_ring: Vec<String>,
+    /// Current position in kill ring
+    kill_ring_index: usize,
+    /// Maximum size of kill ring (Emacs default is 16)
+    max_kill_ring_size: usize,
 }
 
 impl Readline {
@@ -142,6 +148,9 @@ impl Readline {
             search_match_index: 0,
             original_line: String::new(),
             original_cursor: 0,
+            kill_ring: Vec::new(),
+            kill_ring_index: 0,
+            max_kill_ring_size: 16,
         })
     }
 
@@ -765,6 +774,255 @@ impl Readline {
         true
     }
 
+    /// Kills (cuts) text from cursor to end of line (Ctrl-K).
+    ///
+    /// The killed text is added to the kill ring for later yanking.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Text was killed, a redraw is needed
+    /// * `false` - No text to kill
+    pub fn kill_to_end(&mut self) -> bool {
+        let line_len = self.line.chars().count();
+        if self.cursor >= line_len {
+            return false;
+        }
+
+        // Get text from cursor to end
+        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        let killed = self.line[byte_pos..].to_string();
+
+        // Remove text from cursor to end
+        self.line.truncate(byte_pos);
+
+        // Add to kill ring
+        self.add_to_kill_ring(killed);
+        true
+    }
+
+    /// Kills (cuts) text from start of line to cursor (Ctrl-U).
+    ///
+    /// The killed text is added to the kill ring for later yanking.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Text was killed, a redraw is needed
+    /// * `false` - No text to kill
+    pub fn kill_to_start(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        // Get text from start to cursor
+        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        let killed = self.line[..byte_pos].to_string();
+
+        // Remove text from start to cursor
+        self.line = self.line[byte_pos..].to_string();
+        self.cursor = 0;
+
+        // Add to kill ring
+        self.add_to_kill_ring(killed);
+        true
+    }
+
+    /// Kills (cuts) word to the right of cursor (Alt-D).
+    ///
+    /// Words are sequences of alphanumeric characters.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Text was killed, a redraw is needed
+    /// * `false` - No text to kill
+    pub fn kill_word_right(&mut self) -> bool {
+        let line_len = self.line.chars().count();
+        if self.cursor >= line_len {
+            return false;
+        }
+
+        // Find end of current word
+        let chars: Vec<char> = self.line.chars().collect();
+        let mut end = self.cursor;
+
+        // Skip non-alphanumeric characters
+        while end < line_len && !chars[end].is_alphanumeric() {
+            end += 1;
+        }
+
+        // Skip alphanumeric characters (the word)
+        while end < line_len && chars[end].is_alphanumeric() {
+            end += 1;
+        }
+
+        if end == self.cursor {
+            return false;
+        }
+
+        // Get the word to kill
+        let start_byte = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        let end_byte = self.line.chars().take(end).map(|c| c.len_utf8()).sum();
+        let killed = self.line[start_byte..end_byte].to_string();
+
+        // Remove the word
+        self.line = format!("{}{}", &self.line[..start_byte], &self.line[end_byte..]);
+
+        // Add to kill ring
+        self.add_to_kill_ring(killed);
+        true
+    }
+
+    /// Kills (cuts) word to the left of cursor (Ctrl-W).
+    ///
+    /// Words are sequences of alphanumeric characters.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Text was killed, a redraw is needed
+    /// * `false` - No text to kill
+    pub fn kill_word_left(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        // Find start of previous word
+        let chars: Vec<char> = self.line.chars().collect();
+        let mut start = self.cursor;
+
+        // Skip non-alphanumeric characters
+        while start > 0 && !chars[start - 1].is_alphanumeric() {
+            start -= 1;
+        }
+
+        // Skip alphanumeric characters (the word)
+        while start > 0 && chars[start - 1].is_alphanumeric() {
+            start -= 1;
+        }
+
+        if start == self.cursor {
+            return false;
+        }
+
+        // Get the word to kill
+        let start_byte = self.line.chars().take(start).map(|c| c.len_utf8()).sum();
+        let end_byte = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        let killed = self.line[start_byte..end_byte].to_string();
+
+        // Remove the word and update cursor
+        self.line = format!("{}{}", &self.line[..start_byte], &self.line[end_byte..]);
+        self.cursor = start;
+
+        // Add to kill ring
+        self.add_to_kill_ring(killed);
+        true
+    }
+
+    /// Yanks (pastes) the last killed text (Ctrl-Y).
+    ///
+    /// Inserts the most recently killed text at the cursor position.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Text was yanked, a redraw is needed
+    /// * `false` - Kill ring is empty
+    pub fn yank(&mut self) -> bool {
+        if self.kill_ring.is_empty() {
+            return false;
+        }
+
+        // Get the most recent kill (index adjusted to point to last entry)
+        let index = if self.kill_ring_index == 0 {
+            self.kill_ring.len() - 1
+        } else {
+            self.kill_ring_index - 1
+        };
+
+        let text = &self.kill_ring[index];
+
+        // Insert at cursor position
+        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        self.line.insert_str(byte_pos, text);
+        self.cursor += text.chars().count();
+        true
+    }
+
+    /// Moves cursor left by one word (Ctrl-Left or Alt-B).
+    ///
+    /// Words are sequences of alphanumeric characters.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at start
+    pub fn handle_word_left(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        let chars: Vec<char> = self.line.chars().collect();
+        let mut new_pos = self.cursor;
+
+        // Skip non-alphanumeric characters
+        while new_pos > 0 && !chars[new_pos - 1].is_alphanumeric() {
+            new_pos -= 1;
+        }
+
+        // Skip alphanumeric characters (the word)
+        while new_pos > 0 && chars[new_pos - 1].is_alphanumeric() {
+            new_pos -= 1;
+        }
+
+        self.cursor = new_pos;
+        true
+    }
+
+    /// Moves cursor right by one word (Ctrl-Right or Alt-F).
+    ///
+    /// Words are sequences of alphanumeric characters.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at end
+    pub fn handle_word_right(&mut self) -> bool {
+        let line_len = self.line.chars().count();
+        if self.cursor >= line_len {
+            return false;
+        }
+
+        let chars: Vec<char> = self.line.chars().collect();
+        let mut new_pos = self.cursor;
+
+        // Skip alphanumeric characters (the current word)
+        while new_pos < line_len && chars[new_pos].is_alphanumeric() {
+            new_pos += 1;
+        }
+
+        // Skip non-alphanumeric characters
+        while new_pos < line_len && !chars[new_pos].is_alphanumeric() {
+            new_pos += 1;
+        }
+
+        self.cursor = new_pos;
+        true
+    }
+
+    /// Adds text to the kill ring.
+    ///
+    /// The kill ring is a circular buffer with a maximum size.
+    fn add_to_kill_ring(&mut self, text: String) {
+        // Add to kill ring
+        self.kill_ring.push(text);
+
+        // Update index
+        self.kill_ring_index = self.kill_ring.len();
+
+        // Trim if exceeds max size
+        if self.kill_ring.len() > self.max_kill_ring_size {
+            self.kill_ring.remove(0);
+            self.kill_ring_index = self.kill_ring.len();
+        }
+    }
+
     /// Redraws the current line to the terminal.
     ///
     /// This function clears the current line and redraws it with the prompt
@@ -901,18 +1159,30 @@ impl Readline {
                 }
             }
 
-            // Left arrow: Move cursor left
+            // Left arrow: Move cursor left (or by word with Ctrl)
             KeyCode::Left => {
-                if self.handle_left() {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if self.handle_word_left() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
+                } else if self.handle_left() {
                     KeyResult::Redraw
                 } else {
                     KeyResult::Continue
                 }
             }
 
-            // Right arrow: Move cursor right
+            // Right arrow: Move cursor right (or by word with Ctrl)
             KeyCode::Right => {
-                if self.handle_right() {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if self.handle_word_right() {
+                        KeyResult::Redraw
+                    } else {
+                        KeyResult::Continue
+                    }
+                } else if self.handle_right() {
                     KeyResult::Redraw
                 } else {
                     KeyResult::Continue
@@ -949,6 +1219,69 @@ impl Readline {
             // End: Move cursor to end
             KeyCode::End => {
                 if self.handle_end() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Ctrl-K: Kill to end of line
+            KeyCode::Char('k') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.kill_to_end() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Ctrl-U: Kill to start of line
+            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.kill_to_start() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Ctrl-W: Kill word to left
+            KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.kill_word_left() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Alt-D: Kill word to right
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::ALT) => {
+                if self.kill_word_right() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Ctrl-Y: Yank last killed text
+            KeyCode::Char('y') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.yank() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Alt-B: Move cursor left by word
+            KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::ALT) => {
+                if self.handle_word_left() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Alt-F: Move cursor right by word
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::ALT) => {
+                if self.handle_word_right() {
                     KeyResult::Redraw
                 } else {
                     KeyResult::Continue
