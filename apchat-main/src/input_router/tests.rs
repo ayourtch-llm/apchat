@@ -270,6 +270,7 @@ mod tests {
         assert!(manager.webex_reader.is_none());
         assert!(manager.websocket_handlers.is_empty());
     }
+}
 
 #[cfg(test)]
 mod manager_tests {

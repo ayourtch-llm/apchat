@@ -1,7 +1,7 @@
 //! Readline implementation with terminal mode management.
 //!
 //! This module provides a `Readline` struct that manages terminal I/O
-//! using "semi-raw" mode: raw input with normal output (like rustyline).
+//! using "semi-raw" mode: raw input with normal output.
 
 use crossterm::cursor::MoveToColumn;
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
@@ -67,8 +67,6 @@ enum EditMode {
 /// The "semi-raw" mode means:
 /// - Raw input: Character-by-character input without line buffering
 /// - Normal output: Output is processed normally (not raw)
-///
-/// This is similar to how rustyline operates.
 ///
 /// # History Management
 ///

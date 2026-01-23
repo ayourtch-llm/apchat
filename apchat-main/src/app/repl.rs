@@ -287,7 +287,7 @@ pub async fn run_repl_mode(
     let current_model_shared = Arc::new(std::sync::RwLock::new(chat.current_model));
     let current_model_for_main = current_model_shared.clone();
 
-    // Spawn terminal input router to handle stdin with rustyline and route to MSPC channel
+    // Spawn terminal input router to handle stdin and route to MSPC channel
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
     let client_config_for_router = chat.client_config.clone();
 

@@ -24,7 +24,6 @@ apchat-toolcore = { path = "../apchat-toolcore" }
 apchat-vty = { path = "../apchat-vty" }
 regex = "*"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
-rustyline = "14.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 similar = { version = "2.6", features = ["inline"] }
