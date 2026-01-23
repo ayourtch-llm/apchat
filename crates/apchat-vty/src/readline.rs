@@ -2241,7 +2241,7 @@ mod tests {
         assert!(readline.history_up());
         assert_eq!(readline.line(), "command 3");
         assert_eq!(readline.cursor(), 9);
-        assert_eq!(readline.saved_line, "new input");
+        assert_eq!(readline.saved_lines.get(0).map(|s| s.as_str()), Some("new input"));
 
         // Navigate up again
         assert!(readline.history_up());
@@ -2296,7 +2296,7 @@ mod tests {
 
         // Navigate up - should save current line
         assert!(readline.history_up());
-        assert_eq!(readline.saved_line, "typing something");
+        assert_eq!(readline.saved_lines.get(0).map(|s| s.as_str()), Some("typing something"));
         assert_eq!(readline.line(), "old command");
 
         // Navigate down - should restore saved line
@@ -2335,7 +2335,7 @@ mod tests {
         // Exit history navigation
         readline.exit_history_navigation();
         assert!(readline.history_index.is_none());
-        assert_eq!(readline.saved_line, "");
+        assert!(readline.saved_lines.is_empty());
     }
 
     #[test]
