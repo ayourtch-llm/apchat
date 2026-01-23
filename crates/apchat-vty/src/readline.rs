@@ -3,7 +3,7 @@
 //! This module provides a `Readline` struct that manages terminal I/O
 //! using "semi-raw" mode: raw input with normal output.
 
-use crossterm::cursor::{MoveTo, MoveToColumn};
+use crossterm::cursor::{MoveTo, MoveToColumn, MoveUp};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::Clear;
 use crossterm::QueueableCommand;
@@ -254,13 +254,10 @@ pub struct Readline {
     max_lines: usize,
     /// Scroll offset for displaying lines
     scroll_offset: usize,
-    // Compatibility fields for transition (deprecated)
-    #[deprecated(note = "Use lines[0] instead")]
+    /// Compatibility field: current line (deprecated, use lines[cursor_line])
     line: String,
-    #[deprecated(note = "Use cursor_col instead")]
+    /// Compatibility field: cursor position (deprecated, use cursor_col)
     cursor: usize,
-    #[deprecated(note = "Use saved_lines instead")]
-    saved_line: String,
 }
 
 impl Readline {
@@ -301,10 +298,8 @@ impl Readline {
             max_kill_ring_size: 16,
             max_lines: 10,
             scroll_offset: 0,
-            // Compatibility fields
             line: String::new(),
             cursor: 0,
-            saved_line: String::new(),
         })
     }
 
@@ -319,7 +314,7 @@ impl Readline {
     /// assert_eq!(readline.line(), "");
     /// ```
     pub fn line(&self) -> &str {
-        &self.line
+        &self.lines[self.cursor_line]
     }
 
     /// Returns the current cursor position.
@@ -333,7 +328,7 @@ impl Readline {
     /// assert_eq!(readline.cursor(), 0);
     /// ```
     pub fn cursor(&self) -> usize {
-        self.cursor
+        self.cursor_col
     }
 
     /// Checks if raw mode is currently enabled.
@@ -580,7 +575,7 @@ impl Readline {
         self.original_lines = self.lines.clone();
         self.original_cursor_line = self.cursor_line;
         self.original_cursor_col = self.cursor_col;
-        // Also save to compatibility fields for now
+        // Also save to compatibility fields
         self.line = self.lines.get(0).cloned().unwrap_or_default();
         self.cursor = self.cursor_col;
         self.search_pattern.clear();
@@ -628,12 +623,12 @@ impl Readline {
         if !self.search_matches.is_empty() {
             self.search_match_index = 0;
             let match_idx = self.search_matches[0];
-            self.line = self.history[match_idx].clone();
-            self.cursor = self.line.chars().count();
+            self.lines[self.cursor_line] = self.history[match_idx].clone();
+            self.cursor_col = self.lines[self.cursor_line].chars().count();
         } else {
             // No matches, clear the line
-            self.line.clear();
-            self.cursor = 0;
+            self.lines[self.cursor_line].clear();
+            self.cursor_col = 0;
         }
     }
 
@@ -649,8 +644,8 @@ impl Readline {
         // Move to next match (with wraparound)
         self.search_match_index = (self.search_match_index + 1) % self.search_matches.len();
         let match_idx = self.search_matches[self.search_match_index];
-        self.line = self.history[match_idx].clone();
-        self.cursor = self.line.chars().count();
+        self.lines[self.cursor_line] = self.history[match_idx].clone();
+        self.cursor_col = self.lines[self.cursor_line].chars().count();
     }
 
     /// Handles a character input event.
@@ -687,17 +682,21 @@ impl Readline {
     pub fn handle_char(&mut self, c: char) -> bool {
         // Exit history navigation if we were in it
         if self.history_index.is_some() {
-            self.line.clear();
-            self.cursor = 0;
+            self.lines = vec![String::new()];
+            self.cursor_line = 0;
+            self.cursor_col = 0;
             self.history_index = None;
-            self.saved_line.clear();
+            self.saved_lines.clear();
         }
 
-        // Insert character at cursor position
-        // Need to convert character position to byte position
-        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        self.line.insert(byte_pos, c);
-        self.cursor += 1;
+        // Insert character at cursor position in the current line
+        let line = &mut self.lines[self.cursor_line];
+        
+        // Convert character position to byte position for UTF-8
+        let byte_pos = line.chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        line.insert(byte_pos, c);
+        
+        self.cursor_col += 1;
         true
     }
 
@@ -952,11 +951,11 @@ impl Readline {
     /// assert_eq!(readline.cursor(), 0);
     /// ```
     pub fn handle_home(&mut self) -> bool {
-        if self.cursor == 0 {
+        if self.cursor_col == 0 {
             return false;
         }
 
-        self.cursor = 0;
+        self.cursor_col = 0;
         true
     }
 
@@ -987,12 +986,12 @@ impl Readline {
     /// assert_eq!(readline.cursor(), 5);
     /// ```
     pub fn handle_end(&mut self) -> bool {
-        let line_len = self.line.chars().count();
-        if self.cursor >= line_len {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        if self.cursor_col >= line_len {
             return false;
         }
 
-        self.cursor = line_len;
+        self.cursor_col = line_len;
         true
     }
 
@@ -1005,17 +1004,18 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_to_end(&mut self) -> bool {
-        let line_len = self.line.chars().count();
-        if self.cursor >= line_len {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        if self.cursor_col >= line_len {
             return false;
         }
 
         // Get text from cursor to end
-        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        let killed = self.line[byte_pos..].to_string();
+        let byte_pos = self.lines[self.cursor_line].chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        let killed = self.lines[self.cursor_line][byte_pos..].to_string();
 
         // Remove text from cursor to end
-        self.line.truncate(byte_pos);
+        self.lines[self.cursor_line] = self.lines[self.cursor_line].clone();
+        self.lines[self.cursor_line].truncate(byte_pos);
 
         // Add to kill ring
         self.add_to_kill_ring(killed);
@@ -1031,17 +1031,17 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_to_start(&mut self) -> bool {
-        if self.cursor == 0 {
+        if self.cursor_col == 0 {
             return false;
         }
 
         // Get text from start to cursor
-        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        let killed = self.line[..byte_pos].to_string();
+        let byte_pos = self.lines[self.cursor_line].chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        let killed = self.lines[self.cursor_line][..byte_pos].to_string();
 
         // Remove text from start to cursor
-        self.line = self.line[byte_pos..].to_string();
-        self.cursor = 0;
+        self.lines[self.cursor_line] = self.lines[self.cursor_line][byte_pos..].to_string();
+        self.cursor_col = 0;
 
         // Add to kill ring
         self.add_to_kill_ring(killed);
@@ -1057,14 +1057,14 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_word_right(&mut self) -> bool {
-        let line_len = self.line.chars().count();
-        if self.cursor >= line_len {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        if self.cursor_col >= line_len {
             return false;
         }
 
         // Find end of current word
-        let chars: Vec<char> = self.line.chars().collect();
-        let mut end = self.cursor;
+        let chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+        let mut end = self.cursor_col;
 
         // Skip non-alphanumeric characters
         while end < line_len && !chars[end].is_alphanumeric() {
@@ -1076,17 +1076,17 @@ impl Readline {
             end += 1;
         }
 
-        if end == self.cursor {
+        if end == self.cursor_col {
             return false;
         }
 
         // Get the word to kill
-        let start_byte = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        let end_byte = self.line.chars().take(end).map(|c| c.len_utf8()).sum();
-        let killed = self.line[start_byte..end_byte].to_string();
+        let start_byte = self.lines[self.cursor_line].chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        let end_byte = self.lines[self.cursor_line].chars().take(end).map(|c| c.len_utf8()).sum();
+        let killed = self.lines[self.cursor_line][start_byte..end_byte].to_string();
 
         // Remove the word
-        self.line = format!("{}{}", &self.line[..start_byte], &self.line[end_byte..]);
+        self.lines[self.cursor_line] = format!("{}{}", &self.lines[self.cursor_line][..start_byte], &self.lines[self.cursor_line][end_byte..]);
 
         // Add to kill ring
         self.add_to_kill_ring(killed);
@@ -1102,13 +1102,13 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_word_left(&mut self) -> bool {
-        if self.cursor == 0 {
+        if self.cursor_col == 0 {
             return false;
         }
 
         // Find start of previous word
-        let chars: Vec<char> = self.line.chars().collect();
-        let mut start = self.cursor;
+        let chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+        let mut start = self.cursor_col;
 
         // Skip non-alphanumeric characters
         while start > 0 && !chars[start - 1].is_alphanumeric() {
@@ -1120,18 +1120,18 @@ impl Readline {
             start -= 1;
         }
 
-        if start == self.cursor {
+        if start == self.cursor_col {
             return false;
         }
 
         // Get the word to kill
-        let start_byte = self.line.chars().take(start).map(|c| c.len_utf8()).sum();
-        let end_byte = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        let killed = self.line[start_byte..end_byte].to_string();
+        let start_byte = self.lines[self.cursor_line].chars().take(start).map(|c| c.len_utf8()).sum();
+        let end_byte = self.lines[self.cursor_line].chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        let killed = self.lines[self.cursor_line][start_byte..end_byte].to_string();
 
         // Remove the word and update cursor
-        self.line = format!("{}{}", &self.line[..start_byte], &self.line[end_byte..]);
-        self.cursor = start;
+        self.lines[self.cursor_line] = format!("{}{}", &self.lines[self.cursor_line][..start_byte], &self.lines[self.cursor_line][end_byte..]);
+        self.cursor_col = start;
 
         // Add to kill ring
         self.add_to_kill_ring(killed);
@@ -1161,9 +1161,9 @@ impl Readline {
         let text = &self.kill_ring[index];
 
         // Insert at cursor position
-        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
-        self.line.insert_str(byte_pos, text);
-        self.cursor += text.chars().count();
+        let byte_pos = self.lines[self.cursor_line].chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
+        self.lines[self.cursor_line].insert_str(byte_pos, text);
+        self.cursor_col += text.chars().count();
         true
     }
 
@@ -1235,8 +1235,8 @@ impl Readline {
             let final_line = format!("{}{}", last_line, after);
             self.lines.insert(self.cursor_line + pasted_lines.len() - 1, final_line);
 
-            // Remove the original line that we split
-            self.lines.remove(self.cursor_line + pasted_lines.len() - 1);
+            // Note: No need to remove the original line since we already replaced it in step 2
+            // The old line at cursor_line was overwritten with "before + pasted_lines[0]"
 
             // Move cursor to end of last pasted line
             self.cursor_line += pasted_lines.len() - 1;
@@ -1258,12 +1258,12 @@ impl Readline {
     /// * `true` - Cursor moved, a redraw is needed
     /// * `false` - Cursor already at start
     pub fn handle_word_left(&mut self) -> bool {
-        if self.cursor == 0 {
+        if self.cursor_col == 0 {
             return false;
         }
 
-        let chars: Vec<char> = self.line.chars().collect();
-        let mut new_pos = self.cursor;
+        let chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+        let mut new_pos = self.cursor_col;
 
         // Skip non-alphanumeric characters
         while new_pos > 0 && !chars[new_pos - 1].is_alphanumeric() {
@@ -1275,7 +1275,7 @@ impl Readline {
             new_pos -= 1;
         }
 
-        self.cursor = new_pos;
+        self.cursor_col = new_pos;
         true
     }
 
@@ -1288,13 +1288,13 @@ impl Readline {
     /// * `true` - Cursor moved, a redraw is needed
     /// * `false` - Cursor already at end
     pub fn handle_word_right(&mut self) -> bool {
-        let line_len = self.line.chars().count();
-        if self.cursor >= line_len {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        if self.cursor_col >= line_len {
             return false;
         }
 
-        let chars: Vec<char> = self.line.chars().collect();
-        let mut new_pos = self.cursor;
+        let chars: Vec<char> = self.lines[self.cursor_line].chars().collect();
+        let mut new_pos = self.cursor_col;
 
         // Skip alphanumeric characters (the current word)
         while new_pos < line_len && chars[new_pos].is_alphanumeric() {
@@ -1306,7 +1306,7 @@ impl Readline {
             new_pos += 1;
         }
 
-        self.cursor = new_pos;
+        self.cursor_col = new_pos;
         true
     }
 
@@ -1458,42 +1458,58 @@ impl Readline {
         let prompt_visible = strip_ansi_codes(prompt);
         let prompt_len = prompt_visible.chars().count();
 
-        // Clear and redraw each visible line
-        for i in start..end {
-            // Move to the beginning of this line (column 0, row i - start)
-            stdout.queue(MoveTo(0, (i - start) as u16)).ok();
+        // Move to column 0 of the current line
+        stdout.queue(MoveToColumn(0)).ok();
 
-            // Clear the entire line
+        // Display each visible line
+        for (idx, i) in (start..end).enumerate() {
+            if idx > 0 {
+                // For lines after the first, move to next line
+                println!();
+            }
+            
+            // Clear the line and move to column 0
             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-
+            stdout.queue(MoveToColumn(0)).ok();
+            
             // Display prompt only on the first line (line 0)
             if i == 0 {
                 write!(stdout, "{}", prompt).ok();
             }
-
+            
             // Display the line content
             write!(stdout, "{}", self.lines[i]).ok();
         }
 
         // Clear any remaining lines that might have content from before
-        // (in case we had more lines displayed previously)
-        for i in end..(start + self.max_lines) {
-            stdout.queue(MoveTo(0, (i - start) as u16)).ok();
-            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+        let display_count = end - start;
+        if display_count < self.max_lines {
+            for _ in display_count..self.max_lines {
+                println!();
+                stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+            }
         }
 
         // Position cursor at the correct location
-        // The visual line is cursor_line - scroll_offset (relative to where we started drawing)
+        // We need to move back up to the correct line
         let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
+        
+        // Move cursor up to the correct line
+        // If we're on line 2 (visual), and we've printed 3 lines, we need to move up 1 line
+        let lines_from_bottom = display_count.saturating_sub(visual_line + 1);
+        if lines_from_bottom > 0 {
+            // Move up the required number of lines
+            for _ in 0..lines_from_bottom {
+                stdout.queue(MoveUp(1)).ok();
+            }
+        }
+        
+        // Move to correct column
         let mut visual_col = self.cursor_col;
-
-        // Add prompt length to column if we're on the first line
         if visual_line == 0 {
             visual_col += prompt_len;
         }
-
-        // Move cursor to the correct position
-        stdout.queue(MoveTo(visual_col as u16, visual_line as u16)).ok();
+        stdout.queue(MoveToColumn(visual_col as u16)).ok();
 
         // Flush all queued commands
         stdout.flush().ok();
@@ -1539,10 +1555,10 @@ impl Readline {
                         self.add_history_entry(&line);
                     }
                     // Reset the line buffer
-                    self.line.clear();
-                    self.cursor = 0;
+                    self.lines[self.cursor_line].clear();
+                    self.cursor_col = 0;
                     self.history_index = None;
-                    self.saved_line.clear();
+                    self.saved_lines.clear();
                     KeyResult::Return(ReadlineResult::Input(line))
                 } else {
                     // Regular Enter not at end inserts newline
@@ -1570,7 +1586,7 @@ impl Readline {
 
             // Ctrl-D: EOF (only if line is empty)
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if self.line.is_empty() {
+                if self.lines[self.cursor_line].is_empty() {
                     KeyResult::Return(ReadlineResult::Eof)
                 } else {
                     KeyResult::Continue
