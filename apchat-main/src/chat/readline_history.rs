@@ -174,12 +174,12 @@ pub fn save_to_file(entry: &ReadlineEntry) -> Result<String> {
     Ok(format!("Saved readline history to {} (1 entry)", path))
 }
 
-/// Load history and add to rustyline editor
-pub fn load_and_add_to_editor(rl: &mut rustyline::Editor<(), rustyline::history::FileHistory>) -> Result<()> {
+/// Load history and add to crossterm readline editor
+pub fn load_and_add_to_editor(rl: &mut apchat_vty::Readline) -> Result<()> {
     let history = load_history(None)?;
 
     for entry in history.get_entries() {
-        rl.add_history_entry(&entry.command)?;
+        rl.add_history_entry(&entry.command);
     }
 
     Ok(())

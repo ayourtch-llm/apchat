@@ -5,7 +5,7 @@
 
 pub mod readline;
 
-pub use readline::Readline;
+pub use readline::{Readline, ReadlineResult};
 
 use std::io::{self, Write};
 
