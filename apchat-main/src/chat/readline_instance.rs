@@ -134,8 +134,8 @@ impl ReadlineInstance {
 
     /// Clean up the readline instance
     ///
-    /// This method performs cleanup operations including saving history.
-    /// Should be called before application exit.
+    /// This method performs cleanup operations including saving history
+    /// and restoring terminal settings. Should be called before application exit.
     ///
     /// # Returns
     ///
@@ -147,6 +147,16 @@ impl ReadlineInstance {
                 &format!("Warning: Failed to save readline history: {}", e),
                 true,
             );
+        }
+
+        // Restore terminal settings (important for static instances that never get dropped)
+        if let Ok(guard) = READLINE_INSTANCE.try_lock() {
+            if let Err(e) = guard.restore_terminal() {
+                print_heart_yellow(
+                    &format!("Warning: Failed to restore terminal settings: {}", e),
+                    true,
+                );
+            }
         }
 
         // Note: We don't clear the history here because:

@@ -1999,6 +1999,25 @@ impl Readline {
     }
 }
 
+impl Readline {
+    /// Manually restore terminal settings.
+    ///
+    /// This method can be called explicitly to restore terminal settings
+    /// before the struct is dropped. This is useful when the Readline
+    /// instance is stored in a static variable that never gets dropped.
+    ///
+    /// # Returns
+    ///
+    /// * `io::Result<()>` - Ok if successful, Err otherwise
+    pub fn restore_terminal(&self) -> io::Result<()> {
+        if let Some(ref original) = self.original_termios {
+            restore_terminal_settings(original)
+        } else {
+            Ok(()) // No original settings to restore
+        }
+    }
+}
+
 impl Drop for Readline {
     /// Disables raw mode when the `Readline` struct is dropped.
     ///
