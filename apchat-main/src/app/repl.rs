@@ -302,7 +302,10 @@ pub async fn run_repl_mode(
             let model_indicator = format!("[{} ({})]", current_model.display_name(), model_name).bright_magenta();
             let prompt_string = format!("{} {}", model_indicator, "You:".bright_green().bold());
 
-            // Use spawn_blocking for rustyline (it's a blocking operation)
+            // Use spawn_blocking for readline (it's a blocking operation)
+            // Note: We pass None for MPSC receiver since the MspcChannel uses
+            // TokioMutex which can't be easily used in sync context.
+            // External signal handling will be addressed in a future update.
             let line_result = tokio::task::spawn_blocking(move || {
                 crate::chat::ReadlineInstance::readline(&prompt_string)
             }).await;
