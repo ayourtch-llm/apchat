@@ -331,6 +331,302 @@ impl Readline {
         self.saved_line.clear();
     }
 
+    /// Handles a character input event.
+    ///
+    /// Inserts the character at the current cursor position.
+    ///
+    /// # Arguments
+    ///
+    /// * `c` - The character to insert
+    ///
+    /// # Returns
+    ///
+    /// * `true` - The line was modified, a redraw is needed
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    ///
+    /// // Insert characters
+    /// assert!(readline.handle_char('h'));
+    /// assert!(readline.handle_char('i'));
+    /// assert_eq!(readline.line(), "hi");
+    /// assert_eq!(readline.cursor(), 2);
+    ///
+    /// // Insert in middle
+    /// readline.cursor = 1;
+    /// assert!(readline.handle_char('e'));
+    /// assert_eq!(readline.line(), "hei");
+    /// assert_eq!(readline.cursor(), 2);
+    /// ```
+    pub fn handle_char(&mut self, c: char) -> bool {
+        // Exit history navigation if we were in it
+        if self.history_index.is_some() {
+            self.line.clear();
+            self.cursor = 0;
+            self.history_index = None;
+            self.saved_line.clear();
+        }
+
+        // Insert character at cursor position
+        // Need to convert character position to byte position
+        let byte_pos = self.line.chars().take(self.cursor).map(|c| c.len_utf8()).sum();
+        self.line.insert(byte_pos, c);
+        self.cursor += 1;
+        true
+    }
+
+    /// Handles the Backspace key.
+    ///
+    /// Deletes the character before the cursor.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - The line was modified, a redraw is needed
+    /// * `false` - Nothing to delete (cursor at start)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hello".to_string();
+    /// readline.cursor = 5;
+    ///
+    /// // Delete last character
+    /// assert!(readline.handle_backspace());
+    /// assert_eq!(readline.line(), "hell");
+    /// assert_eq!(readline.cursor(), 4);
+    ///
+    /// // Try to delete at start - should do nothing
+    /// readline.cursor = 0;
+    /// assert!(!readline.handle_backspace());
+    /// assert_eq!(readline.line(), "hell");
+    /// ```
+    pub fn handle_backspace(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        // Exit history navigation if we were in it
+        if self.history_index.is_some() {
+            self.exit_history_navigation();
+        }
+
+        self.cursor -= 1;
+        // Remove the character at the current cursor position
+        // Use remove on bytes is safe because we decremented cursor
+        // and cursor is now at a valid character boundary
+        let line_chars: Vec<char> = self.line.chars().collect();
+        let new_line: String = line_chars[..self.cursor]
+            .iter()
+            .chain(line_chars[self.cursor + 1..].iter())
+            .collect();
+        self.line = new_line;
+        true
+    }
+
+    /// Handles the Delete key.
+    ///
+    /// Deletes the character at the cursor position.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - The line was modified, a redraw is needed
+    /// * `false` - Nothing to delete (cursor at end)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hello".to_string();
+    /// readline.cursor = 1;
+    ///
+    /// // Delete character at cursor
+    /// assert!(readline.handle_delete());
+    /// assert_eq!(readline.line(), "hllo");
+    /// assert_eq!(readline.cursor(), 1);
+    ///
+    /// // Try to delete at end - should do nothing
+    /// readline.cursor = 4;
+    /// assert!(!readline.handle_delete());
+    /// assert_eq!(readline.line(), "hllo");
+    /// ```
+    pub fn handle_delete(&mut self) -> bool {
+        if self.cursor >= self.line.chars().count() {
+            return false;
+        }
+
+        // Exit history navigation if we were in it
+        if self.history_index.is_some() {
+            self.exit_history_navigation();
+        }
+
+        // Remove the character at the current cursor position
+        let line_chars: Vec<char> = self.line.chars().collect();
+        let new_line: String = line_chars[..self.cursor]
+            .iter()
+            .chain(line_chars[self.cursor + 1..].iter())
+            .collect();
+        self.line = new_line;
+        true
+    }
+
+    /// Handles the Left arrow key.
+    ///
+    /// Moves the cursor one position to the left.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at start
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hi".to_string();
+    /// readline.cursor = 2;
+    ///
+    /// // Move left
+    /// assert!(readline.handle_left());
+    /// assert_eq!(readline.cursor(), 1);
+    ///
+    /// // Move left again
+    /// assert!(readline.handle_left());
+    /// assert_eq!(readline.cursor(), 0);
+    ///
+    /// // Try to move past start - should do nothing
+    /// assert!(!readline.handle_left());
+    /// assert_eq!(readline.cursor(), 0);
+    /// ```
+    pub fn handle_left(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        self.cursor -= 1;
+        true
+    }
+
+    /// Handles the Right arrow key.
+    ///
+    /// Moves the cursor one position to the right.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at end
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hi".to_string();
+    /// readline.cursor = 0;
+    ///
+    /// // Move right
+    /// assert!(readline.handle_right());
+    /// assert_eq!(readline.cursor(), 1);
+    ///
+    /// // Move right again
+    /// assert!(readline.handle_right());
+    /// assert_eq!(readline.cursor(), 2);
+    ///
+    /// // Try to move past end - should do nothing
+    /// assert!(!readline.handle_right());
+    /// assert_eq!(readline.cursor(), 2);
+    /// ```
+    pub fn handle_right(&mut self) -> bool {
+        if self.cursor >= self.line.chars().count() {
+            return false;
+        }
+
+        self.cursor += 1;
+        true
+    }
+
+    /// Handles the Home key.
+    ///
+    /// Moves the cursor to the start of the line.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at start
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hello".to_string();
+    /// readline.cursor = 5;
+    ///
+    /// // Move to start
+    /// assert!(readline.handle_home());
+    /// assert_eq!(readline.cursor(), 0);
+    ///
+    /// // Already at start - should return false
+    /// assert!(!readline.handle_home());
+    /// assert_eq!(readline.cursor(), 0);
+    /// ```
+    pub fn handle_home(&mut self) -> bool {
+        if self.cursor == 0 {
+            return false;
+        }
+
+        self.cursor = 0;
+        true
+    }
+
+    /// Handles the End key.
+    ///
+    /// Moves the cursor to the end of the line.
+    ///
+    /// # Returns
+    ///
+    /// * `true` - Cursor moved, a redraw is needed
+    /// * `false` - Cursor already at end
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hello".to_string();
+    /// readline.cursor = 0;
+    ///
+    /// // Move to end
+    /// assert!(readline.handle_end());
+    /// assert_eq!(readline.cursor(), 5);
+    ///
+    /// // Already at end - should return false
+    /// assert!(!readline.handle_end());
+    /// assert_eq!(readline.cursor(), 5);
+    /// ```
+    pub fn handle_end(&mut self) -> bool {
+        let line_len = self.line.chars().count();
+        if self.cursor >= line_len {
+            return false;
+        }
+
+        self.cursor = line_len;
+        true
+    }
+
     /// Redraws the current line to the terminal.
     ///
     /// This function clears the current line and redraws it with the prompt
@@ -670,5 +966,234 @@ mod tests {
         // Try to go past newest
         assert!(!readline.history_down());
         assert_eq!(readline.line(), "");
+    }
+
+    #[test]
+    fn test_handle_char() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Insert characters at end
+        assert!(readline.handle_char('h'));
+        assert_eq!(readline.line(), "h");
+        assert_eq!(readline.cursor(), 1);
+
+        assert!(readline.handle_char('i'));
+        assert_eq!(readline.line(), "hi");
+        assert_eq!(readline.cursor(), 2);
+
+        // Insert in middle
+        readline.cursor = 1;
+        assert!(readline.handle_char('e'));
+        assert_eq!(readline.line(), "hei");
+        assert_eq!(readline.cursor(), 2);
+
+        // Insert Unicode character
+        readline.cursor = 3;
+        assert!(readline.handle_char('😀'));
+        assert_eq!(readline.line(), "hei😀");
+        assert_eq!(readline.cursor(), 4);
+    }
+
+    #[test]
+    fn test_handle_char_exits_history_navigation() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("old");
+
+        // Navigate to history
+        readline.history_up();
+        assert_eq!(readline.line(), "old");
+        assert!(readline.history_index.is_some());
+
+        // Insert char - should exit history navigation
+        readline.handle_char('x');
+        assert_eq!(readline.line(), "x");
+        assert!(readline.history_index.is_none());
+    }
+
+    #[test]
+    fn test_handle_backspace() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hello".to_string();
+        readline.cursor = 5;
+
+        // Delete last character
+        assert!(readline.handle_backspace());
+        assert_eq!(readline.line(), "hell");
+        assert_eq!(readline.cursor(), 4);
+
+        // Delete another
+        assert!(readline.handle_backspace());
+        assert_eq!(readline.line(), "hel");
+        assert_eq!(readline.cursor(), 3);
+
+        // Delete in middle
+        readline.cursor = 2;
+        assert!(readline.handle_backspace());
+        assert_eq!(readline.line(), "hl");
+        assert_eq!(readline.cursor(), 1);
+
+        // Try to delete at start
+        readline.cursor = 0;
+        assert!(!readline.handle_backspace());
+        assert_eq!(readline.line(), "hl");
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    fn test_handle_backspace_exits_history_navigation() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("old");
+
+        // Navigate to history
+        readline.history_up();
+        assert_eq!(readline.line(), "old");
+
+        // Backspace - should exit history navigation and delete
+        assert!(readline.handle_backspace());
+        assert_eq!(readline.line(), "ol");
+        assert!(readline.history_index.is_none());
+    }
+
+    #[test]
+    fn test_handle_delete() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hello".to_string();
+        readline.cursor = 1;
+
+        // Delete character at cursor
+        assert!(readline.handle_delete());
+        assert_eq!(readline.line(), "hllo");
+        assert_eq!(readline.cursor(), 1);
+
+        // Delete another
+        assert!(readline.handle_delete());
+        assert_eq!(readline.line(), "hlo");
+        assert_eq!(readline.cursor(), 1);
+
+        // Move to end
+        readline.cursor = 3;
+
+        // Try to delete at end
+        assert!(!readline.handle_delete());
+        assert_eq!(readline.line(), "hlo");
+        assert_eq!(readline.cursor(), 3);
+    }
+
+    #[test]
+    fn test_handle_delete_exits_history_navigation() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("old");
+
+        // Navigate to history
+        readline.history_up();
+        assert_eq!(readline.line(), "old");
+        readline.cursor = 1;
+
+        // Delete - should exit history navigation
+        assert!(readline.handle_delete());
+        assert_eq!(readline.line(), "od");
+        assert!(readline.history_index.is_none());
+    }
+
+    #[test]
+    fn test_handle_left() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hi".to_string();
+        readline.cursor = 2;
+
+        // Move left
+        assert!(readline.handle_left());
+        assert_eq!(readline.cursor(), 1);
+
+        // Move left again
+        assert!(readline.handle_left());
+        assert_eq!(readline.cursor(), 0);
+
+        // Try to move past start
+        assert!(!readline.handle_left());
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    fn test_handle_right() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hi".to_string();
+        readline.cursor = 0;
+
+        // Move right
+        assert!(readline.handle_right());
+        assert_eq!(readline.cursor(), 1);
+
+        // Move right again
+        assert!(readline.handle_right());
+        assert_eq!(readline.cursor(), 2);
+
+        // Try to move past end
+        assert!(!readline.handle_right());
+        assert_eq!(readline.cursor(), 2);
+    }
+
+    #[test]
+    fn test_handle_home() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hello".to_string();
+        readline.cursor = 5;
+
+        // Move to start
+        assert!(readline.handle_home());
+        assert_eq!(readline.cursor(), 0);
+
+        // Already at start
+        assert!(!readline.handle_home());
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    fn test_handle_end() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.line = "hello".to_string();
+        readline.cursor = 0;
+
+        // Move to end
+        assert!(readline.handle_end());
+        assert_eq!(readline.cursor(), 5);
+
+        // Already at end
+        assert!(!readline.handle_end());
+        assert_eq!(readline.cursor(), 5);
+    }
+
+    #[test]
+    fn test_key_handlers_with_empty_line() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // All operations on empty line should be safe
+        assert!(!readline.handle_backspace());
+        assert!(!readline.handle_delete());
+        assert!(!readline.handle_left());
+        assert!(!readline.handle_right());
+        assert!(!readline.handle_home());
+        assert!(!readline.handle_end());
+
+        // But we can still insert
+        assert!(readline.handle_char('x'));
+        assert_eq!(readline.line(), "x");
+    }
+
+    #[test]
+    fn test_unicode_handling() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Insert multi-byte Unicode characters
+        readline.handle_char('😀');
+        readline.handle_char('🎉');
+
+        assert_eq!(readline.line(), "😀🎉");
+        assert_eq!(readline.cursor(), 2);
+
+        // Backspace should remove whole characters
+        readline.handle_backspace();
+        assert_eq!(readline.line(), "😀");
+        assert_eq!(readline.cursor(), 1);
     }
 }
