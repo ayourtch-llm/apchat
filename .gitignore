@@ -8,6 +8,8 @@ Cargo.lock
 # Environment variables
 .env
 
+log.txt
+
 # logs directory
 /logs/
 
