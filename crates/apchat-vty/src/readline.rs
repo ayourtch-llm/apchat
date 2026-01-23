@@ -9,6 +9,7 @@ use crossterm::terminal::Clear;
 use crossterm::QueueableCommand;
 use std::io::{self, Write};
 use std::time::Duration;
+use chrono::prelude::*;
 
 use apchat_mspc::MspcMessage;
 
@@ -1439,6 +1440,9 @@ impl Readline {
     pub fn redraw(&mut self, prompt: &str) {
         let stdout = &mut std::io::stdout();
 
+        let terminal_size = crossterm::terminal::size().ok();
+        let screen_width = terminal_size.map_or(80, |s| s.0.into());
+
         // In search mode, display the search interface on a single line
         if self.mode == EditMode::Search {
             // Move cursor to start of line (column 0)
@@ -1513,7 +1517,12 @@ impl Readline {
 	    stdout.queue(MoveUp(1)).ok();
 	    self.cursor_offset_from_bottom += 1;
 	    stdout.queue(MoveToColumn(0)).ok();
-	    write!(stdout, "{} -- title here, total lines: {} -", crossterm::style::Attribute::Reverse, self.lines.len());
+            let local_time = &Local::now().time().to_string()[0..8];
+            let mut title = format!("User entry lines: {}, time: {}", self.lines.len(), &local_time);
+            while title.len() < screen_width {
+               title.push(' ');
+            }
+	    write!(stdout, "{}{}", crossterm::style::Attribute::Reverse, title );
 	    stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
 	    write!(stdout, "{}", crossterm::style::Attribute::NoReverse);
 	    stdout.queue(MoveDown(1)).ok();
