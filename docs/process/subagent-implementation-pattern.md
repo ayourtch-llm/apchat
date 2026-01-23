@@ -22,6 +22,16 @@ You need:
 - Tasks should be numbered or clearly delineated
 - Related issues in `docs/issues/open/` (optional but recommended)
 
+**Issue Tracking Pattern:**
+
+Before implementation, create individual issue files for each major task in `docs/issues/open/`:
+- Each issue gets its own file: `docs/issues/open/XXX-issue-title.md`
+- Number issues sequentially (e.g., 101, 102, 103...)
+- Include issue description, requirements, and acceptance criteria
+- Reference these issues in your subagent prompt
+
+See `docs/issues/README.md` for the complete issue tracking process.
+
 ### 2. Preparation Phase
 
 **Gather the plan files:**
@@ -63,8 +73,17 @@ Work through the plans systematically, implementing each component.
 The key is to provide a comprehensive, self-contained task that includes:
 - Clear context about what you're building
 - References to all relevant plan files
+- References to open issue files that need to be resolved
 - Specific objectives and success criteria
 - Independence (no need for user interaction)
+
+**Issue Resolution Instructions:**
+
+When instructing the subagent, explicitly tell it to:
+1. Implement the task according to the plan
+2. Move the issue file from `docs/issues/open/` to `docs/issues/resolved/`
+3. Update the issue file with implementation details
+4. Mark issues as resolved with completion notes
 
 **Example prompt structure:**
 
@@ -74,12 +93,17 @@ You are implementing [FEATURE NAME] according to these plans:
 - [path to plan file 2]
 - [path to plan file 3]
 
+Issues to resolve:
+- docs/issues/open/101-issue-one.md
+- docs/issues/open/102-issue-two.md
+- docs/issues/open/103-issue-three.md
+
 Context: [Brief description of what you're doing and why]
 
 Your tasks:
-1. [Specific task 1 with clear objective]
-2. [Specific task 2 with clear objective]
-3. [Specific task 3 with clear objective]
+1. [Issue 101] [Specific task 1 with clear objective]
+2. [Issue 102] [Specific task 2 with clear objective]
+3. [Issue 103] [Specific task 3 with clear objective]
 ...
 
 Requirements:
@@ -87,6 +111,14 @@ Requirements:
 - Ensure all changes are consistent
 - Test your implementation
 - Report any issues found
+
+Issue Resolution:
+For each issue you resolve:
+1. Read the issue file from docs/issues/open/
+2. Implement the solution described
+3. Move the issue file to docs/issues/resolved/
+4. Add "Status: RESOLVED" and implementation notes
+5. Reference the commit in the issue file
 
 You are working independently. Complete all tasks without asking for clarification.
 ```
@@ -118,8 +150,11 @@ The previous implementation has these issues:
 
 Fix these issues while maintaining compatibility with:
 - docs/plans/2025-01-23-crossterm-readline-implementation.md
+- docs/issues/resolved/101-related-issue.md
 
 Make minimal changes to fix only the reported issues.
+
+When complete, update any open issue files to resolved status as appropriate.
 ```
 
 ### 5. Verification Phase
@@ -166,22 +201,37 @@ Make minimal changes to fix only the reported issues.
 
 The crossterm-readline migration followed this pattern:
 
+**Preparation:**
+- Created 3 comprehensive plan files
+- Created 24 issue files in docs/issues/open/ (101-124)
+- Each issue represented a specific task or component
+
 **Initial launch:**
 - 3 plan files provided
-- 7 main tasks defined
+- 24 issue files referenced
+- 7 main task categories defined
 - Comprehensive prompt with full context
+
+**Issue Resolution Process:**
+The subagent systematically:
+1. Read each issue from docs/issues/open/
+2. Implemented the solution
+3. Moved issue to docs/issues/resolved/
+4. Added status and implementation notes
+5. Continued through all 24 issues
 
 **Result:**
 - Complete readline module implemented
 - All features from rustyline replicated
 - Proper mpsc integration
 - 14 files created/modified
+- All 24 issues resolved and moved to docs/issues/resolved/
 - Working in 3 subagent launches
 
 **Follow-up launches:**
-- Launch 1: Fix module organization
-- Launch 2: Add ctrl-r search
-- Launch 3: Final testing and cleanup
+- Launch 1: Fix module organization (resolved issues 101-108)
+- Launch 2: Add ctrl-r search (resolved issues 109-118)
+- Launch 3: Final testing and cleanup (resolved issues 119-124)
 
 ## Template for Future Use
 
@@ -193,13 +243,18 @@ Implement [FEATURE NAME] according to these plans:
 - docs/plans/[PLAN-FILE-2].md
 - docs/plans/[PLAN-FILE-3].md
 
+Issues to resolve:
+- docs/issues/open/XXX-[issue-name].md
+- docs/issues/open/YYY-[issue-name].md
+- docs/issues/open/ZZZ-[issue-name].md
+
 Context:
 We are implementing [FEATURE] to [PURPOSE]. This involves [BRIEF DESCRIPTION].
 
 Your tasks:
-1. [TASK 1]: [Clear objective]
-2. [TASK 2]: [Clear objective]
-3. [TASK 3]: [Clear objective]
+1. [Issue XXX] [TASK 1]: [Clear objective]
+2. [Issue YYY] [TASK 2]: [Clear objective]
+3. [Issue ZZZ] [TASK 3]: [Clear objective]
 ...
 
 Requirements:
@@ -209,6 +264,20 @@ Requirements:
 - Test your implementation thoroughly
 - Report any issues or deviations from the plans
 
+Issue Resolution Process:
+For each issue:
+1. Read the issue file from docs/issues/open/
+2. Implement according to the issue requirements
+3. Move the file to docs/issues/resolved/
+4. Update the file with:
+   - Status: RESOLVED
+   - Implementation date
+   - Key changes made
+   - Test results
+5. Reference commit hashes if applicable
+
+See docs/issues/README.md for complete issue tracking guidelines.
+
 You are working independently. Complete all tasks without asking for clarification.
 Work through the plans systematically, implementing each component in order.
 ```
@@ -216,12 +285,15 @@ Work through the plans systematically, implementing each component in order.
 ## Best Practices
 
 1. **Start with comprehensive plans** - Good plans lead to good implementations
-2. **Be specific in tasks** - Vague tasks lead to vague results
-3. **Provide full context** - Don't assume the subagent knows background
-4. **Reference files explicitly** - Use full paths to plan files
-5. **Allow for iteration** - Multiple focused passes are better than one broad one
-6. **Monitor progress** - Use the pretty output to track what's happening
-7. **Verify thoroughly** - Check results against the original plans
+2. **Create detailed issue files** - Each issue should be clear and actionable
+3. **Be specific in tasks** - Vague tasks lead to vague results
+4. **Provide full context** - Don't assume the subagent knows background
+5. **Reference files explicitly** - Use full paths to plan and issue files
+6. **Allow for iteration** - Multiple focused passes are better than one broad one
+7. **Monitor progress** - Use the pretty output to track what's happening
+8. **Verify thoroughly** - Check results against the original plans
+9. **Track issue resolution** - Ensure all issues are moved to resolved/
+10. **Document outcomes** - Update issue files with implementation details
 
 ## Common Pitfalls to Avoid
 
@@ -233,9 +305,19 @@ Work through the plans systematically, implementing each component in order.
 
 ## Related Documentation
 
+- This document: `docs/process/subagent-implementation-pattern.md`
 - Plan template: `docs/plans/[PLAN-FILE].md`
-- Issue tracking: `docs/issues/`
+- Issue tracking process: `docs/issues/README.md` ⚠️ **IMPORTANT**
 - Subagent specification: `docs/project/subagent.md`
+
+**Issue Tracking Workflow:**
+
+See `docs/issues/README.md` for:
+- How to create issue files
+- Issue file format and structure
+- The open/ vs resolved/ workflow
+- Status tracking and metadata
+- Best practices for issue management
 
 ## Conclusion
 
