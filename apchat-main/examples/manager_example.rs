@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use apchat::mspc::MspcChannel;
 use apchat::input_router::InputSourceManager;
-use apchat::apchat_vty::{print_heart_red, print_heart_yellow};
+use apchat_vty::{print_heart_red, print_heart_yellow};
 
 #[tokio::main]
 async fn main() {

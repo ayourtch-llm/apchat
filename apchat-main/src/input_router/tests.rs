@@ -111,36 +111,36 @@ mod tests {
         assert!(manager.websocket_handlers.is_empty());
     }
 
-    #[test]
-    fn test_input_source_manager_add_terminal_reader() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_terminal_reader() {
         let mut manager = crate::input_router::InputSourceManager::new();
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::TerminalInputRouter::new(channel);
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.terminal_reader = Some(handle);
-        
+
         assert!(manager.terminal_reader.is_some());
     }
 
-    #[test]
-    fn test_input_source_manager_add_webex_reader() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_webex_reader() {
         let mut manager = crate::input_router::InputSourceManager::new();
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::WebexInputRouter::new(channel);
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.webex_reader = Some(handle);
-        
+
         assert!(manager.webex_reader.is_some());
     }
 
-    #[test]
-    fn test_input_source_manager_add_websocket_handler() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_websocket_handler() {
         let mut manager = crate::input_router::InputSourceManager::new();
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.websocket_handlers.insert("session123".to_string(), handle);
@@ -287,36 +287,36 @@ mod manager_tests {
         assert!(manager.websocket_handlers.is_empty());
     }
 
-    #[test]
-    fn test_input_source_manager_add_terminal_reader() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_terminal_reader() {
         let mut manager = crate::input_router::InputSourceManager::new();
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::TerminalInputRouter::new(channel);
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.terminal_reader = Some(handle);
-        
+
         assert!(manager.terminal_reader.is_some());
     }
 
-    #[test]
-    fn test_input_source_manager_add_webex_reader() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_webex_reader() {
         let mut manager = crate::input_router::InputSourceManager::new();
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::WebexInputRouter::new(channel);
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.webex_reader = Some(handle);
-        
+
         assert!(manager.webex_reader.is_some());
     }
 
-    #[test]
-    fn test_input_source_manager_add_websocket_handler() {
+    #[tokio::test]
+    async fn test_input_source_manager_add_websocket_handler() {
         let mut manager = crate::input_router::InputSourceManager::new();
-        
+
         // Create a dummy JoinHandle for testing
         let handle = tokio::spawn(async {});
         manager.websocket_handlers.insert("session123".to_string(), handle);

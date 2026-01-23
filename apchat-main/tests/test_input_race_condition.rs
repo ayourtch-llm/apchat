@@ -137,6 +137,7 @@ async fn test_message_routing() {
     let (input_tx, mut input_rx) = mpsc::channel::<String>(100);
     
     // Message router task
+    let channel_clone = channel.clone();
     tokio::spawn(async move {
         println!("Message router started");
         
@@ -145,14 +146,14 @@ async fn test_message_routing() {
             
             // Parse and route to MSPC channel
             let message = if line.starts_with('!') {
-                MspcMessage::InterruptSignal(line[1..].to_string())
+                MspcMessage::InterruptSignal(line[1..].to_string(), Some("test".to_string()))
             } else if line.starts_with('/') {
-                MspcMessage::Command(line)
+                MspcMessage::Command(line, Some("test".to_string()))
             } else {
-                MspcMessage::UserInput(line)
+                MspcMessage::UserInput(line, Some("test".to_string()))
             };
             
-            channel.send(message).await.unwrap();
+            channel_clone.send(message).await.unwrap();
             println!("Router sent to MSPC channel");
         }
         
@@ -178,9 +179,9 @@ async fn test_message_routing() {
             Ok(Some(msg)) => {
                 received_count += 1;
                 match msg {
-                    MspcMessage::UserInput(_) => println!("✓ User input routed"),
-                    MspcMessage::InterruptSignal(_) => println!("✓ Interrupt routed"),
-                    MspcMessage::Command(_) => println!("✓ Command routed"),
+                    MspcMessage::UserInput(_, _) => println!("✓ User input routed"),
+                    MspcMessage::InterruptSignal(_, _) => println!("✓ Interrupt routed"),
+                    MspcMessage::Command(_, _) => println!("✓ Command routed"),
                     _ => {}
                 }
             }

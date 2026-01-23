@@ -36,7 +36,7 @@ fn test_no_race_condition_in_history_addition() {
     }
     
     // Verify final state
-    let guard = apchat_vty::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     let history_len = rl.get_history_entries().len();
     
@@ -65,12 +65,12 @@ fn test_no_race_condition_in_concurrent_readline_calls() {
             barrier.wait();
             
             // Each thread gets the readline instance and performs operations
-            let guard = apchat_vty::ReadlineInstance::get().unwrap();
+            let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
             let rl = guard.deref_mut();
             
             // Add history entry
             let entry = format!("concurrent_test_{}", i);
-            rl.add_history_entry(&entry).unwrap();
+            rl.add_history_entry(&entry);
             
             // Verify we can still access history
             let history_len = rl.get_history_entries().len();
@@ -108,12 +108,12 @@ fn test_lock_acquisition_order() {
         thread::spawn(move || {
             // Each thread acquires the lock multiple times
             for j in 0..3 {
-                let guard1 = apchat_vty::ReadlineInstance::get().unwrap();
+                let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
                 let rl = guard1.deref_mut();
 
                 // Perform some operation
                 let entry = format!("order_test_{}_iteration_{}", i, j);
-                rl.add_history_entry(&entry).unwrap();
+                rl.add_history_entry(&entry);
 
                 // Drop the guard to release the lock
                 drop(guard1);
@@ -132,7 +132,7 @@ fn test_lock_acquisition_order() {
     }
     
     // Verify final state
-    let guard = apchat_vty::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     let history_len = rl.get_history_entries().len();
     
@@ -179,7 +179,7 @@ fn test_high_concurrency_stress_test() {
     let duration = start_time.elapsed();
     
     // Verify final state
-    let guard = apchat_vty::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     let history_len = rl.get_history_entries().len();
     
@@ -217,7 +217,7 @@ fn test_history_consistency_across_threads() {
     }
     
     // Verify the history
-    let guard = apchat_vty::ReadlineInstance::get().unwrap();
+    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();
     let history = rl.get_history_entries();
     
@@ -256,12 +256,12 @@ fn test_lock_fairness() {
         let counter = Arc::clone(&counter);
         thread::spawn(move || {
             for _ in 0..operations_per_thread {
-                let guard = apchat_vty::ReadlineInstance::get().unwrap();
+                let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
                 let rl = guard.deref_mut();
                 
                 // Perform operation
                 let entry = format!("fairness_test_{}", i);
-                rl.add_history_entry(&entry).unwrap();
+                rl.add_history_entry(&entry);
                 
                 // Increment counter
                 let mut count = counter.lock().unwrap();
