@@ -3,7 +3,7 @@
 //! This module provides a `Readline` struct that manages terminal I/O
 //! using "semi-raw" mode: raw input with normal output.
 
-use crossterm::cursor::{MoveTo, MoveToColumn, MoveUp};
+use crossterm::cursor::{MoveDown, MoveTo, MoveToColumn, MoveUp};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::Clear;
 use crossterm::QueueableCommand;
@@ -220,6 +220,8 @@ pub struct Readline {
     lines: Vec<String>,
     /// Current cursor line (0-based)
     cursor_line: usize,
+    /// Cursor offset from bottom (the actual cursor)
+    cursor_offset_from_bottom: usize,
     /// Current cursor column within the current line (0-based)
     cursor_col: usize,
     /// Original terminal settings before enabling raw mode
@@ -254,6 +256,8 @@ pub struct Readline {
     max_lines: usize,
     /// Scroll offset for displaying lines
     scroll_offset: usize,
+    /// Current editor height in lines (never decreases until Enter is pressed)
+    editor_height: usize,
     /// Compatibility field: current line (deprecated, use lines[cursor_line])
     line: String,
     /// Compatibility field: cursor position (deprecated, use cursor_col)
@@ -281,6 +285,7 @@ impl Readline {
         Ok(Readline {
             lines: vec![String::new()],
             cursor_line: 0,
+            cursor_offset_from_bottom: 0,
             cursor_col: 0,
             original_termios,
             history: Vec::new(),
@@ -298,6 +303,7 @@ impl Readline {
             max_kill_ring_size: 16,
             max_lines: 10,
             scroll_offset: 0,
+            editor_height: 1,
             line: String::new(),
             cursor: 0,
         })
@@ -1005,8 +1011,17 @@ impl Readline {
     /// * `false` - No text to kill
     pub fn kill_to_end(&mut self) -> bool {
         let line_len = self.lines[self.cursor_line].chars().count();
-        if self.cursor_col >= line_len {
+        if self.cursor_col > line_len {
             return false;
+        }
+        // if the line is empty - kill it
+        if line_len == 0 {
+            if self.cursor_line + 1 < self.lines.len() {
+               self.lines.remove(self.cursor_line);
+               return true;
+            } else {
+               return false;
+            }
         }
 
         // Get text from cursor to end
@@ -1396,6 +1411,8 @@ impl Readline {
         self.cursor_line = 0;
         self.cursor_col = 0;
         self.scroll_offset = 0;
+        self.editor_height = 1;
+        self.cursor_offset_from_bottom = 1;
     }
 
     /// Redraws the current line to the terminal.
@@ -1449,56 +1466,95 @@ impl Readline {
         }
 
         // Normal mode: display multiline input with scrolling
-        
-        // Calculate visible range based on scroll_offset and max_lines
-        let start = self.scroll_offset;
-        let end = (start + self.max_lines).min(self.lines.len());
+        {
+	    // Calculate visible range based on scroll_offset and max_lines
+            // check if we need to expand the editor
+	    let start = self.scroll_offset;
+	    let end = start + self.max_lines.min(self.lines.len());
+	    let display_count = end - start;
+	    // Expand editor height if needed (scroll terminal up to make room)
+	    // We never decrease editor_height until Enter is pressed
+	    let mut lines_to_add = 0;
+	    if display_count > self.editor_height {
+		lines_to_add = display_count - self.editor_height;
+		for _ in 0..lines_to_add {
+		    println!();  // Scroll terminal up by adding newlines
+		}
+		self.editor_height = display_count;
+	    }
+        }
+        // Calculate visible range based on scroll_offset and max_lines, take 2
+        // This time, we assume the whole editor height - so we take care
+        // of things like line deletions correctly.
+	let start = self.scroll_offset;
+	let end = start + self.editor_height; // NOTE: without .min(self.lines.len());
+	let display_count = end - start;
+        let pr = format!("[{}]{}", display_count, prompt);
+        let prompt = &pr;
+
 
         // Get the prompt visible length (excluding ANSI codes)
         let prompt_visible = strip_ansi_codes(prompt);
         let prompt_len = prompt_visible.chars().count();
 
-        // Move to column 0 of the current line
-        stdout.queue(MoveToColumn(0)).ok();
+        // Move to the top of the editor area
+        // We need to move up from the current cursor position to the top
+        // Calculate how many lines up we need to go
+        let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
+        let lines_to_move = self.editor_height.saturating_sub(self.cursor_offset_from_bottom); //  + lines_to_add;
 
-        // Display each visible line
+        // Move up to the top line of the editor
+        for _ in 0..lines_to_move {
+            stdout.queue(MoveUp(1)).ok();
+            self.cursor_offset_from_bottom += 1;
+        }
+        let draw_title_bar = false;
+        if draw_title_bar {
+	    stdout.queue(MoveUp(1)).ok();
+	    self.cursor_offset_from_bottom += 1;
+	    stdout.queue(MoveToColumn(0)).ok();
+	    write!(stdout, "{} -- title here, total lines: {} -", crossterm::style::Attribute::Reverse, self.lines.len());
+	    stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
+	    write!(stdout, "{}", crossterm::style::Attribute::NoReverse);
+	    stdout.queue(MoveDown(1)).ok();
+	    self.cursor_offset_from_bottom -= 1;
+        }
+
+
+        // Now we're at the top line, render each line
         for (idx, i) in (start..end).enumerate() {
-            if idx > 0 {
-                // For lines after the first, move to next line
-                println!();
-            }
-
             // Clear the line and move to column 0
-            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
             stdout.queue(MoveToColumn(0)).ok();
-
-            // Display prompt only on the first line (line 0)
+            // Display prompt only on the first line (line 0 of buffer)
             if i == 0 {
                 write!(stdout, "{}", prompt).ok();
             }
 
             // Display the line content
-            write!(stdout, "{}", self.lines[i]).ok();
+            let line = if i < self.lines.len() { &self.lines[i] } else { "" };
+            write!(stdout, "{}", line).ok();
+            // stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+            stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
+
+            // Move to next line if not the last line
+            if idx < display_count - 1 {
+                stdout.queue(MoveDown(1)).ok();
+                self.cursor_offset_from_bottom -= 1;
+            }
         }
 
-        // Note: We don't need to clear extra lines beyond what we're displaying
-        // The display_count lines we printed are sufficient
-        let display_count = end - start;
-
-        // Position cursor at the correct location
-        // We need to move back up to the correct line
+        // Now position cursor at the correct location
+        // Move up from the bottom to the cursor line
         let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
-        
-        // Move cursor up to the correct line
-        // If we're on line 2 (visual), and we've printed 3 lines, we need to move up 1 line
         let lines_from_bottom = display_count.saturating_sub(visual_line + 1);
         if lines_from_bottom > 0 {
             // Move up the required number of lines
             for _ in 0..lines_from_bottom {
                 stdout.queue(MoveUp(1)).ok();
+                self.cursor_offset_from_bottom += 1;
             }
         }
-        
+
         // Move to correct column
         let mut visual_col = self.cursor_col;
         if visual_line == 0 {
@@ -1535,7 +1591,7 @@ impl Readline {
         match key.code {
             // Enter: Submit or insert newline
             KeyCode::Enter => {
-                if key.modifiers.contains(KeyModifiers::SHIFT) {
+                if key.modifiers.contains(KeyModifiers::ALT) {
                     // Shift-Enter always inserts newline
                     if self.handle_newline() {
                         KeyResult::Redraw
@@ -1550,10 +1606,7 @@ impl Readline {
                         self.add_history_entry(&line);
                     }
                     // Reset the line buffer
-                    self.lines[self.cursor_line].clear();
-                    self.cursor_col = 0;
-                    self.history_index = None;
-                    self.saved_lines.clear();
+                    self.reset_input();
                     KeyResult::Return(ReadlineResult::Input(line))
                 } else {
                     // Regular Enter not at end inserts newline
