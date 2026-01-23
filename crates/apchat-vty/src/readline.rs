@@ -60,6 +60,7 @@ fn strip_ansi_codes(s: &str) -> String {
 /// * `Eof` - End of file (Ctrl-D)
 /// * `Interrupt` - Interrupted (Ctrl-C)
 /// * `Signal(MspcMessage)` - MPSC signal received
+#[derive(Debug)]
 pub enum ReadlineResult {
     /// User entered a line of text
     Input(String),

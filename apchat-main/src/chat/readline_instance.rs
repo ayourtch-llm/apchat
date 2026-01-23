@@ -81,8 +81,8 @@ impl ReadlineInstance {
                     Ok(Some(line))
                 }
             }
-            ReadlineResult::Eof => Ok(None),
-            ReadlineResult::Interrupt => Ok(None),
+            ReadlineResult::Eof => Err(anyhow::anyhow!("EOF")), // Return as error for REPL to handle
+            ReadlineResult::Interrupt => Err(anyhow::anyhow!("Interrupted")), // Return as error for REPL to handle
             ReadlineResult::Signal(_msg) => {
                 // For now, ignore signals in the basic readline interface
                 // In Task 12, the REPL will handle signals properly
