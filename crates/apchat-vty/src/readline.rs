@@ -15,6 +15,43 @@ use apchat_mspc::MspcMessage;
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
 
+/// Strips ANSI escape codes from a string to get the visible character count.
+///
+/// ANSI escape codes are sequences like `\x1b[31m` (red) or `\x1b[1m` (bold).
+/// This function removes them so we can calculate the actual display width.
+///
+/// # Arguments
+///
+/// * `s` - The string that may contain ANSI codes
+///
+/// # Returns
+///
+/// * `usize` - The number of visible characters (excluding ANSI codes)
+fn strip_ansi_codes(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // ANSI escape sequence starts
+            if let Some(&'[') = chars.peek() {
+                chars.next(); // consume '['
+                // Skip until we find the end character (a letter, usually 'm')
+                while let Some(&c) = chars.peek() {
+                    chars.next();
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
 /// Result type for the readline operation.
 ///
 /// # Variants
@@ -1120,7 +1157,9 @@ impl Readline {
 
             // Calculate cursor position (in characters, not bytes)
             // Use chars() to handle multi-byte Unicode characters correctly
-            let prompt_len = prompt.chars().count();
+            // IMPORTANT: Strip ANSI codes from prompt when calculating position
+            let prompt_visible = strip_ansi_codes(prompt);
+            let prompt_len = prompt_visible.chars().count();
             let cursor_pos = prompt_len + self.cursor;
 
             // Move cursor to correct position
@@ -1507,6 +1546,52 @@ impl Drop for Readline {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_ansi_codes_basic() {
+        let input = "\x1b[31mRed Text\x1b[0m";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Red Text");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_bold() {
+        let input = "\x1b[1mBold Text\x1b[0m";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Bold Text");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_multiple() {
+        let input = "\x1b[35m\x1b[1m[Model (name)]\x1b[0m \x1b[32m\x1b[1mYou:\x1b[0m ";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "[Model (name)] You: ");
+        assert_eq!(output.chars().count(), 20);
+        assert_eq!(input.chars().count(), 46);
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_no_ansi() {
+        let input = "Plain text";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Plain text");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_empty() {
+        let input = "";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_incomplete_sequence() {
+        // Incomplete sequence should be left as-is
+        let input = "Text\x1b[31"; // Missing the terminating 'm'
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Text");
+    }
     use super::*;
 
     /// Helper function to create a Readline instance for testing.
