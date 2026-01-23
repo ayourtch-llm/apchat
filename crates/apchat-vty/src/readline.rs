@@ -6,12 +6,14 @@
 use crossterm::cursor::MoveToColumn;
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::terminal::Clear;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled};
 use crossterm::QueueableCommand;
 use std::io::{self, Write};
 use std::time::Duration;
 
 use apchat_mspc::MspcMessage;
+
+// Termios imports for raw mode on stdin only
+use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
 
 /// Result type for the readline operation.
 ///
@@ -57,6 +59,57 @@ enum EditMode {
     Search,
 }
 
+/// Enables raw mode on stdin only (not stdout).
+///
+/// This saves the original terminal settings and modifies them to:
+/// - Disable line buffering (ICANON)
+/// - Disable echo (ECHO)
+/// - Disable signal generation (ISIG)
+///
+/// # Safety
+///
+/// This function uses raw libc calls to manipulate terminal settings.
+fn enable_raw_mode_on_stdin() -> io::Result<termios> {
+    unsafe {
+        let mut term: termios = std::mem::zeroed();
+        
+        // Get current terminal settings
+        if libc::tcgetattr(STDIN_FILENO, &mut term) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        
+        let original = term;
+        
+        // Set raw mode flags (clear ICANON, ECHO, ISIG)
+        term.c_lflag &= !(ICANON | ECHO | ISIG);
+        
+        // Set minimum characters to read and timeout
+        term.c_cc[libc::VMIN] = 1;   // Minimum number of characters for non-canonical read
+        term.c_cc[libc::VTIME] = 0;  // Timeout in deciseconds (0 = blocking)
+        
+        // Apply new settings
+        if tcsetattr(STDIN_FILENO, TCSANOW, &term) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        
+        Ok(original)
+    }
+}
+
+/// Restores terminal settings to the original state.
+///
+/// # Safety
+///
+/// This function uses raw libc calls to manipulate terminal settings.
+fn restore_terminal_settings(original: &termios) -> io::Result<()> {
+    unsafe {
+        if tcsetattr(STDIN_FILENO, TCSANOW, original) != 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
 /// Readline struct that manages terminal mode, input state, and command history.
 ///
 /// This struct enables raw mode on construction (for character-by-character input)
@@ -87,8 +140,8 @@ pub struct Readline {
     line: String,
     /// Current cursor position in the line (0-based, from start of line)
     cursor: usize,
-    /// Whether raw mode was successfully enabled
-    raw_mode_enabled: bool,
+    /// Original terminal settings before enabling raw mode
+    original_termios: Option<termios>,
     /// Command history (previous commands)
     history: Vec<String>,
     /// Current position in history navigation (None = editing current line)
@@ -130,13 +183,13 @@ impl Readline {
     /// let readline = Readline::new().expect("Failed to initialize readline");
     /// ```
     pub fn new() -> io::Result<Self> {
-        // Enable raw mode for character-by-character input
-        enable_raw_mode()?;
+        // Enable raw mode on stdin only (not stdout)
+        let original_termios = Some(enable_raw_mode_on_stdin()?);
 
         Ok(Readline {
             line: String::new(),
             cursor: 0,
-            raw_mode_enabled: true,
+            original_termios,
             history: Vec::new(),
             history_index: None,
             saved_line: String::new(),
@@ -191,11 +244,8 @@ impl Readline {
     /// assert!(readline.is_raw_mode_enabled());
     /// ```
     pub fn is_raw_mode_enabled(&self) -> bool {
-        // Return the tracked state. We set this to true when we successfully
-        // call enable_raw_mode(), so if it's true, raw mode is enabled.
-        // Note: crossterm::terminal::is_raw_mode_enabled() may return false
-        // in non-TTY environments (like tests), so we rely on our tracking.
-        self.raw_mode_enabled
+        // Raw mode is enabled if we have saved terminal settings
+        self.original_termios.is_some()
     }
 
     /// Adds an entry to the command history.
@@ -1446,10 +1496,10 @@ impl Drop for Readline {
     ///
     /// This ensures terminal mode is properly restored even if panic occurs.
     fn drop(&mut self) {
-        if self.raw_mode_enabled {
-            // Disable raw mode to restore normal terminal behavior
-            if let Err(e) = disable_raw_mode() {
-                eprintln!("Warning: Failed to disable raw mode: {}", e);
+        // Restore original terminal settings
+        if let Some(ref original) = self.original_termios {
+            if let Err(e) = restore_terminal_settings(original) {
+                eprintln!("Warning: Failed to restore terminal settings: {}", e);
             }
         }
     }
@@ -1482,7 +1532,8 @@ mod tests {
 
         // Verify raw mode is enabled after creation
         assert!(readline.is_raw_mode_enabled());
-        assert!(is_raw_mode_enabled().unwrap_or(false));
+        // Note: crossterm's is_raw_mode_enabled() won't work since we're using termios directly
+        // The important thing is that our Readline tracks the state correctly
     }
 
     #[test]
@@ -1497,21 +1548,23 @@ mod tests {
         // Test passes if we got here without panicking
         // The Drop implementation ensures cleanup is attempted
         // Note: We can't reliably test terminal state in test environments
-        // because tests share terminal state and crossterm uses reference counting
+        // because tests share terminal state
     }
 
     #[test]
     fn test_multiple_readline_instances() {
-        // Skip this test if we can't query terminal mode
+        // Skip this test if we can't create a readline instance
         // (e.g., in CI environments without a TTY)
-        if is_raw_mode_enabled().is_err() {
-            return;
-        }
+        let readline1 = match create_test_readline() {
+            Ok(r) => r,
+            Err(_) => return,
+        };
 
-        let readline1 = create_test_readline().expect("Failed to create first Readline");
-
-        // Creating a second instance should work (raw mode is idempotent)
-        let readline2 = create_test_readline().expect("Failed to create second Readline");
+        // Creating a second instance should work
+        let readline2 = match create_test_readline() {
+            Ok(r) => r,
+            Err(_) => return,
+        };
 
         // Both instances should exist without panicking
         assert_eq!(readline1.line(), "");
@@ -1537,8 +1590,8 @@ mod tests {
         // Verify cursor is at the start
         assert_eq!(readline.cursor(), 0);
 
-        // Verify raw mode flag is set
-        assert!(readline.raw_mode_enabled);
+        // Verify raw mode is enabled (we have saved termios)
+        assert!(readline.is_raw_mode_enabled());
 
         // Verify history is empty
         assert_eq!(readline.get_history_entries().len(), 0);
