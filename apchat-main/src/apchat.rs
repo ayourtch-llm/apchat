@@ -68,6 +68,10 @@ pub struct APChat {
     pub(crate) content_limiter: Option<Arc<apchat_toolcore::content_limiter::ContentLimiter>>,
     // MSPC channel for multi-stream input processing
     pub(crate) mspc_channel: Option<Arc<crate::mspc::MspcChannel>>,
+    // Signal channel for sending confirmation requests to readline
+    pub(crate) signal_sender: Option<tokio::sync::mpsc::Sender<crate::mspc::MspcMessage>>,
+    // Confirmation registry for managing tool confirmation requests
+    pub(crate) confirmation_registry: Option<Arc<apchat_toolcore::confirmation::ConfirmationRegistry>>,
 }
 
 impl APChat {
@@ -84,6 +88,17 @@ impl APChat {
         self.mspc_channel = Some(channel);
         self
     }
+
+    pub fn with_signal_sender(mut self, sender: tokio::sync::mpsc::Sender<crate::mspc::MspcMessage>) -> Self {
+        self.signal_sender = Some(sender);
+        self
+    }
+
+    pub fn with_confirmation_registry(mut self, registry: Arc<apchat_toolcore::confirmation::ConfirmationRegistry>) -> Self {
+        self.confirmation_registry = Some(registry);
+        self
+    }
+
     pub fn new(api_key: String, work_dir: PathBuf) -> Self {
         let config = ClientConfig {
             api_key: api_key.clone(),
@@ -231,6 +246,8 @@ impl APChat {
             readline_history: None,
             content_limiter,
             mspc_channel: None,
+            signal_sender: None,
+            confirmation_registry: None,
         };
 
         chat.messages.push(Message {
@@ -504,6 +521,15 @@ impl APChat {
                 if let Some(ref mspc_channel) = self.mspc_channel {
                     context = context.with_mspc_sender(mspc_channel.sender());
                     context = context.with_mspc_receiver(mspc_channel.receiver());
+                }
+
+                // Add signal sender and confirmation registry if available
+                if let Some(ref signal_sender) = self.signal_sender {
+                    context = context.with_signal_sender(signal_sender.clone());
+                }
+
+                if let Some(ref confirmation_registry) = self.confirmation_registry {
+                    context = context.with_confirmation_registry(confirmation_registry.clone());
                 }
 
                 let context = context;

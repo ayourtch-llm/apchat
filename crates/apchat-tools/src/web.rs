@@ -94,22 +94,24 @@ impl Tool for FetchUrlTool {
         print_heart_red(&format!("{} {} ", "Fetch URL:".yellow(), url.cyan()), false);
         std::io::stdout().flush().ok();
 
-        let (approved, rejection_reason) = match context.check_permission(
-            apchat_policy::ActionType::NetworkRequest,
-            &url,
-            "Fetch? (y/N):"
-        ) {
-            Ok((approved, reason)) => (approved, reason),
-            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        // In non-interactive mode, skip confirmation (already approved via web UI)
+        // In interactive mode, check permission using policy system
+        let approved = if context.non_interactive {
+            true
+        } else {
+            let (result, _) = match context.check_permission_async(
+                apchat_policy::ActionType::NetworkRequest,
+                &url,
+                "Fetch? (y/N):"
+            ).await {
+                Ok((approved, reason)) => (approved, reason),
+                Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+            };
+            result
         };
 
         if !approved {
-            let error_msg = if let Some(reason) = rejection_reason {
-                format!("Request cancelled by user: {}", reason)
-            } else {
-                "Request cancelled by user or policy".to_string()
-            };
-            return ToolResult::error(error_msg);
+            return ToolResult::error("Request cancelled by user or policy".to_string());
         }
 
         print_heart_red(&format!("{} {}", "Fetching:".green(), url.cyan()), true);

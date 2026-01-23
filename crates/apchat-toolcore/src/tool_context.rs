@@ -26,7 +26,6 @@ use apchat_mspc::MspcMessage;
 /// - LLM clients for making API calls
 /// - MSPC channel sender for broadcasting progress updates
 /// - MSPC channel receiver for listening to interrupt signals
-#[derive(Clone)]
 pub struct ToolContext {
     pub work_dir: PathBuf,
     pub session_id: String,
@@ -41,6 +40,33 @@ pub struct ToolContext {
     pub llm_clients: HashMap<ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>>, // NEW
     pub mspc_sender: Option<tokio_mpsc::Sender<MspcMessage>>, // NEW - MSPC channel sender
     pub mspc_receiver: Option<Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>>, // NEW - MSPC channel receiver
+    pub signal_sender: Option<tokio_mpsc::Sender<MspcMessage>>, // NEW - Signal channel sender (for confirmation requests)
+    pub signal_receiver: Option<tokio_mpsc::Receiver<MspcMessage>>, // NEW - Signal channel receiver (for confirmation responses)
+    pub confirmation_registry: Option<Arc<crate::confirmation::ConfirmationRegistry>>, // NEW - Confirmation registry
+}
+
+impl Clone for ToolContext {
+    fn clone(&self) -> Self {
+        Self {
+            work_dir: self.work_dir.clone(),
+            session_id: self.session_id.clone(),
+            environment: self.environment.clone(),
+            policy_manager: self.policy_manager.clone(),
+            terminal_manager: self.terminal_manager.clone(),
+            skill_registry: self.skill_registry.clone(),
+            todo_manager: self.todo_manager.clone(),
+            non_interactive: self.non_interactive,
+            current_model_string: self.current_model_string.clone(),
+            content_limiter: self.content_limiter.clone(),
+            llm_clients: self.llm_clients.clone(),
+            mspc_sender: self.mspc_sender.clone(),
+            mspc_receiver: self.mspc_receiver.clone(),
+            signal_sender: self.signal_sender.clone(),
+            // Note: signal_receiver cannot be cloned, so we set it to None
+            signal_receiver: None,
+            confirmation_registry: self.confirmation_registry.clone(),
+        }
+    }
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -59,6 +85,8 @@ impl std::fmt::Debug for ToolContext {
             .field("llm_clients_count", &self.llm_clients.len())
             .field("mspc_sender", &self.mspc_sender.is_some())
             .field("mspc_receiver", &self.mspc_receiver.is_some())
+            .field("signal_sender", &self.signal_sender.is_some())
+            .field("signal_receiver", &self.signal_receiver.is_some())
             .finish()
     }
 }
@@ -79,6 +107,9 @@ impl ToolContext {
             llm_clients: HashMap::new(),
             mspc_sender: None,
             mspc_receiver: None,
+            signal_sender: None,
+            signal_receiver: None,
+            confirmation_registry: None,
         }
     }
 
@@ -132,6 +163,21 @@ impl ToolContext {
         self
     }
 
+    pub fn with_signal_sender(mut self, sender: tokio_mpsc::Sender<MspcMessage>) -> Self {
+        self.signal_sender = Some(sender);
+        self
+    }
+
+    pub fn with_signal_receiver(mut self, receiver: tokio_mpsc::Receiver<MspcMessage>) -> Self {
+        self.signal_receiver = Some(receiver);
+        self
+    }
+
+    pub fn with_confirmation_registry(mut self, registry: Arc<crate::confirmation::ConfirmationRegistry>) -> Self {
+        self.confirmation_registry = Some(registry);
+        self
+    }
+
     /// Get an LLM client for a specific model color
     /// Returns None if no client is configured for that color
     pub fn get_llm_client(&self, model_color: &ModelColor) -> Option<Arc<dyn apchat_llm_api::client::LlmClient>> {
@@ -140,7 +186,12 @@ impl ToolContext {
 
     /// Check if an action is permitted by the policy
     /// Returns (approved: bool, rejection_reason: Option<String>)
-    pub fn check_permission(
+    /// Check if an action is permitted by the policy
+    /// Returns (approved: bool, rejection_reason: Option<String>)
+    ///
+    /// This async version uses MSPC for confirmation requests when available,
+    /// falling back to stdin for backward compatibility.
+    pub async fn check_permission_async(
         &self,
         action: apchat_policy::ActionType,
         target: &str,
@@ -148,7 +199,6 @@ impl ToolContext {
     ) -> anyhow::Result<(bool, Option<String>)> {
         use apchat_policy::Decision;
         use colored::Colorize;
-        use std::io::{self, BufRead, Write};
 
         let decision = self.policy_manager.evaluate(&action, target);
 
@@ -177,50 +227,233 @@ impl ToolContext {
                     return Ok((true, None));
                 }
 
-                // Ask the user for confirmation in interactive mode
-                print_heart_red(&format!("\n{}", prompt_message.bright_green().bold()), true);
-                print_heart_red(&format!(">>> "), false);
-                io::stdout().flush()?;
+                // Try to use signal channel for confirmation if available (preferred)
+                if let Some(ref signal_sender) = self.signal_sender {
+                    return self.check_permission_via_signal(signal_sender, &action, target, prompt_message).await;
+                }
 
-                let stdin = io::stdin();
-                let mut handle = stdin.lock();
-                let mut response = String::new();
-                handle.read_line(&mut response)?;
+                // Fall back to stdin-based confirmation for backward compatibility
+                self.check_permission_via_stdin(&action, target, prompt_message).await
+            }
+        }
+    }
 
-                let response = response.trim();
-                let response_lower = response.to_lowercase();
-                let approved = response_lower.is_empty() || response_lower == "y" || response_lower == "yes";
+    /// Check permission using signal channel for confirmation
+    /// This is the preferred method as it sends confirmation requests to the readline function
+    async fn check_permission_via_signal(
+        &self,
+        signal_sender: &tokio_mpsc::Sender<MspcMessage>,
+        action: &apchat_policy::ActionType,
+        target: &str,
+        prompt_message: &str,
+    ) -> anyhow::Result<(bool, Option<String>)> {
+        use apchat_policy::Decision;
+        use colored::Colorize;
 
-                let rejection_reason = if !approved {
-                    // Ask for reason if rejected
-                    print_heart_red(&format!("{}", "Why not? (optional - helps the AI understand):".bright_yellow()), true);
-                    print_heart_red(&format!(">>> "), false);
-                    io::stdout().flush()?;
+        // Check if confirmation registry is available
+        if self.confirmation_registry.is_none() {
+            print_heart_red(&format!("{} No confirmation registry available, falling back to stdin", "⚠️".yellow()), true);
+            return self.check_permission_via_stdin(action, target, prompt_message).await;
+        }
 
-                    let mut reason = String::new();
-                    match handle.read_line(&mut reason) {
-                        Ok(_) => {
-                            let reason = reason.trim();
-                            if reason.is_empty() {
-                                None
-                            } else {
-                                Some(reason.to_string())
-                            }
-                        }
-                        Err(_) => None,
-                    }
-                } else {
-                    None
-                };
+        let registry = self.confirmation_registry.as_ref().unwrap();
 
+        // Register a pending confirmation and get a unique ID with a receiver
+        let (confirmation_id, mut response_rx) = registry.register().await;
+
+        // Send confirmation request via signal channel to readline
+        let confirmation_msg = format!(
+            "{}\nAction: {:?}\nTarget: {}",
+            prompt_message, action, target
+        );
+
+        if let Err(e) = signal_sender.send(MspcMessage::ToolConfirmationRequest {
+            content: confirmation_msg,
+            confirmation_id: confirmation_id.clone(),
+        }).await {
+            // If sending fails, cancel the confirmation and fall back to stdin
+            registry.cancel(&confirmation_id).await;
+            print_heart_red(&format!("{} Failed to send confirmation via signal channel: {}", "⚠️".yellow(), e), true);
+            return self.check_permission_via_stdin(action, target, prompt_message).await;
+        }
+
+        // Wait for confirmation response via the oneshot channel
+        let timeout_duration = tokio::time::Duration::from_secs(300); // 5 minute timeout
+
+        match tokio::time::timeout(timeout_duration, response_rx).await {
+            Ok(Ok((approved, reason))) => {
                 // Learn from the user's decision if learning is enabled
                 if self.policy_manager.is_learning() {
                     let decision = if approved { Decision::Allow } else { Decision::Deny };
-                    let _ = self.policy_manager.learn(action, target.to_string(), decision, rejection_reason.clone());
+                    let _ = self.policy_manager.learn(action.clone(), target.to_string(), decision, reason.clone());
                 }
 
-                Ok((approved, rejection_reason))
+                Ok((approved, reason))
+            }
+            Ok(Err(_)) => {
+                // Response sender dropped
+                print_heart_red(&format!("{} Confirmation response channel closed", "⚠️".yellow()), true);
+                Ok((false, Some("Confirmation channel closed".to_string())))
+            }
+            Err(_) => {
+                print_heart_red(&format!("{} Confirmation timeout after 5 minutes", "⏱".yellow()), true);
+                Ok((false, Some("Confirmation timeout".to_string())))
             }
         }
+    }
+
+    /// Check permission using stdin (fallback for backward compatibility)
+    async fn check_permission_via_stdin(
+        &self,
+        action: &apchat_policy::ActionType,
+        target: &str,
+        prompt_message: &str,
+    ) -> anyhow::Result<(bool, Option<String>)> {
+        use apchat_policy::Decision;
+        use colored::Colorize;
+        use std::io::{self, BufRead, Write};
+
+        print_heart_red(&format!("\n{}", prompt_message.bright_green().bold()), true);
+        print_heart_red(&format!(">>> "), false);
+        io::stdout().flush()?;
+
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        let mut response = String::new();
+        handle.read_line(&mut response)?;
+
+        let response = response.trim();
+        let response_lower = response.to_lowercase();
+        let approved = response_lower.is_empty() || response_lower == "y" || response_lower == "yes";
+
+        let rejection_reason = if !approved {
+            // Ask for reason if rejected
+            print_heart_red(&format!("{}", "Why not? (optional - helps the AI understand):".bright_yellow()), true);
+            print_heart_red(&format!(">>> "), false);
+            io::stdout().flush()?;
+
+            let mut reason = String::new();
+            match handle.read_line(&mut reason) {
+                Ok(_) => {
+                    let reason = reason.trim();
+                    if reason.is_empty() {
+                        None
+                    } else {
+                        Some(reason.to_string())
+                    }
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        // Learn from the user's decision if learning is enabled
+        if self.policy_manager.is_learning() {
+            let decision = if approved { Decision::Allow } else { Decision::Deny };
+            let _ = self.policy_manager.learn(action.clone(), target.to_string(), decision, rejection_reason.clone());
+        }
+
+        Ok((approved, rejection_reason))
+    }
+
+    /// Synchronous version of check_permission (for backward compatibility)
+    /// This will block on the async runtime, so prefer check_permission_async when possible.
+    pub fn check_permission(
+        &self,
+        action: apchat_policy::ActionType,
+        target: &str,
+        prompt_message: &str,
+    ) -> anyhow::Result<(bool, Option<String>)> {
+        use apchat_policy::Decision;
+        use colored::Colorize;
+
+        let decision = self.policy_manager.evaluate(&action, target);
+
+        match decision {
+            Decision::Allow => Ok((true, None)),
+            Decision::Deny => Ok((false, Some("Denied by policy".to_string()))),
+            Decision::Ask => {
+                // Auto-approve for memory-related actions (non-interactive mode for memory ops)
+                // Memory operations are tool operations, not direct user actions
+                if matches!(
+                    action,
+                    apchat_policy::ActionType::MemoryStore
+                        | apchat_policy::ActionType::MemoryQuery
+                        | apchat_policy::ActionType::MemoryUpdate
+                        | apchat_policy::ActionType::MemoryList
+                        | apchat_policy::ActionType::MemoryDelete
+                ) {
+                    print_heart_red(&format!("{} {}", "✓".green(), "Auto-confirmed (memory operation)".bright_black()), true);
+                    return Ok((true, None));
+                }
+
+                // In non-interactive mode (web/API), auto-approve since confirmation
+                // was already handled via web UI
+                if self.non_interactive {
+                    print_heart_red(&format!("{} {}", "✓".green(), "Auto-confirmed (web UI)".bright_black()), true);
+                    return Ok((true, None));
+                }
+
+                // Fall back to stdin for synchronous context
+                // Note: This will not use MSPC as it requires async
+                self.check_permission_sync_fallback(&action, target, prompt_message)
+            }
+        }
+    }
+
+    /// Synchronous fallback for check_permission (stdin-based)
+    fn check_permission_sync_fallback(
+        &self,
+        action: &apchat_policy::ActionType,
+        target: &str,
+        prompt_message: &str,
+    ) -> anyhow::Result<(bool, Option<String>)> {
+        use apchat_policy::Decision;
+        use colored::Colorize;
+        use std::io::{self, BufRead, Write};
+
+        print_heart_red(&format!("\n{}", prompt_message.bright_green().bold()), true);
+        print_heart_red(&format!(">>> "), false);
+        io::stdout().flush()?;
+
+        let stdin = io::stdin();
+        let mut handle = stdin.lock();
+        let mut response = String::new();
+        handle.read_line(&mut response)?;
+
+        let response = response.trim();
+        let response_lower = response.to_lowercase();
+        let approved = response_lower.is_empty() || response_lower == "y" || response_lower == "yes";
+
+        let rejection_reason = if !approved {
+            // Ask for reason if rejected
+            print_heart_red(&format!("{}", "Why not? (optional - helps the AI understand):".bright_yellow()), true);
+            print_heart_red(&format!(">>> "), false);
+            io::stdout().flush()?;
+
+            let mut reason = String::new();
+            match handle.read_line(&mut reason) {
+                Ok(_) => {
+                    let reason = reason.trim();
+                    if reason.is_empty() {
+                        None
+                    } else {
+                        Some(reason.to_string())
+                    }
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        // Learn from the user's decision if learning is enabled
+        if self.policy_manager.is_learning() {
+            let decision = if approved { Decision::Allow } else { Decision::Deny };
+            let _ = self.policy_manager.learn(action.clone(), target.to_string(), decision, rejection_reason.clone());
+        }
+
+        Ok((approved, rejection_reason))
     }
 }

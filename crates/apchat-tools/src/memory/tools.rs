@@ -78,11 +78,11 @@ impl Tool for StoreMemoryTool {
         }
 
         // Check permission using policy system
-        let (approved, rejection_reason) = match context.check_permission(
+        let (approved, rejection_reason) = match context.check_permission_async(
             apchat_policy::ActionType::MemoryStore,
             &conversation_id,
             &format!("Store memory for conversation '{}'", conversation_id)
-        ) {
+        ).await {
             Ok((approved, reason)) => (approved, reason),
             Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
         };
@@ -189,11 +189,11 @@ impl Tool for QueryMemoryTool {
         }
 
         // Check permission using policy system
-        let (approved, rejection_reason) = match context.check_permission(
+        let (approved, rejection_reason) = match context.check_permission_async(
             apchat_policy::ActionType::MemoryQuery,
             &query,
             &format!("Query memories with search term '{}'", query)
-        ) {
+        ).await {
             Ok((approved, reason)) => (approved, reason),
             Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
         };
@@ -333,11 +333,11 @@ impl Tool for UpdateMemoryTool {
         // TODO: Add explicit user_id parameter to UpdateMemoryTool for ownership validation
 
         // Check permission using policy system
-        let (approved, rejection_reason) = match context.check_permission(
+        let (approved, rejection_reason) = match context.check_permission_async(
             apchat_policy::ActionType::MemoryUpdate,
             &memory_id,
             &format!("Update memory '{}'", memory_id)
-        ) {
+        ).await {
             Ok((approved, reason)) => (approved, reason),
             Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
         };
@@ -516,11 +516,11 @@ impl Tool for DeleteMemoryTool {
         // Check if running in interactive mode for confirmation
         if !context.non_interactive {
             // Check permission using policy system
-            let (approved, rejection_reason) = match context.check_permission(
+            let (approved, rejection_reason) = match context.check_permission_async(
                 apchat_policy::ActionType::MemoryDelete,
                 &memory_id,
                 &format!("Are you sure you want to delete memory '{}'? This action cannot be undone.", memory_id)
-            ) {
+            ).await {
                 Ok((approved, reason)) => (approved, reason),
                 Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
             };
@@ -599,11 +599,11 @@ impl Tool for ListMemoriesTool {
         }
 
         // Check permission using policy system
-        let (approved, rejection_reason) = match context.check_permission(
+        let (approved, rejection_reason) = match context.check_permission_async(
             apchat_policy::ActionType::MemoryList,
             "",
             "List memories"
-        ) {
+        ).await {
             Ok((approved, reason)) => (approved, reason),
             Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
         };

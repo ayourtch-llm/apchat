@@ -8,6 +8,7 @@ pub mod tool_registry;
 pub mod tool_context;
 pub mod tool_parsing;
 pub mod content_limiter;
+pub mod confirmation;
 
 pub use tool::*;
 pub use tool_registry::*;

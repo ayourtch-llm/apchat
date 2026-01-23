@@ -96,6 +96,8 @@ enum EditMode {
     Normal,
     /// Reverse search mode (Ctrl-R)
     Search,
+    /// Confirmation mode (y/n prompt)
+    Confirmation,
 }
 
 /// Enables raw mode on stdin only (not stdout).
@@ -263,6 +265,10 @@ pub struct Readline {
     line: String,
     /// Compatibility field: cursor position (deprecated, use cursor_col)
     cursor: usize,
+    /// Confirmation prompt/message (set when in Confirmation mode)
+    confirmation_prompt: Option<String>,
+    /// Confirmation ID for tool confirmation requests (for routing the response back to the tool)
+    confirmation_id: Option<String>,
 }
 
 impl Readline {
@@ -307,6 +313,8 @@ impl Readline {
             editor_height: 1,
             line: String::new(),
             cursor: 0,
+            confirmation_prompt: None,
+            confirmation_id: None,
         })
     }
 
@@ -653,6 +661,44 @@ impl Readline {
         let match_idx = self.search_matches[self.search_match_index];
         self.lines[self.cursor_line] = self.history[match_idx].clone();
         self.cursor_col = self.lines[self.cursor_line].chars().count();
+    }
+
+    /// Enters confirmation mode with a prompt.
+    ///
+    /// Stores the original state and switches to confirmation mode.
+    /// The prompt is stored for display during confirmation.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The confirmation prompt to display
+    pub fn enter_confirmation_mode(&mut self, prompt: String, confirmation_id: Option<String>) {
+        self.original_lines = self.lines.clone();
+        self.original_cursor_line = self.cursor_line;
+        self.original_cursor_col = self.cursor_col;
+        self.confirmation_prompt = Some(prompt);
+        self.confirmation_id = confirmation_id;
+        self.mode = EditMode::Confirmation;
+        // Clear the current line for user response
+        self.lines = vec![String::new()];
+        self.cursor_line = 0;
+        self.cursor_col = 0;
+    }
+
+    /// Exits confirmation mode.
+    ///
+    /// Restores the original line and cursor position, then switches back to normal mode.
+    fn exit_confirmation_mode(&mut self) {
+        self.mode = EditMode::Normal;
+        self.lines = self.original_lines.clone();
+        self.cursor_line = self.original_cursor_line;
+        self.cursor_col = self.original_cursor_col;
+        self.confirmation_prompt = None;
+        self.confirmation_id = None;
+    }
+
+    /// Gets the current confirmation prompt, if any.
+    pub fn confirmation_prompt(&self) -> Option<&str> {
+        self.confirmation_prompt.as_deref()
     }
 
     /// Handles a character input event.
@@ -1469,6 +1515,28 @@ impl Readline {
             return;
         }
 
+        // In confirmation mode, display the confirmation prompt
+        if self.mode == EditMode::Confirmation {
+            // Move cursor to start of line (column 0)
+            stdout.queue(MoveToColumn(0)).ok();
+
+            // Clear the current line
+            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+
+            // Display the confirmation prompt with color
+            use colored::Colorize;
+            if let Some(ref prompt) = self.confirmation_prompt {
+                let prompt_display = format!("{} [Y/n]: ", prompt);
+                write!(stdout, "{}", prompt_display.bright_yellow()).ok();
+            } else {
+                write!(stdout, "{}", "Confirm [Y/n]: ".bright_yellow()).ok();
+            }
+
+            // Flush all queued commands
+            stdout.flush().ok();
+            return;
+        }
+
         // Normal mode: display multiline input with scrolling
         {
 	    // Calculate visible range based on scroll_offset and max_lines
@@ -1592,6 +1660,7 @@ impl Readline {
         match self.mode {
             EditMode::Normal => self.handle_normal_mode(key),
             EditMode::Search => self.handle_search_mode(key),
+            EditMode::Confirmation => self.handle_confirmation_mode(key),
         }
     }
 
@@ -1906,6 +1975,93 @@ impl Readline {
         }
     }
 
+    /// Handles key events in confirmation mode.
+    ///
+    /// In confirmation mode, the user is prompted with a y/n question.
+    /// Keys are handled to return the appropriate confirmation response.
+    fn handle_confirmation_mode(&mut self, key: KeyEvent) -> KeyResult {
+        use MspcMessage;
+
+        // Get the confirmation ID if this is a tool confirmation
+        let confirmation_id = self.confirmation_id.clone();
+
+        match key.code {
+            // y or Y: Yes
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                self.exit_confirmation_mode();
+                // Return ToolConfirmationResponse if we have an ID, otherwise regular ConfirmationResponse
+                if let Some(id) = confirmation_id {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ToolConfirmationResponse {
+                            approved: true,
+                            reason: None,
+                            confirmation_id: id,
+                        }
+                    ))
+                } else {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ConfirmationResponse(true, None)
+                    ))
+                }
+            }
+            // n or N: No
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                self.exit_confirmation_mode();
+                if let Some(id) = confirmation_id {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ToolConfirmationResponse {
+                            approved: false,
+                            reason: Some("User denied".to_string()),
+                            confirmation_id: id,
+                        }
+                    ))
+                } else {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ConfirmationResponse(false, Some("User denied".to_string()))
+                    ))
+                }
+            }
+            // Enter: Treat as "yes" (default for convenience)
+            KeyCode::Enter => {
+                self.exit_confirmation_mode();
+                if let Some(id) = confirmation_id {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ToolConfirmationResponse {
+                            approved: true,
+                            reason: None,
+                            confirmation_id: id,
+                        }
+                    ))
+                } else {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ConfirmationResponse(true, None)
+                    ))
+                }
+            }
+            // Escape or Ctrl-C: Cancel/No
+            KeyCode::Esc | KeyCode::Char('c')
+                if key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                self.exit_confirmation_mode();
+                if let Some(id) = confirmation_id {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ToolConfirmationResponse {
+                            approved: false,
+                            reason: Some("Cancelled".to_string()),
+                            confirmation_id: id,
+                        }
+                    ))
+                } else {
+                    KeyResult::Return(ReadlineResult::Signal(
+                        MspcMessage::ConfirmationResponse(false, Some("Cancelled".to_string()))
+                    ))
+                }
+            }
+            // Ignore other keys in confirmation mode
+            _ => KeyResult::Continue,
+        }
+    }
+
     /// Reads a line of input from the user.
     ///
     /// This is the main readline loop. It displays a prompt, reads keyboard
@@ -1994,14 +2150,30 @@ impl Readline {
             if let Some(ref mut receiver) = mspc_receiver {
                 // Try to receive a message without blocking
                 if let Ok(msg) = receiver.try_recv() {
-                    // Clear the line before returning
-                    let mut stdout = std::io::stdout();
-                    stdout.queue(MoveToColumn(0)).ok();
-                    stdout
-                        .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
-                        .ok();
-                    stdout.flush().ok();
-                    return Ok(ReadlineResult::Signal(msg));
+                    match &msg {
+                        MspcMessage::ConfirmationRequest(prompt, _) => {
+                            // Enter confirmation mode and continue the loop
+                            self.enter_confirmation_mode(prompt.clone(), None);
+                            self.redraw(prompt);
+                            continue;
+                        }
+                        MspcMessage::ToolConfirmationRequest { content, confirmation_id } => {
+                            // Enter confirmation mode with the confirmation ID
+                            self.enter_confirmation_mode(content.clone(), Some(confirmation_id.clone()));
+                            self.redraw(content);
+                            continue;
+                        }
+                        _ => {
+                            // For other messages, clear the line and return
+                            let mut stdout = std::io::stdout();
+                            stdout.queue(MoveToColumn(0)).ok();
+                            stdout
+                                .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
+                                .ok();
+                            stdout.flush().ok();
+                            return Ok(ReadlineResult::Signal(msg));
+                        }
+                    }
                 }
             }
         }

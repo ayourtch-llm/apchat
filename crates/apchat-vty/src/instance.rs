@@ -92,6 +92,66 @@ impl ReadlineInstance {
         }
     }
 
+    /// Read a line using the singleton readline instance with MSPC receiver
+    ///
+    /// This method allows readline to receive and handle MSPC signals (like confirmation requests)
+    /// while waiting for user input. The receiver is checked periodically during the input loop.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt string to display
+    /// * `mspc_receiver` - Optional mutable reference to the MSPC receiver
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Option<String>>` - The input line, or None if EOF or Interrupt
+    ///
+    /// # Safety
+    ///
+    /// This method is thread-safe and can be called from multiple threads,
+    /// but the readline operation itself is blocking and will serialize access.
+    pub fn readline_with_mspc(
+        prompt: &str,
+        mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<apchat_mspc::MspcMessage>>,
+    ) -> Result<Option<String>> {
+        let mut guard = Self::get()?;
+        let rl = &mut *guard;
+
+        match rl.readline(prompt, mspc_receiver)? {
+            ReadlineResult::Input(line) => {
+                if line.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(line))
+                }
+            }
+            ReadlineResult::Eof => Err(anyhow::anyhow!("EOF")), // Return as error for REPL to handle
+            ReadlineResult::Interrupt => Err(anyhow::anyhow!("Interrupted")), // Return as error for REPL to handle
+            ReadlineResult::Signal(msg) => {
+                // Handle MSPC signals
+                match msg {
+                    apchat_mspc::MspcMessage::ConfirmationResponse(approved, reason) => {
+                        // Return the confirmation response as an error with a special prefix
+                        // The REPL loop will detect this and forward it to the main channel
+                        let prefix = "__CONFIRMATION_RESPONSE__:";
+                        let approved_str = if approved { "true" } else { "false" };
+                        let reason_str = reason.unwrap_or_else(|| "".to_string());
+                        Err(anyhow::anyhow!("{}{}|{}", prefix, approved_str, reason_str))
+                    }
+                    apchat_mspc::MspcMessage::ToolConfirmationResponse { approved, reason, confirmation_id } => {
+                        // Return the tool confirmation response as an error with a special prefix
+                        // The REPL loop will forward this to the confirmation registry
+                        let prefix = "__TOOL_CONFIRMATION_RESPONSE__:";
+                        let approved_str = if approved { "true" } else { "false" };
+                        let reason_str = reason.unwrap_or_else(|| "".to_string());
+                        Err(anyhow::anyhow!("{}{}|{}|{}", prefix, approved_str, confirmation_id, reason_str))
+                    }
+                    _ => Ok(None),
+                }
+            }
+        }
+    }
+
     /// Add an entry to the readline history
     ///
     /// This method ensures thread-safe access to the history.

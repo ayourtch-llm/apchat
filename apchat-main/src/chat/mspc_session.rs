@@ -33,6 +33,7 @@ pub async fn chat_with_mspc(
     chat: &mut APChat,
     mspc_channel: Arc<MspcChannel>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    signal_sender: Option<tokio::sync::mpsc::Sender<MspcMessage>>,
 ) -> Result<()> {
     // Initialize terminal input router
     let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
@@ -141,7 +142,15 @@ pub async fn chat_with_mspc(
                     if let MspcMessage::ConfirmationRequest(content, _sender) = message {
                         print_heart_yellow(&format!("{} {}", "❓".yellow(), content), true);
                         print_heart_yellow(&format!("{} Type 'yes' or 'no': ", "👉".bright_black()), true);
-                        
+
+                        // Forward the confirmation request to the terminal input router via signal channel
+                        if let Some(ref sender) = signal_sender {
+                            if let Err(e) = sender.send(MspcMessage::ConfirmationRequest(content, _sender)).await {
+                                print_heart_yellow(&format!("{} Failed to send confirmation request to terminal: {}", "⚠️".yellow(), e), true);
+                                // Continue anyway - the user might still respond
+                            }
+                        }
+
                         // Wait for confirmation response
                         match mspc_channel.recv().await {
                             Some(MspcMessage::ConfirmationResponse(response, _sender)) => {
@@ -158,7 +167,7 @@ pub async fn chat_with_mspc(
                                 print_heart_yellow(&format!("{} No response received", "⚠️".yellow()), true);
                             }
                         }
-                        
+
                         continue;
                     }
                 } else if let MspcMessage::UserInput(content, _sender) = message {

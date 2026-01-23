@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::io::{BufRead, Write};
 
 use apchat_vty::{print_heart_yellow, print_heart_red};
 
@@ -279,6 +280,21 @@ pub async fn run_repl_mode(
     // Use provided channel (shared with Webex) or create new one
     let mspc_channel = mspc_channel_opt.unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
 
+    // Set MSPC channel on chat so tools can use it for confirmation requests
+    chat.mspc_channel = Some(mspc_channel.clone());
+
+    // Create a confirmation registry for tool confirmations
+    use apchat_toolcore::confirmation::ConfirmationRegistry;
+    let confirmation_registry = Arc::new(ConfirmationRegistry::new());
+    chat.confirmation_registry = Some(confirmation_registry.clone());
+
+    // Create a signal channel for sending signals (e.g., confirmation requests) to the terminal input router
+    let (signal_sender, signal_receiver) = tokio::sync::mpsc::channel::<MspcMessage>(10);
+    let signal_sender_for_main = signal_sender.clone();
+
+    // Set signal sender on chat so tools can send confirmation requests
+    chat.signal_sender = Some(signal_sender);
+
     // Create output destinations
     let mut output_destinations: Vec<Box<dyn OutputDestination>> = vec![];
     output_destinations.push(Box::new(TerminalOutputDestination::new()));
@@ -288,10 +304,17 @@ pub async fn run_repl_mode(
     let current_model_for_main = current_model_shared.clone();
 
     // Spawn terminal input router to handle stdin and route to MSPC channel
-    let terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+    let mut terminal_router = TerminalInputRouter::new(mspc_channel.clone());
+    terminal_router = terminal_router.with_signal_receiver(signal_receiver);
     let client_config_for_router = chat.client_config.clone();
+    let confirmation_registry_for_router = confirmation_registry.clone(); // Clone for router task
 
     let router_handle = tokio::spawn(async move {
+        // Wrap the signal receiver in a Tokio Mutex so it can be shared across spawn_blocking calls
+        let signal_receiver_mutex = Arc::new(tokio::sync::Mutex::new(
+            terminal_router.take_signal_receiver().expect("Signal receiver should be set")
+        ));
+
         loop {
             // Get current model state for prompt
             let current_model = {
@@ -302,12 +325,18 @@ pub async fn run_repl_mode(
             let model_indicator = format!("[{} ({})]", current_model.display_name(), model_name).bright_magenta();
             let prompt_string = format!("{} {}", model_indicator, "You:".bright_green().bold());
 
+            // Clone the Arc for use in spawn_blocking
+            let receiver_mutex_clone = signal_receiver_mutex.clone();
+
             // Use spawn_blocking for readline (it's a blocking operation)
-            // Note: We pass None for MPSC receiver since the MspcChannel uses
-            // TokioMutex which can't be easily used in sync context.
-            // External signal handling will be addressed in a future update.
+            // We pass the signal receiver to readline so it can receive confirmation requests
             let line_result = tokio::task::spawn_blocking(move || {
-                apchat_vty::ReadlineInstance::readline(&prompt_string)
+                // Lock the mutex to get access to the receiver
+                let mut receiver_guard = receiver_mutex_clone.blocking_lock();
+                // Dereference the MutexGuard to get access to the Receiver
+                let receiver_ref = &mut *receiver_guard;
+
+                apchat_vty::ReadlineInstance::readline_with_mspc(&prompt_string, Some(receiver_ref))
             }).await;
 
             match line_result {
@@ -323,12 +352,37 @@ pub async fn run_repl_mode(
                     }
                 }
                 Ok(Ok(None)) => {
-                    // Empty line - readline returns None, just continue
+                    // Empty line or confirmation request handled - continue
                     continue;
                 }
                 Ok(Err(e)) => {
                     let err_str = e.to_string();
-                    if err_str.contains("EOF") {
+                    // Check for tool confirmation response
+                    if err_str.starts_with("__TOOL_CONFIRMATION_RESPONSE__:") {
+                        // Extract the confirmation response and forward to confirmation registry
+                        let response_str = err_str.strip_prefix("__TOOL_CONFIRMATION_RESPONSE__:").unwrap();
+                        let parts: Vec<&str> = response_str.splitn(3, '|').collect();
+                        let approved = parts.get(0).map(|s| *s == "true").unwrap_or(false);
+                        let confirmation_id = parts.get(1).map(|s| s.to_string()).unwrap_or_default();
+                        let reason = parts.get(2).map(|s| s.to_string());
+
+                        // Forward to confirmation registry
+                        let registry = confirmation_registry_for_router.clone();
+                        if let Err(e) = registry.complete(&confirmation_id, (approved, reason)).await {
+                            print_heart_yellow(&format!("{} Failed to complete confirmation: {}", "⚠️".yellow(), e), true);
+                        }
+                        continue;
+                    } else if err_str.starts_with("__CONFIRMATION_RESPONSE__:") {
+                        // Extract the confirmation response and forward to main channel
+                        let response_str = err_str.strip_prefix("__CONFIRMATION_RESPONSE__:").unwrap();
+                        let parts: Vec<&str> = response_str.splitn(2, '|').collect();
+                        let approved = parts.get(0).map(|s| *s == "true").unwrap_or(false);
+                        let reason = parts.get(1).map(|s| s.to_string());
+                        let _ = terminal_router.send_to_channel(
+                            MspcMessage::ConfirmationResponse(approved, reason)
+                        ).await;
+                        continue;
+                    } else if err_str.contains("EOF") {
                         // Ctrl-D pressed - send exit command
                         let _ = terminal_router.send_to_channel(
                             MspcMessage::Command("exit".to_string(), Some("terminal".to_string()))
@@ -388,6 +442,52 @@ pub async fn run_repl_mode(
             MspcMessage::InterruptSignal(_content, _sender) => {
                 // Interrupt without active operation - just show message and continue
                 print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
+                continue;
+            }
+            MspcMessage::ConfirmationRequest(content, _sender) => {
+                // Confirmation request from tool - display prompt and wait for response
+                print_heart_red(&format!("\n{}", content.bright_green().bold()), true);
+                print_heart_red(&format!("{} ", ">>>".bright_cyan()), false);
+                std::io::stdout().flush().ok();
+
+                // Read user response
+                let stdin = std::io::stdin();
+                let mut handle = stdin.lock();
+                let mut response = String::new();
+
+                if let Err(e) = handle.read_line(&mut response) {
+                    print_heart_yellow(&format!("{} Failed to read response: {}", "❌".bright_red(), e), true);
+                    // Send rejection on error
+                    let _ = mspc_channel.send(MspcMessage::ConfirmationResponse(false, Some("Failed to read response".to_string()))).await;
+                    continue;
+                }
+
+                let response = response.trim();
+                let response_lower = response.to_lowercase();
+                let approved = response_lower.is_empty() || response_lower == "y" || response_lower == "yes";
+
+                // Get rejection reason if not approved
+                let rejection_reason = if !approved {
+                    print_heart_red(&format!("{} ", "Why not? (optional - helps the AI understand):".bright_yellow()), false);
+                    std::io::stdout().flush().ok();
+
+                    let mut reason = String::new();
+                    if let Ok(_) = handle.read_line(&mut reason) {
+                        let reason = reason.trim();
+                        if reason.is_empty() {
+                            None
+                        } else {
+                            Some(reason.to_string())
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Send confirmation response back via MSPC
+                let _ = mspc_channel.send(MspcMessage::ConfirmationResponse(approved, rejection_reason)).await;
                 continue;
             }
             _ => {
@@ -1095,6 +1195,7 @@ mod repl_compact_tests {
             readline_history: None,
             content_limiter: None,
             mspc_channel: None,
+            signal_sender: None,
         }
     }
 

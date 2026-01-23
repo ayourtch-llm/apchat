@@ -9,6 +9,17 @@ pub enum MspcMessage {
     SystemPrompt(String, Option<String>),   // Content, Sender
     ConfirmationRequest(String, Option<String>), // Content, Sender
     ConfirmationResponse(bool, Option<String>),   // Response, Sender
+    /// Tool confirmation request with a unique ID for routing the response
+    ToolConfirmationRequest {
+        content: String,
+        confirmation_id: String,
+    },
+    /// Tool confirmation response
+    ToolConfirmationResponse {
+        approved: bool,
+        reason: Option<String>,
+        confirmation_id: String,
+    },
     InterruptSignal(String, Option<String>),    // Content, Sender
     Command(String, Option<String>),         // Content, Sender
     ToolResult(String, Option<String>),      // Content, Sender
@@ -178,12 +189,12 @@ impl MspcChannel {
     
     /// Check if a message is a confirmation request
     pub fn is_confirmation_request(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::ConfirmationRequest(_, _))
+        matches!(message, MspcMessage::ConfirmationRequest(_, _) | MspcMessage::ToolConfirmationRequest { .. })
     }
-    
+
     /// Check if a message is a confirmation response
     pub fn is_confirmation_response(&self, message: &MspcMessage) -> bool {
-        matches!(message, MspcMessage::ConfirmationResponse(_, _))
+        matches!(message, MspcMessage::ConfirmationResponse(_, _) | MspcMessage::ToolConfirmationResponse { .. })
     }
     
     /// Validate message history for consistency and correctness

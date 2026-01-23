@@ -283,14 +283,20 @@ impl Tool for EditFileTool {
             print_heart_red(&format!("{}", format!("⚠️  Warning: {} occurrences will be replaced", occurrences).yellow()), true);
         }
 
-        // Check permission using policy system
-        let (approved, rejection_reason) = match context.check_permission(
-            apchat_policy::ActionType::FileEdit,
-            &file_path,
-            "Apply these changes? [Y/n]"
-        ) {
-            Ok((approved, reason)) => (approved, reason),
-            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        // In non-interactive mode, skip confirmation (already approved via web UI)
+        // In interactive mode, check permission using policy system
+        let approved = if context.non_interactive {
+            true
+        } else {
+            let (result, _) = match context.check_permission_async(
+                apchat_policy::ActionType::FileEdit,
+                &file_path,
+                "Apply these changes? [Y/n]"
+            ).await {
+                Ok((approved, reason)) => (approved, reason),
+                Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+            };
+            result
         };
 
         if approved {
@@ -300,12 +306,7 @@ impl Tool for EditFileTool {
                 Err(e) => ToolResult::error(format!("Failed to write file: {}", e)),
             }
         } else {
-            let error_msg = if let Some(reason) = rejection_reason {
-                format!("Edit cancelled by user: {}", reason)
-            } else {
-                "Edit cancelled by user or policy".to_string()
-            };
-            ToolResult::error(error_msg)
+            ToolResult::error("Edit cancelled by user or policy".to_string())
         }
     }
 }
