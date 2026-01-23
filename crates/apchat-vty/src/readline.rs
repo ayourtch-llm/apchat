@@ -3,8 +3,11 @@
 //! This module provides a `Readline` struct that manages terminal I/O
 //! using "semi-raw" mode: raw input with normal output (like rustyline).
 
+use crossterm::cursor::MoveToColumn;
+use crossterm::terminal::Clear;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, is_raw_mode_enabled};
-use std::io;
+use crossterm::QueueableCommand;
+use std::io::{self, Write};
 
 /// Readline struct that manages terminal mode, input state, and command history.
 ///
@@ -326,6 +329,51 @@ impl Readline {
     pub fn exit_history_navigation(&mut self) {
         self.history_index = None;
         self.saved_line.clear();
+    }
+
+    /// Redraws the current line to the terminal.
+    ///
+    /// This function clears the current line and redraws it with the prompt
+    /// and current input, positioning the cursor correctly.
+    ///
+    /// # Arguments
+    ///
+    /// * `prompt` - The prompt string to display (e.g., "> ")
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use apchat_vty::Readline;
+    ///
+    /// let mut readline = Readline::new().unwrap();
+    /// readline.line = "hello".to_string();
+    /// readline.cursor = 5;
+    ///
+    /// // Redraw with prompt
+    /// readline.redraw("> ");
+    /// ```
+    pub fn redraw(&mut self, prompt: &str) {
+        let mut stdout = std::io::stdout();
+
+        // Move cursor to start of line (column 0)
+        stdout.queue(MoveToColumn(0)).ok();
+
+        // Clear the current line
+        stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+
+        // Write prompt and input
+        write!(stdout, "{}{}", prompt, self.line).ok();
+
+        // Calculate cursor position (in characters, not bytes)
+        // Use chars() to handle multi-byte Unicode characters correctly
+        let prompt_len = prompt.chars().count();
+        let cursor_pos = prompt_len + self.cursor;
+
+        // Move cursor to correct position
+        stdout.queue(MoveToColumn(cursor_pos as u16)).ok();
+
+        // Flush all queued commands
+        stdout.flush().ok();
     }
 }
 
