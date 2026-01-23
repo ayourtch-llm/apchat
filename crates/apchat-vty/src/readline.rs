@@ -1209,6 +1209,15 @@ impl Readline {
                 KeyResult::Return(ReadlineResult::Input(line))
             }
 
+            // Ctrl-A: Move cursor to start of line
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.handle_home() {
+                    KeyResult::Redraw
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
             // Ctrl-C: Interrupt
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 KeyResult::Return(ReadlineResult::Interrupt)
@@ -1218,6 +1227,15 @@ impl Readline {
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 if self.line.is_empty() {
                     KeyResult::Return(ReadlineResult::Eof)
+                } else {
+                    KeyResult::Continue
+                }
+            }
+
+            // Ctrl-E: Move cursor to end of line
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                if self.handle_end() {
+                    KeyResult::Redraw
                 } else {
                     KeyResult::Continue
                 }
