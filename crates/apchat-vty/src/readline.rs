@@ -1489,7 +1489,7 @@ impl Readline {
 	let start = self.scroll_offset;
 	let end = start + self.editor_height; // NOTE: without .min(self.lines.len());
 	let display_count = end - start;
-        let pr = format!("[{}]{}", display_count, prompt);
+        let pr = format!("[{}]{}", std::process::id(), prompt);
         let prompt = &pr;
 
 

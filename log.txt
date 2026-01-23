@@ -1,7 +1,15 @@
 warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   /Users/ayourtch/llm-rust/a/apchat/crates/apchat-wasm/Cargo.toml
 workspace: /Users/ayourtch/llm-rust/a/apchat/Cargo.toml
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+   Compiling apchat-vty v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-vty)
+   Compiling apchat-llm-api v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-llm-api)
+   Compiling apchat-policy v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-policy)
+   Compiling apchat-skills v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-skills)
+   Compiling apchat-toolcore v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-toolcore)
+   Compiling apchat-tools v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-tools)
+   Compiling apchat-agents v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/crates/apchat-agents)
+   Compiling apchat v0.1.0 (/Users/ayourtch/llm-rust/a/apchat/apchat-main)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.62s
      Running `target/debug/apchat --llama-cpp-url 'http://100.72.206.67:8080' --stream -i`
 💛 [33m🔍[0m DEBUG: Final model overrides before client config:
 💛   blu_model_override_final: "some-model"
