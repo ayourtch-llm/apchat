@@ -168,6 +168,38 @@ fn restore_terminal_settings(original: &termios) -> io::Result<()> {
 /// The "semi-raw" mode means:
 /// - Raw input: Character-by-character input without line buffering
 /// - Normal output: Output is processed normally (not raw)
+/// - Bracketed paste mode: Enabled to support intelligent paste handling
+///
+/// # Paste Behavior
+///
+/// Bracketed paste mode is automatically enabled. When you paste multiline text,
+/// the newlines are converted to spaces to keep the input on a single line.
+///
+/// Example:
+/// ```text
+/// Pasting:    Becomes:
+/// line1       line1 line2 line3
+/// line2
+/// line3
+/// ```
+///
+/// # Keybindings
+///
+/// Movement:
+/// - `Left`, `Right`, `Ctrl-Left`, `Ctrl-Right` - Move by character/word
+/// - `Home`, `End`, `Ctrl-A`, `Ctrl-E` - Move to start/end
+/// - `Up`, `Down` - Navigate history
+///
+/// Editing:
+/// - `Backspace`, `Delete` - Delete characters
+/// - `Ctrl-K`, `Ctrl-U`, `Ctrl-W` - Kill text
+/// - `Ctrl-Y` - Yank (paste) last killed text
+///
+/// Special:
+/// - `Enter` - Submit the current line
+/// - `Ctrl-C` - Interrupt (sends interrupt signal)
+/// - `Ctrl-D` - Exit if line is empty, otherwise delete character
+/// - `Ctrl-R` - Reverse search in history
 ///
 /// # History Management
 ///
