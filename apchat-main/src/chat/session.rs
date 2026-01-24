@@ -373,6 +373,8 @@ pub(crate) async fn chat(
                     ));
                 }
 
+		let rollback_len = chat.messages.len();
+
                 chat.messages.push(response.clone());
 
                 // Log assistant message with tool calls
@@ -398,6 +400,8 @@ pub(crate) async fn chat(
                         tool_call_info,
                     ).await;
                 }
+                // rollback assistant message with tool calls and the tool results
+                let mut rollback = false;
 
                 for tool_call in tool_calls {
                     print_heart_red(&format!(
@@ -417,6 +421,9 @@ pub(crate) async fn chat(
                         Ok(r) => r,
                         Err(e) => {
                             let error_msg = e.to_string();
+			    if error_msg.contains("Failed to parse") {
+                                rollback = true;
+                            }
 
                             // Track error for progress evaluation
                             errors_encountered.push(format!("{}: {}", tool_call.function.name, error_msg));
@@ -517,6 +524,10 @@ pub(crate) async fn chat(
                         name: Some(tool_call.function.name.clone()),
                         reasoning: None,
                     });
+		    if rollback {
+                       print_heart_red(&format!("{} {}", "📋 FATAL ERROR - ROLLBACK".red(), "parsing failed"), true);
+                       chat.messages.truncate(rollback_len);
+                    }
                 }
             } else {
                 chat.messages.push(response.clone());

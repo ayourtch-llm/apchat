@@ -484,7 +484,7 @@ impl APChat {
             _ => {
                 // Use the tool registry for all tools (including plan_edits and apply_edit_plan)
                 let params = ToolParameters::from_json(arguments)
-                    .with_context(|| format!("Failed to parse tool arguments for '{}': {}", name, arguments.replace("<","&lt;")))?;
+                    .with_context(|| format!("Failed to parse tool arguments for '{}'.", name))?;
 
                 // Format current model string for subagent tools
                 let current_model_string = self.format_current_model_string();
