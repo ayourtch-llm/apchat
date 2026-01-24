@@ -24,14 +24,13 @@ const MAX_FILE_SIZE: usize = 1024 * 1024; // 1 MiB
 /// * `work_dir` – The root workspace directory. The function ensures the resolved file stays inside this directory.
 /// * `file_path` – Path relative to the workspace.
 /// * `start_line` – Optional inclusive 1‑based start line. If `None`, assume line 1.
-/// * `max_line_count` - Optional line count. If `start_line` is set, assume 30, else entire file.
+/// * `max_line_count` - Optional line count.
 pub async fn open_file(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
     start_line: Option<usize>,
     max_line_count: Option<usize>,
 ) -> Result<String> {
-    let max_line_count = if start_line.is_some() { Some(30) } else { max_line_count };
     // Resolve the absolute path
     let abs_path = work_dir.join(file_path.as_ref());
 
