@@ -61,7 +61,11 @@ fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io:
         if i < lines.len() - 1 {
             let _ = writeln!(writer, "{} {}", emoji, line);
         } else {
-            let _ = write!(writer, "{} {}", emoji, line);
+            if lines.len() == 1 && !newline {
+               let _ = write!(writer, "{}", line);
+            } else {
+               let _ = write!(writer, "{} {}", emoji, line);
+            }
         }
     }
 

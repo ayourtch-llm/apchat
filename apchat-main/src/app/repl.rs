@@ -320,6 +320,7 @@ pub async fn run_repl_mode(
         let signal_receiver_mutex = Arc::new(tokio::sync::Mutex::new(
             terminal_router.take_signal_receiver().expect("Signal receiver should be set")
         ));
+        println!("");
 
         loop {
             // Get current model state for prompt
@@ -938,6 +939,7 @@ eprintln!("AYXX: {:?}", mspc_result);
 	if let Some(logger) = &mut chat.logger {
 	    logger.log("user", line, None, false).await;
 	}
+        println!("");
 
 	// Auto-save history after user message
 	match chat.auto_save_history() {
