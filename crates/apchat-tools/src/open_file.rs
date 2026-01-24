@@ -19,18 +19,19 @@ pub enum OpenFileError {
 
 const MAX_FILE_SIZE: usize = 1024 * 1024; // 1 MiB
 
-/// Open a file within the given workspace, optionally returning only a line range.
+/// Open a file within the given workspace, optionally returning the whole file
 ///
 /// * `work_dir` – The root workspace directory. The function ensures the resolved file stays inside this directory.
 /// * `file_path` – Path relative to the workspace.
 /// * `start_line` – Optional inclusive 1‑based start line. If `None`, assume line 1.
-/// * `read_line_count` - Optional line count. If `None`, assume as many as possible.
+/// * `max_line_count` - Optional line count. If `start_line` is set, assume 30, else entire file.
 pub async fn open_file(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
     start_line: Option<usize>,
-    read_line_count: Option<usize>,
+    max_line_count: Option<usize>,
 ) -> Result<String> {
+    let max_line_count = if start_line.is_some() { Some(30) } else { max_line_count };
     // Resolve the absolute path
     let abs_path = work_dir.join(file_path.as_ref());
 
@@ -109,7 +110,7 @@ pub async fn open_file(
     }
 
     let start = start_line.unwrap_or(1).max(1).min(total.max(1));
-    let count = read_line_count.unwrap_or(total);
+    let count = max_line_count.unwrap_or(total);
 
     let end = start + count - 1;
     // Clamp the range to valid values instead of failing

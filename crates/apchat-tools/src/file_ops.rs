@@ -18,14 +18,14 @@ impl Tool for OpenFileTool {
     }
 
     fn description(&self) -> &str {
-        "Open a file and display its contents with optional line range. WARNING: For large files, specify 'read_line_count' (e.g., 30 lines) to avoid truncation. Default reads entire file."
+        "Open a file and display its contents with optional line range. WARNING: For large files, specify 'max_line_count' (e.g., 30 lines) to avoid truncation. Default reads entire file."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("file_path", "string", "Path to the file relative to the work directory", required),
             param!("start_line", "integer", "Starting line number (1-based)", optional),
-            param!("read_line_count", "integer", "How many lines to read (recommended: 30 for large files)", optional),
+            param!("max_line_count", "integer", "How many lines to read (recommended: 30 for large files)", optional),
         ])
     }
 
@@ -36,9 +36,9 @@ impl Tool for OpenFileTool {
         };
 
         let start_line = params.get_optional::<usize>("start_line").unwrap_or(None);
-        let read_line_count = params.get_optional::<usize>("read_line_count").unwrap_or(None);
+        let max_line_count = params.get_optional::<usize>("max_line_count").unwrap_or(None);
 
-        match open_file::open_file(&context.work_dir, &file_path, start_line, read_line_count).await {
+        match open_file::open_file(&context.work_dir, &file_path, start_line, max_line_count).await {
             Ok(content) => ToolResult::success(content),
             Err(e) => ToolResult::error(format!("Failed to open file: {}", e)),
         }

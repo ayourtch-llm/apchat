@@ -69,7 +69,7 @@ impl ContentLimiter {
 
         // Create truncated content with note
         let truncated_content = format!("🚨 LARGE OUTPUT TRUNCATED 🚨
-Output from '{}' exceeds maximum display length ({} chars). If a tool allows to make a smaller request - do it.
+Output from '{}' exceeds maximum display length ({} chars). IMPORTANT: If a tool allows to limit the size of reply, like using max_read_lines parameter in open_file tool - do it.
 Full output saved to: {}",
                                        tool_name,
                                        self.config.max_content_length,

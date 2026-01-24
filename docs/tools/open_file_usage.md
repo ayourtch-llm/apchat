@@ -23,14 +23,14 @@ open_file {
 // ✅ GOOD - Read in 40-line chunks
 open_file {
   "file_path": "src/main.rs",
-  "read_line_count": 40
+  "max_line_count": 40
 }
 
 // ✅ GOOD - Read specific range
 open_file {
   "file_path": "src/main.rs",
   "start_line": 101,
-  "read_line_count": 20
+  "max_line_count": 20
 }
 ```
 
@@ -61,7 +61,7 @@ file_curly_glance {
 open_file {
   "file_path": "src/main.rs",
   "start_line": 42,
-  "read_line_count": 25
+  "max_line_count": 25
 }
 ```
 

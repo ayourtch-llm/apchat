@@ -8,7 +8,7 @@
 // FOR LARGE FILES (>50 lines)
 open_file {
   "file_path": "src/main.rs",
-  "read_line_count": 20,
+  "max_line_count": 20,
   "start_line": 100  // Optional
 }
 
@@ -31,7 +31,7 @@ file_curly_glance {"file_path": "src/main.rs"}
 open_file {
   "file_path": "src/main.rs",
   "start_line": 42,
-  "read_line_count": 25
+  "max_line_count": 25
 }
 ```
 
