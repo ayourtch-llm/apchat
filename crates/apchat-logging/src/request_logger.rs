@@ -12,42 +12,42 @@ pub fn log_request(url: &str, request: &ChatRequest, api_key: &str, verbose: boo
         return;
     }
 
-    println!("\n{}", "═".repeat(80).bright_cyan());
-    println!("{}", "🔍 HTTP REQUEST DEBUG".bright_cyan().bold());
-    println!("{}", "═".repeat(80).bright_cyan());
+    eprintln!("\n{}", "═".repeat(80).bright_cyan());
+    eprintln!("{}", "🔍 HTTP REQUEST DEBUG".bright_cyan().bold());
+    eprintln!("{}", "═".repeat(80).bright_cyan());
 
     // Parse URL to show host and port
     if let Ok(parsed_url) = reqwest::Url::parse(url) {
-        println!("{}: {}", "URL".bright_yellow(), url);
-        println!("{}: {}", "Host".bright_yellow(), parsed_url.host_str().unwrap_or("unknown"));
-        println!("{}: {}", "Port".bright_yellow(), parsed_url.port().map(|p| p.to_string()).unwrap_or_else(||
+        eprintln!("{}: {}", "URL".bright_yellow(), url);
+        eprintln!("{}: {}", "Host".bright_yellow(), parsed_url.host_str().unwrap_or("unknown"));
+        eprintln!("{}: {}", "Port".bright_yellow(), parsed_url.port().map(|p| p.to_string()).unwrap_or_else(||
             if parsed_url.scheme() == "https" { "443 (default)".to_string() } else { "80 (default)".to_string() }
         ));
-        println!("{}: {}", "Scheme".bright_yellow(), parsed_url.scheme());
+        eprintln!("{}: {}", "Scheme".bright_yellow(), parsed_url.scheme());
     } else {
-        println!("{}: {}", "URL".bright_yellow(), url);
+        eprintln!("{}: {}", "URL".bright_yellow(), url);
     }
 
-    println!("\n{}", "Headers:".bright_yellow());
-    println!("  Content-Type: application/json");
-    println!("  Authorization: Bearer {}***", &api_key.chars().take(10).collect::<String>());
+    eprintln!("\n{}", "Headers:".bright_yellow());
+    eprintln!("  Content-Type: application/json");
+    eprintln!("  Authorization: Bearer {}***", &api_key.chars().take(10).collect::<String>());
 
-    println!("\n{}", "Request Body:".bright_yellow());
+    eprintln!("\n{}", "Request Body:".bright_yellow());
     match serde_json::to_string_pretty(&request) {
         Ok(json) => {
             // Truncate very long requests for readability
             if json.chars().count() > 5000 {
-                println!("{}", safe_truncate(&json, 5000));
-                println!("\n{}", format!("... (truncated, total {} bytes)", json.len()).bright_black());
+                eprintln!("{}", safe_truncate(&json, 5000));
+                eprintln!("\n{}", format!("... (truncated, total {} bytes)", json.len()).bright_black());
             } else {
-                println!("{}", json);
+                eprintln!("{}", json);
             }
         }
-        Err(e) => println!("{}", format!("Error serializing request: {}", e).red()),
+        Err(e) => eprintln!("{}", format!("Error serializing request: {}", e).red()),
     }
 
-    println!("{}", "═".repeat(80).bright_cyan());
-    println!();
+    eprintln!("{}", "═".repeat(80).bright_cyan());
+    eprintln!();
 }
 
 /// Log HTTP request to file for persistent debugging
@@ -107,7 +107,7 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelColor,
         .with_context(|| format!("Failed to write request log to {}", file_path.display()))?;
 
     // Print the filename to console
-    println!("{}", format!("📝 Request logged to: {}", filename).bright_blue());
+    eprintln!("{}", format!("📝 Request logged to: {}", filename).bright_blue());
 
     Ok(())
 }
@@ -182,7 +182,7 @@ pub fn log_response_to_file(
         .with_context(|| format!("Failed to write response log to {}", file_path.display()))?;
 
     // Print the filename to console
-    println!("{}", format!("📄 Response logged to: {}", filename).bright_blue());
+    eprintln!("{}", format!("📄 Response logged to: {}", filename).bright_blue());
 
     Ok(())
 }
@@ -206,7 +206,7 @@ pub fn log_raw_response_to_file(
         .with_context(|| format!("Failed to write raw response log to {}", file_path.display()))?;
 
     // Print the filename to console
-    println!("{}", format!("📄 Raw response logged to: {}", filename).bright_blue());
+    eprintln!("{}", format!("📄 Raw response logged to: {}", filename).bright_blue());
 
     Ok(())
 }
@@ -217,49 +217,49 @@ pub fn log_response(status: &reqwest::StatusCode, headers: &reqwest::header::Hea
         return;
     }
 
-    println!("\n{}", "═".repeat(80).bright_green());
-    println!("{}", "📥 HTTP RESPONSE DEBUG".bright_green().bold());
-    println!("{}", "═".repeat(80).bright_green());
+    eprintln!("\n{}", "═".repeat(80).bright_green());
+    eprintln!("{}", "📥 HTTP RESPONSE DEBUG".bright_green().bold());
+    eprintln!("{}", "═".repeat(80).bright_green());
 
-    println!("{}: {} {}",
+    eprintln!("{}: {} {}",
         "Status".bright_yellow(),
         status.as_u16(),
         status.canonical_reason().unwrap_or("Unknown")
     );
 
-    println!("\n{}", "Headers:".bright_yellow());
+    eprintln!("\n{}", "Headers:".bright_yellow());
     for (name, value) in headers.iter() {
         if let Ok(val_str) = value.to_str() {
-            println!("  {}: {}", name.as_str().bright_white(), val_str);
+            eprintln!("  {}: {}", name.as_str().bright_white(), val_str);
         }
     }
 
-    println!("\n{}", "Response Body:".bright_yellow());
+    eprintln!("\n{}", "Response Body:".bright_yellow());
     // Try to pretty-print JSON, fall back to raw text
     if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(body) {
         match serde_json::to_string_pretty(&json_val) {
             Ok(pretty) => {
                 if pretty.chars().count() > 5000 {
-                    println!("{}", safe_truncate(&pretty, 5000));
-                    println!("\n{}", format!("... (truncated, total {} bytes)", pretty.len()).bright_black());
+                    eprintln!("{}", safe_truncate(&pretty, 5000));
+                    eprintln!("\n{}", format!("... (truncated, total {} bytes)", pretty.len()).bright_black());
                 } else {
-                    println!("{}", pretty);
+                    eprintln!("{}", pretty);
                 }
             }
-            Err(_) => println!("{}", body),
+            Err(_) => eprintln!("{}", body),
         }
     } else {
         // Not JSON, show raw
         if body.chars().count() > 5000 {
-            println!("{}", safe_truncate(body, 5000));
-            println!("\n{}", format!("... (truncated, total {} bytes)", body.len()).bright_black());
+            eprintln!("{}", safe_truncate(body, 5000));
+            eprintln!("\n{}", format!("... (truncated, total {} bytes)", body.len()).bright_black());
         } else {
-            println!("{}", body);
+            eprintln!("{}", body);
         }
     }
 
-    println!("{}", "═".repeat(80).bright_green());
-    println!();
+    eprintln!("{}", "═".repeat(80).bright_green());
+    eprintln!();
 }
 
 /// Log streaming chunk for debugging (console output)
@@ -268,7 +268,7 @@ pub fn log_stream_chunk(chunk_num: usize, data: &str, verbose: bool) {
         return;
     }
 
-    println!("{}", format!("📦 Stream Chunk #{}: {}", chunk_num,
+    eprintln!("{}", format!("📦 Stream Chunk #{}: {}", chunk_num,
         if data.chars().count() > 200 {
             format!("{}... ({} bytes)", safe_truncate(data, 200), data.len())
         } else {
