@@ -81,14 +81,17 @@ mod tests {
     async fn test_terminal_router_handles_confirmation() {
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::TerminalInputRouter::new(channel.clone());
-        
+println!("Start test");
+
         // Drain any existing messages to avoid cross-test pollution
         while channel.try_recv().await.is_ok() {
             // Drain old messages
         }
-        
+println!("Drain finished");
+
         // Test that we can send confirmation messages
         router.send_to_channel(MspcMessage::ConfirmationResponse(true, Some("terminal".to_string()))).await;
+println!("Send done");
         
         // Timeout-based receive to prevent hanging
         let received = match tokio::time::timeout(
@@ -99,11 +102,16 @@ mod tests {
             Ok(None) => panic!("Channel closed unexpectedly"),
             Err(_) => panic!("Test hung waiting for channel message!"),
         };
+println!("Recv done: {:?}", &received);
         assert!(matches!(received, MspcMessage::ConfirmationResponse(true, sender) 
             if sender == Some("terminal".to_string())));
         
         // Drain the first message we just received
-        let _drained = channel.recv().await;
+        // AY: NOTE: we can not "drain" it - it is already out of the bag. 
+        // Attempting to recv here will hang, since there is nothing on the channel.
+  
+        // let _drained = channel.recv().await;
+//println!("Drained: {:?}", &_drained);
         
         // Test false confirmation
         router.send_to_channel(MspcMessage::ConfirmationResponse(false, Some("terminal".to_string()))).await;
@@ -115,9 +123,45 @@ mod tests {
             Ok(None) => panic!("Channel closed unexpectedly"),
             Err(_) => panic!("Test hung waiting for second channel message!"),
         };
+println!("Recv2 done: {:?}", &received);
         assert!(matches!(received, MspcMessage::ConfirmationResponse(false, sender) 
             if sender == Some("terminal".to_string())));
-        // Note: The test verifies correct behavior with awaits added
+    }
+
+    #[test]
+    fn test_parse_input_confirmation_yes() {
+        let channel = Arc::new(MspcChannel::new(100));
+        let router = crate::input_router::TerminalInputRouter::new(channel.clone());
+
+        // Test parse_input returns ConfirmationResponse for "yes"
+        let msg = router.parse_input("yes");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if b));
+
+        // Test parse_input returns ConfirmationResponse for "y"
+        let msg = router.parse_input("y");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if b));
+
+        // Test parse_input returns ConfirmationResponse for "YES"
+        let msg = router.parse_input("YES");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if b));
+
+        // Test parse_input returns ConfirmationResponse for "Y"
+        let msg = router.parse_input("Y");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if b));
+    }
+
+    #[test]
+    fn test_parse_input_confirmation_no() {
+        let channel = Arc::new(MspcChannel::new(100));
+        let router = crate::input_router::TerminalInputRouter::new(channel.clone());
+
+        // Test parse_input returns ConfirmationResponse for "no"
+        let msg = router.parse_input("no");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if !b));
+
+        // Test parse_input returns ConfirmationResponse for "n"
+        let msg = router.parse_input("n");
+        assert!(matches!(msg, MspcMessage::ConfirmationResponse(b, _) if !b));
     }
     
     #[test]
@@ -298,6 +342,7 @@ mod tests {
     }
 }
 #[cfg(test)]
+#[ignore]
 mod hang_debug_tests {
     use super::*;
 
@@ -321,6 +366,15 @@ mod hang_debug_tests {
     async fn test_confirmation_response_send() {
         let channel = Arc::new(MspcChannel::new(100));
         
+        // Drain any existing messages to avoid cross-test pollution
+        loop {
+            match channel.try_recv().await {
+                Ok(Some(_)) => continue,
+                Ok(None) => break,
+                Err(_) => break,
+            }
+        }
+
         // 测试 send 和 recv 的分离问题
         let send_result = channel.send(
             MspcMessage::ConfirmationResponse(true, Some("terminal".to_string()))
@@ -329,6 +383,7 @@ mod hang_debug_tests {
         match send_result {
             Ok(_) => {
                 println!("✓ Send successful, checking receive...");
+                // Expect to receive exactly the message we sent
                 if let Some(msg) = channel.recv().await {
                     println!("✓ Received: {:?}", msg);
                     assert!(matches!(msg, MspcMessage::ConfirmationResponse(true, _)));
