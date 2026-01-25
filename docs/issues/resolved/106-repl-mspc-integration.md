@@ -100,3 +100,35 @@ This will integrate the REPL with the MSPC infrastructure, enabling input decoup
 
 ---
 *Created: 2026-01-18*
+
+## Resolution
+
+This issue has been successfully implemented. The REPL loop now integrates with the MSPC infrastructure for input/output decoupling.
+
+**Implementation Details:**
+
+1. **MSPC Channel Integration:** The REPL now uses `MspcChannel` for communication between input/output components instead of direct readline calls.
+
+2. **TerminalInputRouter:** Implemented to read terminal input and send messages to the MSPC channel properly parsed (UserInput, Command, InterruptSignal, ConfirmationResponse).
+
+3. **TerminalOutputDestination:** Added to the output destinations vector for system output via MSPC.
+
+4. **Signal Handling:** The REPL correctly receives and processes interrupt signals (`^C`) and command interruptions via the MSPC channel.
+
+5. **Backward Compatibility:** All existing REPL functionality (commands like `/model`, `/history`, `/brainstorm`, etc.) continues to work alongside the new MSPC integration.
+
+**Files Modified:**
+- `apchat-main/src/app/repl.rs`: Refactored to use MSPC channels throughout
+
+**Testing:**
+- Integration tests verify MSPC message handling in REPL context
+- Manual testing confirms UTF-8 encoding and prompt parsing work correctly
+
+**Key Code Locations:**
+- TerminalInputRouter in `apchat-main/src/input_router/terminal.rs`
+- Output routing in `apchat-main/src/app/repl.rs` lines ~305-310
+- Interrupt signal handling in `apchat-main/src/app/repl.rs` lines ~1070-1095
+
+---
+*Created: 2026-01-18*
+*Resolved: 2026-01-25*
