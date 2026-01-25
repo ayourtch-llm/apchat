@@ -70,7 +70,7 @@ mod tests {
         let router = crate::input_router::TerminalInputRouter::new(channel.clone());
         
         // Send a message through the router
-        router.send_to_channel(MspcMessage::UserInput("test message".to_string(), Some("terminal".to_string())));
+        router.send_to_channel(MspcMessage::UserInput("test message".to_string(), Some("terminal".to_string()))).await;
         
         // Receive it from the channel
         let received = channel.recv().await.unwrap();
@@ -88,7 +88,7 @@ mod tests {
         }
         
         // Test that we can send confirmation messages
-        router.send_to_channel(MspcMessage::ConfirmationResponse(true, Some("terminal".to_string())));
+        router.send_to_channel(MspcMessage::ConfirmationResponse(true, Some("terminal".to_string()))).await;
         
         // Timeout-based receive to prevent hanging
         let received = match tokio::time::timeout(
@@ -106,7 +106,7 @@ mod tests {
         let _drained = channel.recv().await;
         
         // Test false confirmation
-        router.send_to_channel(MspcMessage::ConfirmationResponse(false, Some("terminal".to_string())));
+        router.send_to_channel(MspcMessage::ConfirmationResponse(false, Some("terminal".to_string()))).await;
         let received = match tokio::time::timeout(
             tokio::time::Duration::from_millis(200), 
             channel.recv()
@@ -117,6 +117,7 @@ mod tests {
         };
         assert!(matches!(received, MspcMessage::ConfirmationResponse(false, sender) 
             if sender == Some("terminal".to_string())));
+        // Note: The test verifies correct behavior with awaits added
     }
     
     #[test]
