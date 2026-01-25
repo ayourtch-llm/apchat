@@ -82,17 +82,41 @@ mod tests {
         let channel = Arc::new(MspcChannel::new(100));
         let router = crate::input_router::TerminalInputRouter::new(channel.clone());
         
+        // Drain any existing messages to avoid cross-test pollution
+        while channel.try_recv().await.is_ok() {
+            // Drain old messages
+        }
+        
         // Test that we can send confirmation messages
         router.send_to_channel(MspcMessage::ConfirmationResponse(true, Some("terminal".to_string())));
         
-        // Receive the confirmation
-        let received = channel.recv().await.unwrap();
-        assert!(matches!(received, MspcMessage::ConfirmationResponse(true, sender) if sender == Some("terminal".to_string())));
+        // Timeout-based receive to prevent hanging
+        let received = match tokio::time::timeout(
+            tokio::time::Duration::from_millis(200), 
+            channel.recv()
+        ).await {
+            Ok(Some(msg)) => msg,
+            Ok(None) => panic!("Channel closed unexpectedly"),
+            Err(_) => panic!("Test hung waiting for channel message!"),
+        };
+        assert!(matches!(received, MspcMessage::ConfirmationResponse(true, sender) 
+            if sender == Some("terminal".to_string())));
+        
+        // Drain the first message we just received
+        let _drained = channel.recv().await;
         
         // Test false confirmation
         router.send_to_channel(MspcMessage::ConfirmationResponse(false, Some("terminal".to_string())));
-        let received = channel.recv().await.unwrap();
-        assert!(matches!(received, MspcMessage::ConfirmationResponse(false, sender) if sender == Some("terminal".to_string())));
+        let received = match tokio::time::timeout(
+            tokio::time::Duration::from_millis(200), 
+            channel.recv()
+        ).await {
+            Ok(Some(msg)) => msg,
+            Ok(None) => panic!("Channel closed unexpectedly"),
+            Err(_) => panic!("Test hung waiting for second channel message!"),
+        };
+        assert!(matches!(received, MspcMessage::ConfirmationResponse(false, sender) 
+            if sender == Some("terminal".to_string())));
     }
     
     #[test]
@@ -270,6 +294,57 @@ mod tests {
         assert!(manager.terminal_reader.is_none());
         assert!(manager.webex_reader.is_none());
         assert!(manager.websocket_handlers.is_empty());
+    }
+}
+#[cfg(test)]
+mod hang_debug_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_mspc_channel_base_performance() {
+        let channel = Arc::new(MspcChannel::new(100));
+        
+        // 快速发送多条消息测试通水量
+        let start = std::time::Instant::now();
+        for i in 0..50 {
+            let _ = channel.send(MspcMessage::UserInput(
+                format!("test{}", i),
+                Some("terminal".to_string()),
+            )).await;
+        }
+        let elapsed = start.elapsed();
+        println!("✓ 50 messages sent in {:.4}ms", elapsed.as_secs_f64() * 1000.0);
+    }
+
+    #[tokio::test]
+    async fn test_confirmation_response_send() {
+        let channel = Arc::new(MspcChannel::new(100));
+        
+        // 测试 send 和 recv 的分离问题
+        let send_result = channel.send(
+            MspcMessage::ConfirmationResponse(true, Some("terminal".to_string()))
+        ).await;
+        
+        match send_result {
+            Ok(_) => {
+                println!("✓ Send successful, checking receive...");
+                if let Some(msg) = channel.recv().await {
+                    println!("✓ Received: {:?}", msg);
+                    assert!(matches!(msg, MspcMessage::ConfirmationResponse(true, _)));
+                    match msg {
+                        MspcMessage::ConfirmationResponse(true, sender) => {
+                            assert_eq!(sender, Some("terminal".to_string()));
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    println!("✗ Receive returned None - this indicates a potential issue!");
+                }
+            }
+            Err(e) => {
+                println!("✗ Send failed: {:?}", e);
+            }
+        }
     }
 }
 
