@@ -9,12 +9,16 @@ use axum::{
     Router,
 };
 use futures_util::{SinkExt, StreamExt};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use apchat_models::Message as ChatMessage;
 use apchat_vty::{print_heart_red, print_heart_yellow};
+use apchat_toolcore::parameter_validation::validate_tool_call;
+use apchat_toolcore::ToolParameters;
+use serde_json::Value;
 use crate::{
     api::call_api,
     mspc::{MspcChannel, MspcMessage},
@@ -395,53 +399,202 @@ async fn handle_chat_with_broadcast(
                     }
                 }
 
-                // Execute tool (either confirmed or doesn't need confirmation)
+                // Validate tool call parameters before execution (single LLM mode only)
                 let mut apchat = session.apchat.lock().await;
-                let result = apchat
-                    .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
-                    .await;
-                drop(apchat);
+                let tool = apchat.tool_registry.get_tool(&tool_call.function.name);
 
-                // Broadcast tool result
-                match result {
-                    Ok(result_str) => {
-                        let result_msg = ServerMessage::ToolCallResult {
-                            tool_call_id: tool_call.id.clone(),
-                            result: result_str.clone(),
-                            success: true,
-                            formatted_result: Some(result_str.clone()),
-                        };
-                        session.broadcast(result_msg).await;
+                if let Some(tool) = tool {
+                    // Get parameter definitions from the tool
+                    let param_definitions: HashMap<String, Value> = tool.parameters()
+                        .iter()
+                        .map(|(key, def)| {
+                            (key.clone(), serde_json::to_value(def).unwrap_or(Value::Null))
+                        })
+                        .collect();
 
-                        // Add tool result to history
-                        session.apchat.lock().await.messages.push(ChatMessage {
-                            role: "tool".to_string(),
-                            content: result_str,
-                            tool_calls: None,
-                            tool_call_id: Some(tool_call.id.clone()),
-                            name: Some(tool_call.function.name.clone()),
-                            reasoning: None,
-                        });
+                    // Parse the arguments JSON
+                    let parsed_args: HashMap<String, Value> = match serde_json::from_str(&tool_call.function.arguments) {
+                        Ok(args) => args,
+                        Err(e) => {
+                            let error_msg = format!("Failed to parse tool arguments: {}", e);
+                            print_heart_red(&format!("⚠️  {}", error_msg), true);
+
+                            let error_msg_msg = ServerMessage::Error {
+                                message: error_msg.clone(),
+                                recoverable: true,
+                            };
+                            session.broadcast(error_msg_msg).await;
+
+                            // Add error to history
+                            session.apchat.lock().await.messages.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: error_msg.clone(),
+                                tool_calls: None,
+                                tool_call_id: Some(tool_call.id.clone()),
+                                name: Some(tool_call.function.name.clone()),
+                                reasoning: None,
+                            });
+
+                            continue;
+                        }
+                    };
+
+                    // Build ToolParameters from parsed arguments
+                    let validated_params = ToolParameters {
+                        data: parsed_args,
+                    };
+
+                    // Create tool context
+                    let current_model_string = apchat.current_model.as_str_default();
+                    let context = apchat_toolcore::ToolContext::new(
+                        apchat.work_dir.clone(),
+                        format!("session_{}", uuid::Uuid::new_v4()),
+                        apchat.policy_manager.clone()
+                    )
+                    .with_terminal_manager(apchat.terminal_manager.clone())
+                    .with_todo_manager(apchat.todo_manager.clone())
+                    .with_non_interactive(apchat.non_interactive)
+                    .with_current_model_string(current_model_string);
+
+                    // Add LLM clients to context
+                    let mut llm_clients: HashMap<apchat_models::ModelColor, Arc<dyn apchat_llm_api::client::LlmClient>> = HashMap::new();
+                    for color in apchat_models::ModelColor::iter() {
+                        let client = crate::config::create_client_for_model_color(
+                            &color,
+                            &apchat.client_config,
+                            &apchat.api_key,
+                        );
+                        llm_clients.insert(color, client);
                     }
-                    Err(e) => {
-                        let error_str = format!("Error: {}", e);
-                        let result_msg = ServerMessage::ToolCallResult {
-                            tool_call_id: tool_call.id.clone(),
-                            result: error_str.clone(),
-                            success: false,
-                            formatted_result: Some(error_str.clone()),
-                        };
-                        session.broadcast(result_msg).await;
+                    let context_with_clients = context.with_llm_clients(llm_clients);
 
-                        // Add error to history
-                        session.apchat.lock().await.messages.push(ChatMessage {
-                            role: "tool".to_string(),
-                            content: error_str,
-                            tool_calls: None,
-                            tool_call_id: Some(tool_call.id.clone()),
-                            name: Some(tool_call.function.name.clone()),
-                            reasoning: None,
-                        });
+                    // Add skill registry if available
+                    let context_with_skill = if let Some(ref registry) = apchat.skill_registry {
+                        context_with_clients.with_skill_registry(Arc::clone(registry))
+                    } else {
+                        context_with_clients
+                    };
+
+                    // Add content limiter if available
+                    let context_with_limiter = if let Some(ref limiter) = apchat.content_limiter {
+                        context_with_skill.with_content_limiter(Arc::clone(limiter))
+                    } else {
+                        context_with_skill
+                    };
+
+                    // Add MSPC sender and receiver if available
+                    let final_context = if let Some(ref mspc_channel) = apchat.mspc_channel {
+                        context_with_limiter.with_mspc_sender(mspc_channel.sender())
+                            .with_mspc_receiver(mspc_channel.receiver())
+                    } else {
+                        context_with_limiter
+                    };
+
+                    // Add signal sender if available
+                    let context_with_signal = if let Some(ref signal_sender) = apchat.signal_sender {
+                        final_context.with_signal_sender(signal_sender.clone())
+                    } else {
+                        final_context
+                    };
+
+                    // Add signal receiver if available
+                    let context_with_receiver = if let Some(ref signal_receiver) = apchat.signal_receiver {
+                        context_with_signal.with_signal_receiver(signal_receiver.clone())
+                    } else {
+                        context_with_signal
+                    };
+
+                    // Add confirmation registry if available
+                    let context_with_confirmation = if let Some(ref confirmation_registry) = apchat.confirmation_registry {
+                        context_with_receiver.with_confirmation_registry(confirmation_registry.clone())
+                    } else {
+                        context_with_receiver
+                    };
+
+                    // Add validated parameters to context and execute
+                    let tool_result = apchat.tool_registry.execute_tool(
+                        &tool_call.function.name,
+                        validated_params,
+                        &context_with_confirmation
+                    ).await;
+                    drop(apchat);
+
+                    // Broadcast tool result
+                    match tool_result {
+                        apchat_toolcore::ToolResult { success, content, error, .. } => {
+                            let result_str = if success {
+                                content
+                            } else {
+                                error.unwrap_or_else(|| "Unknown error".to_string())
+                            };
+
+                            let result_msg = ServerMessage::ToolCallResult {
+                                tool_call_id: tool_call.id.clone(),
+                                result: result_str.clone(),
+                                success,
+                                formatted_result: Some(result_str.clone()),
+                            };
+                            session.broadcast(result_msg).await;
+
+                            // Add tool result to history
+                            session.apchat.lock().await.messages.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: result_str,
+                                tool_calls: None,
+                                tool_call_id: Some(tool_call.id.clone()),
+                                name: Some(tool_call.function.name.clone()),
+                                reasoning: None,
+                            });
+                        }
+                    }
+                } else {
+                    // Tool doesn't exist in registry - execute without validation
+                    let result = apchat
+                        .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
+                        .await;
+                    drop(apchat);
+
+                    // Broadcast tool result
+                    match result {
+                        Ok(result_str) => {
+                            let result_msg = ServerMessage::ToolCallResult {
+                                tool_call_id: tool_call.id.clone(),
+                                result: result_str.clone(),
+                                success: true,
+                                formatted_result: Some(result_str.clone()),
+                            };
+                            session.broadcast(result_msg).await;
+
+                            // Add tool result to history
+                            session.apchat.lock().await.messages.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: result_str,
+                                tool_calls: None,
+                                tool_call_id: Some(tool_call.id.clone()),
+                                name: Some(tool_call.function.name.clone()),
+                                reasoning: None,
+                            });
+                        }
+                        Err(e) => {
+                            let error_str = format!("Error: {}", e);
+                            let result_msg = ServerMessage::ToolCallResult {
+                                tool_call_id: tool_call.id.clone(),
+                                result: error_str.clone(),
+                                success: false,
+                                formatted_result: Some(error_str.clone()),
+                            };
+                            session.broadcast(result_msg).await;
+
+                            // Add error to history
+                            session.apchat.lock().await.messages.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: error_str,
+                                tool_calls: None,
+                                tool_call_id: Some(tool_call.id.clone()),
+                                name: Some(tool_call.function.name.clone()),
+                                reasoning: None,
+                            });
+                        }
                     }
                 }
             }

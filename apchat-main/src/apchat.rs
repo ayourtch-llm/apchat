@@ -1,6 +1,8 @@
 // APChat struct and implementation
 use anyhow::{Context, Result};
 use colored::Colorize;
+use serde_json::Value;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -16,7 +18,7 @@ use apchat_agents::{
 use apchat_logging::ConversationLogger;
 use apchat_policy::PolicyManager;
 use apchat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
-use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext};
+use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext, parameter_validation::validate_tool_call};
 use crate::cli::Cli;
 use crate::config::{ClientConfig, initialize_tool_registry, initialize_agent_system};
 use crate::chat::{save_state, load_state};
@@ -485,6 +487,40 @@ impl APChat {
                 // Use the tool registry for all tools (including plan_edits and apply_edit_plan)
                 let params = ToolParameters::from_json(arguments)
                     .with_context(|| format!("Failed to parse tool arguments for '{}'.", name))?;
+
+                // Add parameter validation only in single LLM mode (not multi-agent mode)
+                if !self.use_agents {
+                    // Get tool schema for validation
+                    let tool = self.tool_registry.get_tool(name)
+                        .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in registry.", name))?;
+
+                    // Get parameter definitions from the tool
+                    let param_definitions: HashMap<String, Value> = tool.parameters()
+                        .iter()
+                        .map(|(key, def)| {
+                            (key.clone(), serde_json::to_value(def).unwrap_or(Value::Null))
+                        })
+                        .collect();
+
+                    // Create a minimal ToolCall for validation (only need function name and arguments)
+                    let tool_call = apchat_models::ToolCall {
+                        id: format!("call_{}", chrono::Utc::now().timestamp_millis()),
+                        tool_type: "function".to_string(),
+                        function: apchat_models::FunctionCall {
+                            name: name.to_string(),
+                            arguments: arguments.to_string(),
+                        },
+                    };
+
+                    // Validate the tool call against the schema
+                    let validated_params = match validate_tool_call(&tool_call, &params, &param_definitions) {
+                        Ok(params) => params,
+                        Err(e) => return Err(anyhow::anyhow!("Parameter validation failed for '{}': {}", name, e)),
+                    };
+
+                    // Use validated parameters for execution
+                    let params = validated_params;
+                }
 
                 // Format current model string for subagent tools
                 let current_model_string = self.format_current_model_string();
