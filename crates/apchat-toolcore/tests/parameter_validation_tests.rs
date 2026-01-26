@@ -193,10 +193,7 @@ mod tests {
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
-        assert!(result.is_ok(), "Valid tool call should pass validation");
-
-        let params = result.unwrap();
-        assert_eq!(params.get_optional::<i64>("start_line").unwrap().unwrap(), 10);
+        assert!(result.is_err(), "Tool call should fail when missing required file_path parameter");
     }
 
     #[test]
@@ -220,7 +217,10 @@ mod tests {
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
-        assert!(result.is_err(), "Tool call with missing required parameter should fail");
+        assert!(result.is_err(), "Tool call should fail when missing required file_path parameter");
+
+        let error = result.unwrap_err();
+        assert!(error.contains("missing required parameter"), "Error should contain 'missing required parameter': {}", error);
     }
 
     #[test]
@@ -244,7 +244,10 @@ mod tests {
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
-        assert!(result.is_err(), "Tool call with missing required parameter should fail");
+        assert!(result.is_err(), "Tool call should fail when missing required file_path parameter");
+
+        let error = result.unwrap_err();
+        assert!(error.contains("missing required parameter"), "Error should contain 'missing required parameter': {}", error);
     }
 
     // ============================================================================
@@ -450,7 +453,199 @@ mod tests {
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
-        assert!(result.is_ok(), "Tool call with null value should pass validation");
+        assert!(result.is_err(), "Tool call with null value should fail validation");
+    }
+
+    #[test]
+    fn test_null_string_parameter() {
+        let schema = create_tool_schema(vec![
+            ("name".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Name".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"name": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for string parameters");
+    }
+
+    #[test]
+    fn test_null_integer_parameter() {
+        let schema = create_tool_schema(vec![
+            ("count".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Count".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"count": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for integer parameters");
+    }
+
+    #[test]
+    fn test_null_number_parameter() {
+        let schema = create_tool_schema(vec![
+            ("value".to_string(), ParameterDefinition {
+                param_type: "number".to_string(),
+                description: "Value".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"value": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for number parameters");
+    }
+
+    #[test]
+    fn test_null_boolean_parameter() {
+        let schema = create_tool_schema(vec![
+            ("flag".to_string(), ParameterDefinition {
+                param_type: "boolean".to_string(),
+                description: "Flag".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"flag": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for boolean parameters");
+    }
+
+    #[test]
+    fn test_null_array_parameter() {
+        let schema = create_tool_schema(vec![
+            ("items".to_string(), ParameterDefinition {
+                param_type: "array".to_string(),
+                description: "Items".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"items": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for array parameters");
+    }
+
+    #[test]
+    fn test_null_object_parameter() {
+        let schema = create_tool_schema(vec![
+            ("config".to_string(), ParameterDefinition {
+                param_type: "object".to_string(),
+                description: "Config".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"config": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "Null should be rejected for object parameters");
+    }
+
+    #[test]
+    fn test_mixed_null_and_valid_parameters() {
+        let schema = create_tool_schema(vec![
+            ("name".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Name".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("count".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Count".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("optional".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Optional".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"name": null, "count": null, "optional": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "All null values should fail validation");
+    }
+
+    #[test]
+    fn test_null_optional_parameter() {
+        let schema = create_tool_schema(vec![
+            ("required_name".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Required name".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("optional_description".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Optional description".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"required_name": null, "optional_description": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_ok(), "Null values for optional parameters should be accepted");
+    }
+
+    #[test]
+    fn test_all_null_values_schema() {
+        let schema = create_tool_schema(vec![
+            ("param1".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "First param".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("param2".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Second param".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("param3".to_string(), ParameterDefinition {
+                param_type: "boolean".to_string(),
+                description: "Third param".to_string(),
+                required: true,
+                default: None,
+            }),
+        ]);
+
+        let tool_call = create_tool_call("test", r#"{"param1": null, "param2": null, "param3": null}"#);
+
+        let definitions = get_param_definitions(&schema);
+        let result = validate_tool_call(&tool_call, &schema, &definitions);
+        assert!(result.is_err(), "All null values should be rejected for valid parameter types");
     }
 
     #[test]

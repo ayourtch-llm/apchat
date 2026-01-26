@@ -62,6 +62,21 @@ pub fn validate_tool_call(
         }
     }
 
+    // Check for type mismatches
+    for (param_name, param_value) in &parsed_args {
+        if let Some(param_def) = param_definitions.get(param_name) {
+            match validate_type(param_value, &param_def.param_type) {
+                Ok(_) => {},
+                Err(msg) => {
+                    return Err(format!(
+                        "Tool '{}' has parameter '{}' with wrong type: {}. Expected: {}, Received: {}",
+                        tool_call.function.name, param_name, msg, param_def.param_type, param_value
+                    ));
+                }
+            }
+        }
+    }
+
     // Check for missing required parameters
     for required_param in &required_params {
         if !parsed_args.contains_key(required_param) {
@@ -77,6 +92,43 @@ pub fn validate_tool_call(
     Ok(ToolParameters {
         data: parsed_args,
     })
+}
+
+/// Validates that a JSON value matches the expected type
+fn validate_type(value: &Value, expected_type: &str) -> Result<(), String> {
+    match expected_type {
+        "string" => match value {
+            Value::String(_) => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: string, Received: {}", format!("{:?}", value))),
+        },
+        "integer" => match value {
+            Value::Number(n) if n.is_i64() => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: integer, Received: {}", format!("{:?}", value))),
+        },
+        "number" => match value {
+            Value::Number(_) => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: number, Received: {}", format!("{:?}", value))),
+        },
+        "boolean" => match value {
+            Value::Bool(_) => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: boolean, Received: {}", format!("{:?}", value))),
+        },
+        "array" => match value {
+            Value::Array(_) => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: array, Received: {}", format!("{:?}", value))),
+        },
+        "object" => match value {
+            Value::Object(_) => Ok(()),
+            Value::Null => Err("Parameter cannot be null".to_string()),
+            _ => Err(format!("Parameter has wrong type. Expected: object, Received: {}", format!("{:?}", value))),
+        },
+        _ => Ok(()), // Unknown type, accept the value
+    }
 }
 
 #[cfg(test)]
@@ -338,6 +390,6 @@ mod tests {
         let tool_call = create_tool_call("open_file", r#"{"file_path": null}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
 }
