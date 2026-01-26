@@ -123,6 +123,12 @@ fn test_lock_acquisition_order() {
 
     // Acquire test lock with RAII guard - releases automatically on drop
     let _lock = TestLock::acquire("test_lock_acquisition_order");
+    // Clear history before starting concurrent operations
+    {
+        let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
+        let rl = guard.deref_mut();
+        rl.clear_history_for_tests_only();
+    }
 
     // This test verifies that locks are acquired in a predictable order
     // and that there are no deadlocks
@@ -174,6 +180,12 @@ fn test_high_concurrency_stress_test() {
 
     // Acquire test lock with RAII guard - releases automatically on drop
     let _lock = TestLock::acquire("test_high_concurrency_stress_test");
+    // Clear history before starting concurrent operations
+    {
+        let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
+        let rl = guard.deref_mut();
+        rl.clear_history_for_tests_only();
+    }
 
     let num_threads = 100;
     let barrier = Arc::new(Barrier::new(num_threads));
