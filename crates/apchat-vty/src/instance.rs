@@ -10,6 +10,7 @@ use crate::{print_heart_red, print_heart_yellow};
 use crate::readline::{Readline, ReadlineResult};
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::history;
 
@@ -20,11 +21,54 @@ static READLINE_INSTANCE: Lazy<Mutex<Readline>> = Lazy::new(|| {
     Mutex::new(rl)
 });
 
+/// Binary semaphore for test coordination
+/// Tests must call ReadlineInstance::try_take_test_lock() to acquire exclusive
+/// access. After using the singleton, they must call release_test_lock().
+/// This ensures tests run in sequence without race conditions.
+static TEST_LOCK: AtomicBool = AtomicBool::new(false);
+
 /// Singleton readline instance manager
 #[derive(Debug)]
 pub struct ReadlineInstance;
 
 impl ReadlineInstance {
+    /// Try to take the test lock - blocks until it's available
+    ///
+    /// Tests should call this at the start of their test to ensure
+    /// exclusive access to the readline singleton. The test will
+    /// block until a previous test calls release_test_lock().
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // In test 1
+    /// reader_test::try_take_test_lock();
+    /// // Safe to use singleton now...
+    /// reader_test::release_test_lock();
+    ///
+    /// // In test 2
+    /// reader_test::try_take_test_lock();
+    /// // Use safely initialized singleton...
+    /// reader_test::release_test_lock();
+    /// ```
+    pub fn try_take_test_lock() {
+        // Spin-wait until lock is released (false).
+        // Use Acquire ordering to ensure we see all prior writes
+        while TEST_LOCK.load(Ordering::Acquire) == false {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        // Once we get here, lock is held by us (now true)
+    }
+
+    /// Release the test lock - allows next test to proceed
+    ///
+    /// Tests should call this at the end of their test to release
+    /// exclusive access for the next test. This is critical for
+    /// proper test coordination.
+    pub fn release_test_lock() {
+        TEST_LOCK.store(false, Ordering::Release);
+    }
+
     /// Get the singleton readline instance
     ///
     /// This method returns a locked guard that ensures exclusive access to the readline instance.
