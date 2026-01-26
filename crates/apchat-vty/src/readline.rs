@@ -346,6 +346,36 @@ impl Readline {
         self.cursor_col
     }
 
+    /// Sets the output line.
+    /// Useful for unit tests that need to modify the line.
+    #[allow(dead_code)] // Only used in tests
+    #[cfg(test)]
+    pub fn set_line(&mut self, line: &str) {
+        if self.cursor_line < self.lines.len() {
+            self.lines[self.cursor_line] = line.to_string();
+        }
+    }
+
+    /// Sets the cursor position.
+    /// Useful for unit tests that need to position the cursor.
+    #[allow(dead_code)] // Only used in tests
+    #[cfg(test)]
+    pub fn set_cursor(&mut self, cursor: usize, line: Option<usize>) {
+        self.cursor_col = cursor;
+        if let Some(l) = line {
+            self.cursor_line = l;
+            // Ensure cursor_line is within bounds
+            if self.cursor_line >= self.lines.len() && !self.lines.is_empty() {
+                self.cursor_line = self.lines.len() - 1;
+            }
+            if self.cursor_line < self.lines.len() {
+                // Clamp cursor_col to the new line length
+                let max_col = self.lines[self.cursor_line].chars().count();
+                self.cursor_col = self.cursor_col.min(max_col);
+            }
+        }
+    }
+
     /// Checks if raw mode is currently enabled.
     ///
     /// # Example
@@ -578,12 +608,9 @@ impl Readline {
     /// assert!(readline.history_index.is_none());
     /// ```
     pub fn exit_history_navigation(&mut self) {
+        // Only clear the history index - don't restore the line
+        // The current line content should remain as-is (user continues editing)
         self.history_index = None;
-        // Restore the complete multiline state from saved_lines
-        self.lines = self.saved_lines.clone();
-        // Restore cursor to end of last line
-        self.cursor_line = self.lines.len().saturating_sub(1);
-        self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
         self.saved_lines.clear();
     }
 
@@ -897,7 +924,7 @@ impl Readline {
     ///
     /// let mut readline = Readline::new().unwrap();
     /// readline.line = "hi".to_string();
-    /// readline.cursor = 2;
+    /// readline.set_cursor(2, None);
     ///
     /// // Move left
     /// assert!(readline.handle_left());
@@ -2561,18 +2588,19 @@ mod tests {
         assert_eq!(readline.cursor(), 2);
 
         // Insert in middle
-        readline.cursor = 1;
+        readline.set_cursor(1, None);
         assert!(readline.handle_char('e'));
         assert_eq!(readline.line(), "hei");
         assert_eq!(readline.cursor(), 2);
 
         // Insert Unicode character
-        readline.cursor = 3;
+        readline.set_cursor(3, None);
         assert!(readline.handle_char('😀'));
         assert_eq!(readline.line(), "hei😀");
         assert_eq!(readline.cursor(), 4);
     }
 
+    #[test]
     #[test]
     fn test_handle_char_exits_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
@@ -2592,8 +2620,8 @@ mod tests {
     #[test]
     fn test_handle_backspace() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.line = "hello".to_string();
-        readline.cursor = 5;
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
 
         // Delete last character
         assert!(readline.handle_backspace());
@@ -2606,13 +2634,13 @@ mod tests {
         assert_eq!(readline.cursor(), 3);
 
         // Delete in middle
-        readline.cursor = 2;
+        readline.set_cursor(2, None);
         assert!(readline.handle_backspace());
         assert_eq!(readline.line(), "hl");
         assert_eq!(readline.cursor(), 1);
 
         // Try to delete at start
-        readline.cursor = 0;
+        readline.set_cursor(0, None);
         assert!(!readline.handle_backspace());
         assert_eq!(readline.line(), "hl");
         assert_eq!(readline.cursor(), 0);
@@ -2678,7 +2706,7 @@ mod tests {
     fn test_handle_left() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.line = "hi".to_string();
-        readline.cursor = 2;
+        readline.set_cursor(2, None);
 
         // Move left
         assert!(readline.handle_left());
@@ -2715,8 +2743,8 @@ mod tests {
     #[test]
     fn test_handle_home() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.line = "hello".to_string();
-        readline.cursor = 5;
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
 
         // Move to start
         assert!(readline.handle_home());
