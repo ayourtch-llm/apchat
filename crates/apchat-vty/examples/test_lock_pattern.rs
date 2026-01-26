@@ -13,10 +13,8 @@ use apchat_vty::ReadlineInstance;
 fn test_readline_init_setup() -> Result<()> {
     println!("=== Test 1: Initialize Setup ===");
 
-    // Wait until the lock is available
-    // Since TEST_LOCK starts at false, we'll spin-wait until it's true
-    // Once here, we have exclusive access to initialize the singleton
-    ReadlineInstance::try_take_test_lock("test_readline_init_setup");
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = ReadlineInstance::try_take_test_lock("test_readline_init_setup");
     println!("✓ Acquired lock, initialized singleton can proceed");
 
     // Now we can safely initialize the singleton
@@ -25,11 +23,7 @@ fn test_readline_init_setup() -> Result<()> {
     ReadlineInstance::add_history("initial setup command")?;
 
     println!("✓ Completed initialization");
-
-    // IMPORTANT: Release the lock when done
-    // This allows the next test to claim it
-    ReadlineInstance::release_test_lock("test_readline_init_setup");
-    println!("✓ Lock released\n");
+    // Lock is automatically released when _lock goes out of scope
 
     Ok(())
 }
@@ -43,7 +37,7 @@ fn test_readline_singleton_basic() -> Result<()> {
 
     // Wait for test 1 to release the lock
     // This blocks until safe initialization is complete
-    ReadlineInstance::try_take_test_lock("test_readline_singleton_basic");
+    let _lock = ReadlineInstance::try_take_test_lock("test_readline_singleton_basic");
     println!("✓ Acquired lock after test 1");
 
     // Now singleton is safely initialized - no race conditions
@@ -55,10 +49,7 @@ fn test_readline_singleton_basic() -> Result<()> {
     assert_eq!(history[0], "initial setup command", "History entry matches");
 
     println!("✓ Verified singleton works correctly");
-
-    // Release lock for next test
-    ReadlineInstance::release_test_lock("test_readline_singleton_basic");
-    println!("✓ Lock released\n");
+    // Lock is automatically released when _lock goes out of scope
 
     Ok(())
 }
@@ -68,8 +59,8 @@ fn test_readline_singleton_basic() -> Result<()> {
 fn test_readline_input_simulation() -> Result<()> {
     println!("=== Test 3: Input Simulation ===");
 
-    // Wait for lock
-    ReadlineInstance::try_take_test_lock("test_readline_input_simulation");
+    // Acquire lock with RAII guard
+    let _lock = ReadlineInstance::try_take_test_lock("test_readline_input_simulation");
 
     // Simulate readline input
     let guard = ReadlineInstance::get()?;
@@ -80,9 +71,7 @@ fn test_readline_input_simulation() -> Result<()> {
     assert_eq!(history.len(), 2);
 
     println!("✓ Simulated input successfully");
-
-    ReadlineInstance::release_test_lock("test_readline_input_simulation");
-    println!("✓ Lock released\n");
+    // Lock is automatically released when _lock goes out of scope
 
     Ok(())
 }
@@ -93,7 +82,7 @@ fn test_readline_race_condition_prevention() -> Result<()> {
     println!("=== Test 4: Race Condition Prevention ===");
 
     // This test waits their turn in the sequence
-    ReadlineInstance::try_take_test_lock("test_readline_race_condition_prevention");
+    let _lock = ReadlineInstance::try_take_test_lock("test_readline_race_condition_prevention");
 
     let guard = ReadlineInstance::get()?;
     guard.add_history("test 4 command");
@@ -106,9 +95,7 @@ fn test_readline_race_condition_prevention() -> Result<()> {
     assert_eq!(history[2], "test 4 command");
 
     println!("✓ All sequence-dependent tests ran without interference");
-
-    ReadlineInstance::release_test_lock("test_readline_race_condition_prevention");
-    println!("✓ Lock released\n");
+    // Lock is automatically released when _lock goes out of scope
 
     Ok(())
 }

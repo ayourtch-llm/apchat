@@ -21,6 +21,9 @@ log.txt
 
 # Large file outputs
 .apchat-large-outputs/
+# edit plans in progress
+.apchat_edit_plan.json
+wip
 
 current_instruction.md
 
