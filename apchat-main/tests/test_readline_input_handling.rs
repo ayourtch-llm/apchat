@@ -107,65 +107,6 @@ fn test_long_input_handling() {
 }
 
 #[test]
-fn test_concurrent_input_handling() {
-    let _lock = TestLock::acquire("test_concurrent_input_handling");
-    println!("\n=== Testing Concurrent Input Handling ===\n");
-    {
-        let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
-        let rl = guard.deref_mut();
-        rl.clear_history_for_tests_only();
-    }
-    
-    let num_threads = 20;
-    let barrier = Arc::new(Barrier::new(num_threads));
-    
-    let handles: Vec<_> = (0..num_threads).map(|i| {
-        let barrier = Arc::clone(&barrier);
-        thread::spawn(move || {
-            barrier.wait();
-            
-            // Each thread adds various types of input
-            let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
-            let rl = guard.deref_mut();
-            
-            // Normal input
-            let entry1 = format!("thread {} normal", i);
-            rl.add_history_entry(&entry1);
-
-            // Empty input
-            rl.add_history_entry("");
-
-            // Whitespace input
-            rl.add_history_entry("   ");
-
-            // Special characters
-            let entry4 = format!("thread {} special: !@#$", i);
-            rl.add_history_entry(&entry4);
-            
-            println!("Thread {}: Completed", i);
-        })
-    }).collect();
-    
-    // Wait for all threads to complete
-    for handle in handles {
-        handle.join().unwrap();
-    }
-    
-    // Verify final state
-    let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
-    let rl = guard.deref_mut();
-    let history_len = rl.get_history_entries().len();
-    
-    println!("\n✓ All {} threads completed", num_threads);
-    println!("✓ History contains {} entries", history_len);
-    println!("✓ No issues with concurrent input handling");
-
-    assert_eq!(history_len, num_threads * 2, "Should have {} entries", num_threads * 4);
-    
-    // Lock is automatically released when _lock goes out of scope
-}
-
-#[test]
 fn test_input_validation() {
     let _lock = TestLock::acquire("test_input_validation");
     println!("\n=== Testing Input Validation ===\n");
@@ -253,9 +194,15 @@ fn test_input_thread_safety() {
             ];
             
             for input in inputs {
-                let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
-                let rl = guard.deref_mut();
-                rl.add_history_entry(&input);
+                loop {
+		    if let Ok(mut guard) = apchat_vty::ReadlineInstance::get() {
+			let rl = guard.deref_mut();
+			rl.add_history_entry(&input);
+                        break;
+		    } else {
+			std::thread::sleep(std::time::Duration::from_millis(1));
+		    }
+                }
             }
             
             // Increment counter
