@@ -111,7 +111,7 @@ impl ReadlineInstance {
     /// ```
     pub fn get() -> Result<MutexGuard<'static, Readline>> {
         let guard = READLINE_INSTANCE
-            .lock()
+            .try_lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire readline lock: {}", e))?;
         Ok(guard)
     }
