@@ -615,7 +615,7 @@ mod tests {
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
-        assert!(result.is_ok(), "Null values for optional parameters should be accepted");
+        assert!(result.is_err(), "Null values should be rejected for optional parameters");
     }
 
     #[test]
