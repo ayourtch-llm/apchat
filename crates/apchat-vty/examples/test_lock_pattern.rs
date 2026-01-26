@@ -16,7 +16,7 @@ fn test_readline_init_setup() -> Result<()> {
     // Wait until the lock is available
     // Since TEST_LOCK starts at false, we'll spin-wait until it's true
     // Once here, we have exclusive access to initialize the singleton
-    ReadlineInstance::try_take_test_lock();
+    ReadlineInstance::try_take_test_lock("test_readline_init_setup");
     println!("✓ Acquired lock, initialized singleton can proceed");
 
     // Now we can safely initialize the singleton
@@ -28,7 +28,7 @@ fn test_readline_init_setup() -> Result<()> {
 
     // IMPORTANT: Release the lock when done
     // This allows the next test to claim it
-    ReadlineInstance::release_test_lock();
+    ReadlineInstance::release_test_lock("test_readline_init_setup");
     println!("✓ Lock released\n");
 
     Ok(())
@@ -43,7 +43,7 @@ fn test_readline_singleton_basic() -> Result<()> {
 
     // Wait for test 1 to release the lock
     // This blocks until safe initialization is complete
-    ReadlineInstance::try_take_test_lock();
+    ReadlineInstance::try_take_test_lock("test_readline_singleton_basic");
     println!("✓ Acquired lock after test 1");
 
     // Now singleton is safely initialized - no race conditions
@@ -57,7 +57,7 @@ fn test_readline_singleton_basic() -> Result<()> {
     println!("✓ Verified singleton works correctly");
 
     // Release lock for next test
-    ReadlineInstance::release_test_lock();
+    ReadlineInstance::release_test_lock("test_readline_singleton_basic");
     println!("✓ Lock released\n");
 
     Ok(())
@@ -69,11 +69,11 @@ fn test_readline_input_simulation() -> Result<()> {
     println!("=== Test 3: Input Simulation ===");
 
     // Wait for lock
-    ReadlineInstance::try_take_test_lock();
+    ReadlineInstance::try_take_test_lock("test_readline_input_simulation");
 
     // Simulate readline input
     let guard = ReadlineInstance::get()?;
-    guard.add_history("user input test");
+    guard.add_history_entry("user input test");
 
     // Verify we got our input
     let history = guard.get_history_entries();
@@ -81,7 +81,7 @@ fn test_readline_input_simulation() -> Result<()> {
 
     println!("✓ Simulated input successfully");
 
-    ReadlineInstance::release_test_lock();
+    ReadlineInstance::release_test_lock("test_readline_input_simulation");
     println!("✓ Lock released\n");
 
     Ok(())
@@ -93,7 +93,7 @@ fn test_readline_race_condition_prevention() -> Result<()> {
     println!("=== Test 4: Race Condition Prevention ===");
 
     // This test waits their turn in the sequence
-    ReadlineInstance::try_take_test_lock();
+    ReadlineInstance::try_take_test_lock("test_readline_race_condition_prevention");
 
     let guard = ReadlineInstance::get()?;
     guard.add_history("test 4 command");
@@ -107,7 +107,7 @@ fn test_readline_race_condition_prevention() -> Result<()> {
 
     println!("✓ All sequence-dependent tests ran without interference");
 
-    ReadlineInstance::release_test_lock();
+    ReadlineInstance::release_test_lock("test_readline_race_condition_prevention");
     println!("✓ Lock released\n");
 
     Ok(())

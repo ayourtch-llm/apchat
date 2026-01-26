@@ -11,6 +11,7 @@ use crate::readline::{Readline, ReadlineResult};
 use once_cell::sync::Lazy;
 use std::sync::{Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
+// use std::sync::atomic::CompareExchangeError;
 
 use super::history;
 
@@ -25,7 +26,7 @@ static READLINE_INSTANCE: Lazy<Mutex<Readline>> = Lazy::new(|| {
 /// Tests must call ReadlineInstance::try_take_test_lock() to acquire exclusive
 /// access. After using the singleton, they must call release_test_lock().
 /// This ensures tests run in sequence without race conditions.
-static TEST_LOCK: AtomicBool = AtomicBool::new(false);
+static TEST_LOCK: AtomicBool = AtomicBool::new(true);
 
 /// Singleton readline instance manager
 #[derive(Debug)]
@@ -38,26 +39,47 @@ impl ReadlineInstance {
     /// exclusive access to the readline singleton. The test will
     /// block until a previous test calls release_test_lock().
     ///
+    /// # Arguments
+    ///
+    /// * `caller` - A string identifier for the test/caller for logging purposes
+    ///
     /// # Example
     ///
     /// ```ignore
     /// // In test 1
-    /// reader_test::try_take_test_lock();
+    /// reader_test::try_take_test_lock("test_1");
     /// // Safe to use singleton now...
-    /// reader_test::release_test_lock();
+    /// reader_test::release_test_lock("test_1");
     ///
     /// // In test 2
-    /// reader_test::try_take_test_lock();
+    /// reader_test::try_take_test_lock("test_2");
     /// // Use safely initialized singleton...
-    /// reader_test::release_test_lock();
+    /// reader_test::release_test_lock("test_2");
     /// ```
-    pub fn try_take_test_lock() {
+    pub fn try_take_test_lock(caller: &str) {
+        println!("SEMA: {} taking lock", caller);
         // Spin-wait until lock is released (false).
-        // Use Acquire ordering to ensure we see all prior writes
-        while TEST_LOCK.load(Ordering::Acquire) == false {
-            std::thread::sleep(std::time::Duration::from_millis(1));
+        // Use compare_exchange for atomic acquire-release semantics
+        loop {
+            match TEST_LOCK.compare_exchange(
+                true,       // expected: currently true means "available"
+                false,      // new: set to false means "taken"
+                Ordering::Acquire,
+                Ordering::Relaxed
+            ) {
+                Ok(_) => {
+                    // Successfully acquired lock (swapped true->false)
+                    break;
+                }
+                Err(_) => {
+                    // Lock was already false, someone else took it
+                    // Try again
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+            }
         }
-        // Once we get here, lock is held by us (now true)
+        println!("SEMA: {} took lock", caller);
+        // Once we get here, lock is held by us (now false)
     }
 
     /// Release the test lock - allows next test to proceed
@@ -65,8 +87,13 @@ impl ReadlineInstance {
     /// Tests should call this at the end of their test to release
     /// exclusive access for the next test. This is critical for
     /// proper test coordination.
-    pub fn release_test_lock() {
-        TEST_LOCK.store(false, Ordering::Release);
+    ///
+    /// # Arguments
+    ///
+    /// * `caller` - A string identifier for the test/caller for logging purposes
+    pub fn release_test_lock(caller: &str) {
+        println!("SEMA: {} releasing lock", caller);
+        TEST_LOCK.store(true, Ordering::Relaxed);
     }
 
     /// Get the singleton readline instance
