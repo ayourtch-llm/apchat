@@ -170,6 +170,13 @@ impl ReadlineInstance {
         Ok(())
     }
 
+    pub fn clear_history_for_tests_only() -> Result<()> {
+        let mut guard = Self::get()?;
+        let rl = &mut *guard;
+        rl.clear_history_for_tests_only();
+        Ok(())
+    }
+
     /// Check if the readline instance has been initialized
     ///
     /// # Returns

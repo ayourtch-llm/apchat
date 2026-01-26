@@ -395,6 +395,10 @@ impl Readline {
         self.history.push(entry.to_string());
     }
 
+    pub fn clear_history_for_tests_only(&mut self) {
+        self.history.clear();
+    }
+
     /// Navigates to the previous entry in history (Up arrow).
     ///
     /// Saves the current line buffer on first navigation, then replaces
