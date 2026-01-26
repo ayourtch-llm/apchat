@@ -2,6 +2,7 @@
 // These tests verify that the readline fixes handle input correctly
 
 use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -9,6 +10,7 @@ use std::ops::DerefMut;
 
 #[test]
 fn test_empty_input_handling() {
+    let _lock = TestLock::acquire("test_empty_input_handling");
     println!("\n=== Testing Empty Input Handling ===\n");
     
     // Add an empty string - should not cause issues
@@ -21,10 +23,13 @@ fn test_empty_input_handling() {
     // Verify history still works
     rl.add_history_entry("normal entry");
     println!("✓ Normal entries still work after empty string");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_whitespace_input_handling() {
+    let _lock = TestLock::acquire("test_whitespace_input_handling");
     println!("\n=== Testing Whitespace Input Handling ===\n");
     
     // Add various whitespace strings
@@ -40,10 +45,13 @@ fn test_whitespace_input_handling() {
     // Verify history still works
     assert_eq!(rl.get_history_entries().len(), 4);
     println!("✓ All whitespace entries added to history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_special_characters_handling() {
+    let _lock = TestLock::acquire("test_special_characters_handling");
     println!("\n=== Testing Special Characters Handling ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -52,7 +60,7 @@ fn test_special_characters_handling() {
     // Add entries with special characters
     let special_entries = vec![
         "test with !@#$%^&*()",
-        "test with \\ /\"'|:;,.<>?",
+        "test with \\ /\"'|:;,<>.?",
         "test with \x00\x01\x02",
         "test with Unicode: 你好世界",
         "test with emoji: 😀🎉",
@@ -65,10 +73,13 @@ fn test_special_characters_handling() {
     println!("✓ All special character entries handled");
     assert_eq!(rl.get_history_entries().len(), 5);
     println!("✓ All entries added to history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_long_input_handling() {
+    let _lock = TestLock::acquire("test_long_input_handling");
     println!("\n=== Testing Long Input Handling ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -87,10 +98,13 @@ fn test_long_input_handling() {
     // Verify both are in history
     assert_eq!(rl.get_history_entries().len(), 2);
     println!("✓ Long entries added to history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_concurrent_input_handling() {
+    let _lock = TestLock::acquire("test_concurrent_input_handling");
     println!("\n=== Testing Concurrent Input Handling ===\n");
     
     let num_threads = 20;
@@ -138,10 +152,13 @@ fn test_concurrent_input_handling() {
     println!("✓ No issues with concurrent input handling");
     
     assert_eq!(history_len, num_threads * 4, "Should have {} entries", num_threads * 4);
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_input_validation() {
+    let _lock = TestLock::acquire("test_input_validation");
     println!("\n=== Testing Input Validation ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -165,10 +182,13 @@ fn test_input_validation() {
     println!("✓ All valid inputs accepted");
     assert_eq!(rl.get_history_entries().len(), valid_inputs.len());
     println!("✓ All valid inputs added to history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_history_boundary_conditions() {
+    let _lock = TestLock::acquire("test_history_boundary_conditions");
     println!("\n=== Testing History Boundary Conditions ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -189,10 +209,13 @@ fn test_history_boundary_conditions() {
     // Verify all are in history
     assert_eq!(rl.get_history_entries().len(), 3);
     println!("✓ All boundary condition inputs in history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_input_thread_safety() {
+    let _lock = TestLock::acquire("test_input_thread_safety");
     println!("\n=== Testing Input Thread Safety ===\n");
     
     let num_threads = 50;
@@ -242,10 +265,13 @@ fn test_input_thread_safety() {
     
     assert_eq!(final_count, num_threads, "All threads should complete");
     assert_eq!(history_len, num_threads * 4, "Should have {} entries", num_threads * 4);
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_input_after_cleanup() {
+    let _lock = TestLock::acquire("test_input_after_cleanup");
     println!("\n=== Testing Input After Cleanup ===\n");
     
     // Add some initial entries
@@ -271,10 +297,13 @@ fn test_input_after_cleanup() {
     // Verify the new entry is there
     assert_eq!(rl2.get_history_entries().len(), 1);
     println!("✓ New entry is in history");
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_duplicate_input_handling() {
+    let _lock = TestLock::acquire("test_duplicate_input_handling");
     println!("\n=== Testing Duplicate Input Handling ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -292,10 +321,13 @@ fn test_duplicate_input_handling() {
     let duplicate_count = history.iter().filter(|entry| entry.as_str() == "duplicate entry").count();
     assert_eq!(duplicate_count, 5);
     println!("✓ All {} duplicates present in history", duplicate_count);
+    
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_mixed_input_types() {
+    let _lock = TestLock::acquire("test_mixed_input_types");
     println!("\n=== Testing Mixed Input Types ===\n");
     
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
@@ -315,8 +347,10 @@ fn test_mixed_input_types() {
     for input in &inputs {
         rl.add_history_entry(input);
     }
-    
+
     println!("✓ All mixed input types handled");
     assert_eq!(rl.get_history_entries().len(), inputs.len());
     println!("✓ All {} entries in history", inputs.len());
+    
+    // Lock is automatically released when _lock goes out of scope
 }

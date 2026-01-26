@@ -1,4 +1,5 @@
 use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -8,6 +9,9 @@ use std::ops::DerefMut;
 #[test]
 fn test_rapid_input_sequence() {
     println!("\n=== Testing Rapid Input Sequence ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_rapid_input_sequence");
     
     // Test rapid sequence of readline operations
     let num_operations = 50;
@@ -40,11 +44,15 @@ fn test_rapid_input_sequence() {
     println!("✓ History contains {} entries", history_len);
     
     assert_eq!(history_len, num_operations, "Should have exactly {} history entries", num_operations);
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_lifecycle_transitions() {
     println!("\n=== Testing Lifecycle Transitions ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_lifecycle_transitions");
     
     // Test multiple initialization and cleanup cycles
     for cycle in 0..5 {
@@ -73,11 +81,15 @@ fn test_lifecycle_transitions() {
     println!("✓ Final history length after cleanup: {}", history_len);
     
     assert_eq!(history_len, 0, "History should be empty after cleanup");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_concurrent_readline_and_history_operations() {
     println!("\n=== Testing Concurrent Readline and History Operations ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_concurrent_readline_and_history_operations");
     
     let num_threads = 20;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -121,11 +133,15 @@ fn test_concurrent_readline_and_history_operations() {
     println!("✓ No race conditions in mixed operations");
     
     assert_eq!(final_count, num_threads, "All threads should complete");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_history_persistence_across_operations() {
     println!("\n=== Testing History Persistence Across Operations ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_history_persistence_across_operations");
     
     // Add initial entries
     apchat_vty::ReadlineInstance::add_history("persist_test_1").unwrap();
@@ -145,11 +161,15 @@ fn test_history_persistence_across_operations() {
     println!("✓ History length after mixed operations: {}", history_len);
     
     assert_eq!(history_len, 3, "Should have all 3 history entries");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_long_running_concurrent_access() {
     println!("\n=== Testing Long-Running Concurrent Access ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_long_running_concurrent_access");
     
     let num_threads = 10;
     let operations_per_thread = 50;
@@ -194,11 +214,15 @@ fn test_long_running_concurrent_access() {
     
     // Should have at least some entries (some may be lost due to save operations)
     assert!(history_len > 0, "History should not be empty");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_cleanup_does_not_prevent_reuse() {
     println!("\n=== Testing Cleanup Doesn't Prevent Reuse ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_cleanup_does_not_prevent_reuse");
     
     // Add history and cleanup
     apchat_vty::ReadlineInstance::add_history("before_cleanup").unwrap();
@@ -216,11 +240,15 @@ fn test_cleanup_does_not_prevent_reuse() {
     println!("✓ History length after reuse: {}", history_len);
     
     assert_eq!(history_len, 1, "Should have one entry after reuse");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_high_concurrency_with_mixed_operations() {
     println!("\n=== Testing High Concurrency with Mixed Operations ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_high_concurrency_with_mixed_operations");
     
     let num_threads = 50;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -278,11 +306,15 @@ fn test_high_concurrency_with_mixed_operations() {
     println!("✓ No race conditions with mixed operation types");
     
     assert!(history_len > 0, "History should not be empty");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_rapid_cleanup_saves() {
     println!("\n=== Testing Rapid Cleanup and Save Operations ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_rapid_cleanup_saves");
     
     // Test rapid sequence of cleanup and save operations
     for i in 0..10 {
@@ -298,11 +330,15 @@ fn test_rapid_cleanup_saves() {
     
     println!("✓ Rapid cleanup/save operations completed");
     println!("✓ Instance remains functional after rapid operations");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_history_boundary_conditions() {
     println!("\n=== Testing History Boundary Conditions ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_history_boundary_conditions");
     
     // Test with empty strings
     apchat_vty::ReadlineInstance::add_history("").unwrap();
@@ -326,11 +362,15 @@ fn test_history_boundary_conditions() {
     println!("✓ History length: {}", history_len);
     
     assert_eq!(history_len, 4, "Should have all 4 boundary entries");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_concurrent_cleanup_attempts() {
     println!("\n=== Testing Concurrent Cleanup Attempts ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_concurrent_cleanup_attempts");
     
     let num_threads = 20;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -351,4 +391,5 @@ fn test_concurrent_cleanup_attempts() {
     
     println!("✓ All {} concurrent cleanup attempts completed", num_threads);
     println!("✓ No deadlocks or race conditions in cleanup");
+    // Lock is automatically released when _lock goes out of scope
 }

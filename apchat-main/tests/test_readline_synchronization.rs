@@ -1,5 +1,6 @@
 #![cfg(test)]
 use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -9,6 +10,9 @@ use std::ops::DerefMut;
 #[test]
 fn test_readline_synchronization() {
     println!("\n=== Testing Readline Instance Synchronization ===\n");
+
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_readline_synchronization");
 
     // Create multiple threads that try to access readline simultaneously
     let handles: Vec<_> = (0..10).map(|i| {
@@ -51,12 +55,16 @@ fn test_readline_synchronization() {
     println!("✓ No race conditions detected");
 
     assert_eq!(history_len, 10, "Should have exactly 10 history entries");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 /// Test to verify that the new readline API works correctly
 #[test]
 fn test_new_readline_api() {
     println!("\n=== Testing New Readline API ===\n");
+
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_new_readline_api");
 
     // Test adding history
     apchat_vty::ReadlineInstance::add_history("test command 1");
@@ -73,12 +81,16 @@ fn test_new_readline_api() {
     println!("✓ Instance is properly initialized");
     
     println!("✓ New readline API works correctly");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 /// Test to verify thread safety with concurrent access
 #[test]
 fn test_concurrent_history_access() {
     println!("\n=== Testing Concurrent History Access ===\n");
+
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_concurrent_history_access");
 
     let num_threads = 20;
     let handles: Vec<_> = (0..num_threads).map(|i| {
@@ -107,12 +119,16 @@ fn test_concurrent_history_access() {
     assert_eq!(history_len, num_threads * 5, "Should have {} history entries", num_threads * 5);
     
     println!("✓ Concurrent access is thread-safe");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 /// Test to verify that the readline instance is a true singleton
 #[test]
 fn test_singleton_property() {
     println!("\n=== Testing Singleton Property ===\n");
+
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_singleton_property");
 
     let guard1 = apchat_vty::ReadlineInstance::get().unwrap();
     let guard2 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -126,4 +142,5 @@ fn test_singleton_property() {
 
     println!("✓ Singleton property verified");
     println!("✓ Proper locking mechanism in place");
+    // Lock is automatically released when _lock goes out of scope
 }

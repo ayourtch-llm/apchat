@@ -2,6 +2,7 @@
 // These tests verify that the readline fixes prevent race conditions
 
 use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -10,6 +11,9 @@ use std::ops::DerefMut;
 #[test]
 fn test_no_race_condition_in_history_addition() {
     println!("\n=== Testing Race Condition Fix: History Addition ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_no_race_condition_in_history_addition");
     
     let num_threads = 50;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -45,11 +49,15 @@ fn test_no_race_condition_in_history_addition() {
     println!("✓ Expected: {} entries", num_threads * 10);
     
     assert_eq!(history_len, num_threads * 10, "Should have exactly {} history entries, got {}", num_threads * 10, history_len);
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_no_race_condition_in_concurrent_readline_calls() {
     println!("\n=== Testing Race Condition Fix: Concurrent Readline Calls ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_no_race_condition_in_concurrent_readline_calls");
     
     // Note: This test won't actually call readline (requires TTY), but it tests
     // that the synchronization mechanism works for concurrent access
@@ -94,11 +102,15 @@ fn test_no_race_condition_in_concurrent_readline_calls() {
     println!("✓ No race conditions detected in concurrent access");
     
     assert_eq!(final_count, num_threads, "All threads should complete successfully");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_lock_acquisition_order() {
     println!("\n=== Testing Lock Acquisition Order ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_lock_acquisition_order");
     
     // This test verifies that locks are acquired in a predictable order
     // and that there are no deadlocks
@@ -141,11 +153,15 @@ fn test_lock_acquisition_order() {
     println!("✓ No deadlocks detected");
     
     assert_eq!(history_len, num_threads * 3, "Should have exactly {} history entries", num_threads * 3);
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_high_concurrency_stress_test() {
     println!("\n=== Testing High Concurrency Stress ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_high_concurrency_stress_test");
     
     let num_threads = 100;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -191,11 +207,15 @@ fn test_high_concurrency_stress_test() {
     // Verify that we have approximately the right number of entries
     // (some might be duplicates or lost due to save operations, but no crashes)
     assert!(history_len > 0, "History should not be empty");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_history_consistency_across_threads() {
     println!("\n=== Testing History Consistency Across Threads ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_history_consistency_across_threads");
     
     let num_threads = 10;
     let handles: Vec<_> = (0..num_threads).map(|i| {
@@ -238,11 +258,15 @@ fn test_history_consistency_across_threads() {
     println!("✓ Found {} out of {} expected entries", found_entries, num_threads * 5);
     
     assert_eq!(found_entries, num_threads * 5, "All expected entries should be present");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_lock_fairness() {
     println!("\n=== Testing Lock Fairness ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_lock_fairness");
     
     // This test verifies that the lock is fair and doesn't starve threads
     
@@ -281,4 +305,5 @@ fn test_lock_fairness() {
     println!("✓ No thread starvation detected");
     
     assert_eq!(final_count, total_operations, "All operations should complete");
+    // Lock is automatically released when _lock goes out of scope
 }

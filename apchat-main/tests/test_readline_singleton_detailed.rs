@@ -2,6 +2,7 @@
 // These tests ensure that the readline singleton pattern works correctly
 
 use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 use std::ops::DerefMut;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier};
@@ -10,6 +11,9 @@ use std::thread;
 #[test]
 fn test_single_instance_creation() {
     println!("\n=== Testing Single Instance Creation ===\n");
+
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_single_instance_creation");
 
     // Get the instance multiple times
     let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -29,11 +33,15 @@ fn test_single_instance_creation() {
     assert_ne!(&*guard2 as *const _, &*guard3 as *const _);
 
     println!("✓ Each call returns a different guard (proper locking)");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_instance_initialization_once() {
     println!("\n=== Testing Instance Initialization (Once) ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_instance_initialization_once");
     
     // Verify the instance is initialized
     assert!(apchat_vty::ReadlineInstance::is_initialized());
@@ -50,11 +58,15 @@ fn test_instance_initialization_once() {
     // Verify it's a valid rustyline editor
     // assert!(!rl.is_editing());
     println!("✓ Editor is in valid state");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_no_duplicate_instances() {
     println!("\n=== Testing No Duplicate Instances ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_no_duplicate_instances");
     
     let num_calls = 100;
     let mut instances = Vec::new();
@@ -74,11 +86,15 @@ fn test_no_duplicate_instances() {
     }
     
     println!("✓ All guards are distinct (proper locking)");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_singleton_across_threads() {
     println!("\n=== Testing Singleton Across Threads ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_singleton_across_threads");
     
     let num_threads = 20;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -116,11 +132,15 @@ fn test_singleton_across_threads() {
     println!("✓ Single instance used across all threads");
     
     assert_eq!(final_count, num_threads, "All threads should get the instance");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_singleton_configuration_consistency() {
     println!("\n=== Testing Singleton Configuration Consistency ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_singleton_configuration_consistency");
     
     // Get instance multiple times and verify configuration is consistent
     let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -136,11 +156,15 @@ fn test_singleton_configuration_consistency() {
     // Verify they reference the same underlying instance
     // (we can't test this directly due to Rust's borrowing rules)
     // but the configuration check above validates consistency
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_instance_persistence() {
     println!("\n=== Testing Instance Persistence ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_instance_persistence");
     
     // Get the instance and add some history
     let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -163,11 +187,15 @@ fn test_instance_persistence() {
     assert!(history.iter().any(|entry| entry == "persistent test 1"));
     assert!(history.iter().any(|entry| entry == "persistent test 2"));
     println!("✓ Specific history entries persist");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_no_instance_reinitialization() {
     println!("\n=== Testing No Instance Reinitialization ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_no_instance_reinitialization");
     
     // Get the instance and verify it's initialized
     let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -183,11 +211,15 @@ fn test_no_instance_reinitialization() {
     // Verify it's the same instance (history should be there)
     assert_eq!(rl2.get_history_entries().len(), 1);
     println!("✓ Instance is not reinitialized");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_global_access_pattern() {
     println!("\n=== Testing Global Access Pattern ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_global_access_pattern");
     
     // Simulate the global access pattern used in the application
     let mut guard1 = apchat_vty::ReadlineInstance::get().unwrap();
@@ -206,11 +238,15 @@ fn test_global_access_pattern() {
     // Verify the instance is still valid and history is there
     assert_eq!(rl2.get_history_entries().len(), 1);
     println!("✓ Global access pattern works correctly");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_concurrent_singleton_access() {
     println!("\n=== Testing Concurrent Singleton Access ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_concurrent_singleton_access");
     
     let num_threads = 30;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -257,11 +293,15 @@ fn test_concurrent_singleton_access() {
     
     assert_eq!(final_count, num_threads, "All threads should access the singleton");
     assert_eq!(history_len, num_threads, "All entries should be present");
+    // Lock is automatically released when _lock goes out of scope
 }
 
 #[test]
 fn test_singleton_lifecycle() {
     println!("\n=== Testing Singleton Lifecycle ===\n");
+    
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_singleton_lifecycle");
     
     // 1. Instance doesn't exist initially (lazily initialized)
     assert!(apchat_vty::ReadlineInstance::is_initialized());
@@ -285,4 +325,5 @@ fn test_singleton_lifecycle() {
     let rl3 = guard3.deref_mut();
     assert_eq!(rl3.get_history_entries().len(), 0);
     println!("✓ Cleanup works correctly");
+    // Lock is automatically released when _lock goes out of scope
 }

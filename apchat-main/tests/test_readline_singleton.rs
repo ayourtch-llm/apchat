@@ -1,9 +1,14 @@
 // Test to verify readline singleton pattern
 use anyhow::Result;
+use std::ops::DerefMut;
+
+use apchat_vty::ReadlineInstance;
+use apchat_vty::instance::TestLock;
 
 #[test]
 fn test_readline_singleton_basic() -> Result<()> {
-    // Test 1: Initialize and get the instance
+    // Acquire test lock with RAII guard - releases automatically on drop
+    let _lock = TestLock::acquire("test_readline_singleton_basic");
     println!("Testing readline singleton pattern...");
 
     // Get the singleton instance
@@ -21,5 +26,6 @@ fn test_readline_singleton_basic() -> Result<()> {
     println!("✓ Both instances have same configuration");
 
     println!("\nAll tests passed! ✓");
+    // Lock is automatically released when _lock goes out of scope
     Ok(())
 }
