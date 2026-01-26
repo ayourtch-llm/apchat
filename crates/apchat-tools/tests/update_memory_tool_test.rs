@@ -38,6 +38,7 @@ async fn test_update_memory_tool_parameters() {
 }
 
 #[tokio::test]
+#[ignore] // FIXME-TEST: figure out a better way to test memory without littering the main memories
 async fn test_update_memory_tool_validation() {
     let tool = UpdateMemoryTool;
     let context = ToolContext::new(PathBuf::from("/tmp"), "test-session".to_string(), PolicyManager::default());
@@ -117,6 +118,7 @@ async fn test_update_memory_tool_nonexistent_memory() {
 }
 
 #[tokio::test]
+#[ignore] // FIXME-TEST - need to figure a better way to test without polluting main memory
 async fn test_update_memory_tool_wrong_owner() {
     let tool = UpdateMemoryTool;
     let context = ToolContext::new(PathBuf::from("/tmp"), "test-session".to_string(), PolicyManager::default());

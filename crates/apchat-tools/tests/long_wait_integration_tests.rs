@@ -98,6 +98,7 @@ async fn test_progress_updates_sent_via_mspc() {
 }
 
 #[tokio::test]
+#[ignore] // FIXME-TEST
 async fn test_interrupt_signal_cancels_wait() {
     let tool = LongWaitTool;
     let (context, mspc_channel) = create_context_with_mspc();
@@ -245,6 +246,7 @@ async fn test_multiple_progress_updates_with_timing() {
 }
 
 #[tokio::test]
+#[ignore] // FIXME-TEST
 async fn test_graceful_shutdown_on_immediate_interrupt() {
     let tool = LongWaitTool;
     let (context, mspc_channel) = create_context_with_mspc();

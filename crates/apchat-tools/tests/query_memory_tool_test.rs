@@ -71,6 +71,7 @@ async fn test_query_memory_tool_validation() {
 }
 
 #[tokio::test]
+#[ignore] // FIXME-TEST: need to figure out a better way to test without polluting main memories
 async fn test_query_memory_tool_success() {
     let tool = QueryMemoryTool;
     let store_tool = StoreMemoryTool;
