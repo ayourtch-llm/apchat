@@ -14,6 +14,11 @@ fn test_no_race_condition_in_history_addition() {
 
     // Acquire test lock with RAII guard - releases automatically on drop
     let _lock = TestLock::acquire("test_no_race_condition_in_history_addition");
+    {
+        let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
+        let rl = guard.deref_mut();
+        rl.clear_history_for_tests_only();
+    }
 
     let num_threads = 50;
     let barrier = Arc::new(Barrier::new(num_threads));
@@ -39,12 +44,6 @@ fn test_no_race_condition_in_history_addition() {
         handle.join().unwrap();
     }
 
-    // Verify final state
-    {
-        let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
-        let rl = guard.deref_mut();
-        rl.clear_history_for_tests_only();
-    }
 
     let mut guard = apchat_vty::ReadlineInstance::get().unwrap();
     let rl = guard.deref_mut();

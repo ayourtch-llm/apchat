@@ -11,18 +11,22 @@ fn test_readline_singleton_basic() -> Result<()> {
     let _lock = TestLock::acquire("test_readline_singleton_basic");
     println!("Testing readline singleton pattern...");
 
-    // Get the singleton instance
-    let rl1 = apchat_vty::ReadlineInstance::get()?;
-    println!("✓ Got readline instance");
+    let history1 = {
+        // Get the singleton instance
+        let mut guard = apchat_vty::ReadlineInstance::get()?;
+        println!("✓ Got readline instance");
+        guard.get_history_entries().len()
+    };
 
-    // Get the instance again - should be the same
-    let rl2 = apchat_vty::ReadlineInstance::get()?;
-    println!("✓ Got readline instance again");
+   let history2 = {
+        // Get the singleton instance
+        let mut guard = apchat_vty::ReadlineInstance::get()?;
+        println!("✓ Got readline instance again");
+        guard.get_history_entries().len()
+    };
 
     // Both should have the same configuration
-    let history1 = rl1.get_history_entries();
-    let history2 = rl2.get_history_entries();
-    assert_eq!(history1.len(), history2.len());
+    assert_eq!(history1, history2);
     println!("✓ Both instances have same configuration");
 
     println!("\nAll tests passed! ✓");
