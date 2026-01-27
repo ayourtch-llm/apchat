@@ -360,7 +360,7 @@ impl Readline {
     /// Useful for unit tests that need to position the cursor.
     #[allow(dead_code)] // Only used in tests
     #[cfg(test)]
-    pub fn set_cursor(&mut self, cursor: usize, line: Option<usize>) {
+    pub fn set_cursor(&mut self, cursor: usize, line: Option<usize> = None) {
         self.cursor_col = cursor;
         if let Some(l) = line {
             self.cursor_line = l;
@@ -478,7 +478,7 @@ impl Readline {
             self.lines = entry.split('\n').map(String::from).collect();
             // Position cursor at end of last line
             self.cursor_line = self.lines.len().saturating_sub(1);
-            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0, None);
             return true;
         }
 
@@ -490,7 +490,7 @@ impl Readline {
                 self.lines = entry.split('\n').map(String::from).collect();
                 // Position cursor at end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0, None);
                 return true;
             }
         }
@@ -546,7 +546,7 @@ impl Readline {
                 self.lines = entry.split('\n').map(String::from).collect();
                 // Position cursor at end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0, None);
                 return true;
             } else {
                 // Exit history navigation, restore saved multiline state
@@ -554,7 +554,7 @@ impl Readline {
                 self.lines = self.saved_lines.clone();
                 // Restore cursor to end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0, None);
                 self.saved_lines.clear();
                 return true;
             }
@@ -608,9 +608,12 @@ impl Readline {
     /// assert!(readline.history_index.is_none());
     /// ```
     pub fn exit_history_navigation(&mut self) {
-        // Only clear the history index - don't restore the line
-        // The current line content should remain as-is (user continues editing)
         self.history_index = None;
+        // Restore the complete multiline state from saved_lines
+        self.lines = self.saved_lines.clone();
+        // Restore cursor to end of last line
+        self.cursor_line = self.lines.len().saturating_sub(1);
+        self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0, None);
         self.saved_lines.clear();
     }
 
@@ -1415,7 +1418,7 @@ impl Readline {
 
         // Trim if exceeds max size
         if self.kill_ring.len() > self.max_kill_ring_size {
-            self.kill_ring.remove(0);
+            self.kill_ring.remove(0, None);
             self.kill_ring_index = self.kill_ring.len();
         }
     }
@@ -2664,8 +2667,8 @@ mod tests {
     #[test]
     fn test_handle_delete() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.set_line("hello");
-        readline.set_cursor(1, None);
+        readline.line = "hello".to_string();
+        readline.cursor = 1;
 
         // Delete character at cursor
         assert!(readline.handle_delete());
@@ -2678,7 +2681,7 @@ mod tests {
         assert_eq!(readline.cursor(), 1);
 
         // Move to end
-        readline.set_cursor(3, None);
+        readline.cursor = 3;
 
         // Try to delete at end
         assert!(!readline.handle_delete());
@@ -2694,7 +2697,7 @@ mod tests {
         // Navigate to history
         readline.history_up();
         assert_eq!(readline.line(), "old");
-        readline.set_cursor(1, None);
+        readline.cursor = 1;
 
         // Delete - should exit history navigation
         assert!(readline.handle_delete());
