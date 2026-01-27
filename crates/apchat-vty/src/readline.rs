@@ -353,6 +353,8 @@ impl Readline {
     pub fn set_line(&mut self, line: &str) {
         if self.cursor_line < self.lines.len() {
             self.lines[self.cursor_line] = line.to_string();
+            // Sync deprecated field
+            self.line = self.lines[self.cursor_line].clone();
         }
     }
 
@@ -361,18 +363,23 @@ impl Readline {
     #[allow(dead_code)] // Only used in tests
     #[cfg(test)]
     pub fn set_cursor(&mut self, cursor: usize, line: Option<usize>) {
-        self.cursor_col = cursor;
         if let Some(l) = line {
             self.cursor_line = l;
-            // Ensure cursor_line is within bounds
-            if self.cursor_line >= self.lines.len() && !self.lines.is_empty() {
-                self.cursor_line = self.lines.len() - 1;
-            }
-            if self.cursor_line < self.lines.len() {
-                // Clamp cursor_col to the new line length
-                let max_col = self.lines[self.cursor_line].chars().count();
-                self.cursor_col = self.cursor_col.min(max_col);
-            }
+        }
+        self.cursor_col = cursor;
+        // Sync deprecated field
+        if self.cursor_line < self.lines.len() {
+            self.cursor = self.cursor_col;
+        }
+        // Ensure cursor_line is within bounds
+        if self.cursor_line >= self.lines.len() && !self.lines.is_empty() {
+            self.cursor_line = self.lines.len() - 1;
+        }
+        if self.cursor_line < self.lines.len() {
+            // Clamp cursor_col to the new line length
+            let max_col = self.lines[self.cursor_line].chars().count();
+            self.cursor_col = self.cursor_col.min(max_col);
+            self.cursor = self.cursor_col;
         }
     }
 
@@ -479,6 +486,11 @@ impl Readline {
             // Position cursor at end of last line
             self.cursor_line = self.lines.len().saturating_sub(1);
             self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+            // Sync deprecated fields
+            self.cursor = self.cursor_col;
+            if !self.lines.is_empty() {
+                self.line = self.lines[self.cursor_line].clone();
+            }
             return true;
         }
 
@@ -491,6 +503,11 @@ impl Readline {
                 // Position cursor at end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
                 self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                // Sync deprecated fields
+                self.cursor = self.cursor_col;
+                if !self.lines.is_empty() {
+                    self.line = self.lines[self.cursor_line].clone();
+                }
                 return true;
             }
         }
@@ -2446,8 +2463,8 @@ mod tests {
         readline.add_history_entry("command 3");
 
         // Start typing something
-        readline.line = "new input".to_string();
-        readline.cursor = 9;
+        readline.set_line("new input");
+        readline.set_cursor(9, None);
 
         // Navigate up - should go to most recent
         assert!(readline.history_up());
@@ -2503,8 +2520,8 @@ mod tests {
         readline.add_history_entry("old command");
 
         // Start typing
-        readline.line = "typing something".to_string();
-        readline.cursor = 17;
+        readline.set_line("typing something");
+        readline.set_cursor(17, None);
 
         // Navigate up - should save current line
         assert!(readline.history_up());
@@ -2705,7 +2722,7 @@ mod tests {
     #[test]
     fn test_handle_left() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.line = "hi".to_string();
+        readline.set_line("hi");
         readline.set_cursor(2, None);
 
         // Move left
@@ -2724,8 +2741,8 @@ mod tests {
     #[test]
     fn test_handle_right() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.line = "hi".to_string();
-        readline.cursor = 0;
+        readline.set_line("hi");
+        readline.set_cursor(0, None);
 
         // Move right
         assert!(readline.handle_right());
@@ -2758,8 +2775,8 @@ mod tests {
     #[test]
     fn test_handle_end() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
-        readline.line = "hello".to_string();
-        readline.cursor = 0;
+        readline.set_line("hello");
+        readline.set_cursor(0, None);
 
         // Move to end
         assert!(readline.handle_end());
