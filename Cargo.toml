@@ -18,6 +18,9 @@ members = [
 ]
 resolver = "2"
 
+[workspace.lints.rust]
+unused_must_use = "deny"
+
 [workspace.dependencies]
 # Testing dependencies shared across workspace
 tokio-test = "0.4"
