@@ -56,6 +56,10 @@ fn resolve_api_key_for_backend(
                 // For Llama: CLI > env (no standard env var for llama)
                 cli_key.clone().or(env_key.clone())
             }
+            BackendType::Ollama => {
+                // For Ollama: CLI > env
+                cli_key.clone().or(env_key.clone())
+            }
         }
     } else {
         // No specific backend, use general precedence: CLI > env > legacy env

@@ -1,7 +1,7 @@
 use std::env;
 use std::sync::Arc;
 
-use crate::client::{LlmClient, anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient};
+use crate::client::{LlmClient, anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient, ollama::OllamaClient};
 use crate::config::{BackendType, GROQ_API_URL, ANTHROPIC_API_URL, OPENAI_API_URL};
 
 /// Client factory for creating LLM clients
@@ -41,6 +41,10 @@ impl ClientFactory {
             BackendType::Llama => {
                 let url = api_url.expect("llama.cpp backend requires api_url to be specified");
                 Arc::new(LlamaCppClient::new(url, model))
+            }
+            BackendType::Ollama => {
+                let url = api_url.or_else(|| env::var("OLLAMA_HOST").ok()).unwrap_or_else(|| "http://localhost:11434".to_string());
+                Arc::new(OllamaClient::new(url, model))
             }
             BackendType::Groq => {
                 let url = api_url.unwrap_or_else(|| GROQ_API_URL.to_string());
@@ -99,6 +103,8 @@ impl ClientFactory {
         } else if env::var("ANTHROPIC_AUTH_TOKEN").is_ok() ||
                   env::var("ANTHROPIC_API_KEY").is_ok() {
             BackendType::Anthropic
+        } else if env::var("OLLAMA_HOST").is_ok() {
+            BackendType::Ollama
         } else {
             BackendType::Groq
         };

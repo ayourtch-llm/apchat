@@ -7,6 +7,7 @@ pub enum BackendType {
     Anthropic,
     Llama,
     OpenAI,
+    Ollama,
 }
 
 impl BackendType {
@@ -17,6 +18,7 @@ impl BackendType {
             "anthropic" | "claude" => Some(Self::Anthropic),
             "llama" | "llamacpp" | "llama.cpp" | "llama-cpp" => Some(Self::Llama),
             "openai" => Some(Self::OpenAI),
+            "ollama" => Some(Self::Ollama),
             _ => None,
         }
     }
@@ -28,6 +30,7 @@ impl BackendType {
             Self::Anthropic => "anthropic",
             Self::Llama => "llama",
             Self::OpenAI => "openai",
+            Self::Ollama => "ollama",
         }
     }
 }
