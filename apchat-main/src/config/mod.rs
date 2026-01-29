@@ -170,6 +170,7 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(PtyListTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtyKillTool, vec!["terminal".to_string()]);
     registry.register_with_categories(PtyRequestUserInputTool, vec!["terminal".to_string()]);
+    registry.register_with_categories(PtySendCredentialKeysTool, vec!["terminal".to_string()]);
 
     // Register memory tools
     registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);

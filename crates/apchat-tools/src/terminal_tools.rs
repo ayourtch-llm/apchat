@@ -5,6 +5,9 @@ use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use serde_json::json;
+use serde::Deserialize;
+use std::path::PathBuf;
+use regex::Regex;
 
 /// Tool for launching a new PTY terminal session
 pub struct PtyLaunchTool;
@@ -620,6 +623,208 @@ impl Tool for PtyRequestUserInputTool {
                 Session will remain available for {} seconds.",
                 session_id, message, screen_contents, timeout_seconds
             ),
+        });
+
+        ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
+    }
+}
+
+/// Credential entry from credentials.toml
+#[derive(Debug, Deserialize, Clone)]
+struct CredentialEntry {
+    key: String,
+    password: Option<String>,
+    enable_secret: Option<String>,
+}
+
+/// Root structure for credentials.toml
+#[derive(Debug, Deserialize)]
+struct CredentialsFile {
+    credentials: Vec<CredentialEntry>,
+}
+
+/// Tool for sending credentials from credentials.toml to a PTY session
+pub struct PtySendCredentialKeysTool;
+
+#[async_trait]
+impl Tool for PtySendCredentialKeysTool {
+    fn name(&self) -> &str {
+        "pty_send_credential_keys"
+    }
+
+    fn description(&self) -> &str {
+        "Send credentials from ~/.okaychat/credentials.toml to a PTY terminal session. Reads the credentials file, matches device hostname using regex patterns, and types the credential (password or enable_secret) into the session. IMPORTANT: Verifies credentials don't echo back to the terminal."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("session_id", "string", "PTY session ID to send credentials to", required),
+            param!("device_hostname", "string", "Hostname of the device (matched against credential 'key' patterns as regex)", required),
+            param!("credential_type", "string", "Type of credential to send: 'password' or 'enable_secret'", required),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Get parameters
+        let session_id = match params.get_required::<String>("session_id") {
+            Ok(id) => id,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let device_hostname = match params.get_required::<String>("device_hostname") {
+            Ok(hostname) => hostname,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let credential_type = match params.get_required::<String>("credential_type") {
+            Ok(ct) => ct,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        // Validate credential_type
+        if credential_type != "password" && credential_type != "enable_secret" {
+            return ToolResult::error(format!(
+                "Invalid credential_type '{}'. Must be 'password' or 'enable_secret'",
+                credential_type
+            ));
+        }
+
+        // Get terminal manager
+        let terminal_manager = match &context.terminal_manager {
+            Some(tm) => tm,
+            None => return ToolResult::error("Terminal manager not available".to_string()),
+        };
+
+        // Read credentials file
+        let home_dir = match std::env::var("HOME") {
+            Ok(home) => PathBuf::from(home),
+            Err(_) => return ToolResult::error("HOME environment variable not set".to_string()),
+        };
+
+        let credentials_path = home_dir.join(".okaychat").join("credentials.toml");
+
+        if !credentials_path.exists() {
+            return ToolResult::error(format!(
+                "Credentials file not found at: {}",
+                credentials_path.display()
+            ));
+        }
+
+        let credentials_content = match std::fs::read_to_string(&credentials_path) {
+            Ok(content) => content,
+            Err(e) => return ToolResult::error(format!(
+                "Failed to read credentials file: {}",
+                e
+            )),
+        };
+
+        let credentials_file: CredentialsFile = match toml::from_str(&credentials_content) {
+            Ok(creds) => creds,
+            Err(e) => return ToolResult::error(format!(
+                "Failed to parse credentials file: {}",
+                e
+            )),
+        };
+
+        // Find matching credential using regex
+        let mut matched_credential: Option<CredentialEntry> = None;
+
+        for cred in credentials_file.credentials {
+            match Regex::new(&cred.key) {
+                Ok(pattern) => {
+                    if pattern.is_match(&device_hostname) {
+                        matched_credential = Some(cred);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    return ToolResult::error(format!(
+                        "Invalid regex pattern in credential key '{}': {}",
+                        cred.key, e
+                    ));
+                }
+            }
+        }
+
+        let credential_entry = match matched_credential {
+            Some(cred) => cred,
+            None => return ToolResult::error(format!(
+                "No credential found matching hostname '{}'",
+                device_hostname
+            )),
+        };
+
+        // Get the actual credential value
+        let credential_value = if credential_type == "password" {
+            match &credential_entry.password {
+                Some(pwd) => pwd.clone(),
+                None => return ToolResult::error(format!(
+                    "Credential matching '{}' has no password field",
+                    device_hostname
+                )),
+            }
+        } else {
+            match &credential_entry.enable_secret {
+                Some(secret) => secret.clone(),
+                None => return ToolResult::error(format!(
+                    "Credential matching '{}' has no enable_secret field",
+                    device_hostname
+                )),
+            }
+        };
+
+        // Get screen contents before sending credential
+        let manager = terminal_manager.lock().await;
+        let screen_before = match manager.get_screen(&session_id, false, false).await {
+            Ok(screen) => screen,
+            Err(e) => return ToolResult::error(format!(
+                "Failed to get screen contents before sending credential: {}",
+                e
+            )),
+        };
+        drop(manager);
+
+        // Send the credential followed by Enter
+        let mut manager = terminal_manager.lock().await;
+        let credential_with_enter = format!("{}\n", credential_value);
+        match manager.send_input(&session_id, &credential_with_enter).await {
+            Ok(_) => {},
+            Err(e) => return ToolResult::error(format!(
+                "Failed to send credential to session: {}",
+                e
+            )),
+        };
+        drop(manager);
+
+        // Wait a moment for the screen to update
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // Get screen contents after sending credential
+        let manager = terminal_manager.lock().await;
+        let screen_after = match manager.get_screen(&session_id, false, false).await {
+            Ok(screen) => screen,
+            Err(e) => return ToolResult::error(format!(
+                "Failed to get screen contents after sending credential: {}",
+                e
+            )),
+        };
+
+        // Verify the credential didn't echo back
+        // We check if the credential value appears in the new content (screen_after but not in screen_before)
+        if screen_after.contains(&credential_value) && !screen_before.contains(&credential_value) {
+            return ToolResult::error(format!(
+                "SECURITY WARNING: Credential echoed back in terminal! The {} was visible in the terminal output.",
+                credential_type
+            ));
+        }
+
+        let result = json!({
+            "session_id": session_id,
+            "device_hostname": device_hostname,
+            "credential_type": credential_type,
+            "matched_pattern": credential_entry.key,
+            "status": "credential sent successfully",
+            "echo_check": "passed - credential did not echo back"
         });
 
         ToolResult::success(serde_json::to_string_pretty(&result).unwrap())
