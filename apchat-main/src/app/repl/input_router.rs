@@ -2,13 +2,14 @@ use std::sync::Arc;
 use colored::Colorize;
 use tokio::task::JoinHandle;
 
-use apchat_vty::{print_heart_yellow};
+use apchat_vty::{print_heart_yellow, request_counter};
 use apchat_models::ModelColor;
 use apchat_toolcore::confirmation::ConfirmationRegistry;
 
 use crate::mspc::{MspcChannel, MspcMessage};
 use crate::input_router::TerminalInputRouter;
 use crate::config::ClientConfig;
+
 
 /// Configuration for the background input router task.
 pub struct RouterConfig {
@@ -56,7 +57,9 @@ pub fn spawn_input_router(config: RouterConfig) -> JoinHandle<()> {
 
             let model_name = super::get_model_name_for_prompt(&current_model, &client_config);
             let model_indicator = format!("[{} ({})]", current_model.display_name(), model_name).bright_magenta();
-            let prompt_string = format!("{} {}", model_indicator, "You:".bright_green().bold());
+            let request_count = request_counter::get_count();
+            let prompt_string = format!("{}[{}] {}", model_indicator, request_count, "You:".bright_green().bold());
+
 
             // Clone the Arc for use in spawn_blocking
             let receiver_mutex_clone = signal_receiver_mutex.clone();

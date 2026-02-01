@@ -3,6 +3,7 @@ use colored::Colorize;
 
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::Message;
+use apchat_vty::RequestGuard;
 
 use crate::APChat;
 use crate::mspc::{MspcChannel, MspcMessage};
@@ -30,6 +31,7 @@ pub async fn run_inference(
     cancel_token: &tokio_util::sync::CancellationToken,
     mspc_channel: &Arc<MspcChannel>,
 ) -> InferenceOutcome {
+    let _request_guard = RequestGuard::new();
     if chat.use_agents && chat.agent_coordinator.is_some() {
         run_agent_inference(chat, input, cancel_token, mspc_channel).await
     } else {

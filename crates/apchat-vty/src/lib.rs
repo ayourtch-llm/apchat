@@ -11,6 +11,60 @@ pub use readline::{Readline, ReadlineResult};
 pub use history::{ReadlineEntry, ReadlineHistory, load_history, save_history, load_and_add_to_editor, save_to_file};
 pub use instance::ReadlineInstance;
 
+/// Atomic counter for tracking active HTTP requests
+/// This module provides thread-safe tracking of ongoing LLM API requests
+pub mod request_counter {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// Global atomic counter for active HTTP requests
+    static ACTIVE_REQUESTS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Get the current count of active requests
+    ///
+    /// # Returns
+    /// * `usize` - The number of currently active HTTP requests
+    pub fn get_count() -> usize {
+        ACTIVE_REQUESTS.load(Ordering::Relaxed)
+    }
+
+    /// Increment the request counter
+    fn increment() {
+        ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed);
+println!("REQ: {:?}", ACTIVE_REQUESTS);
+    }
+
+    /// Decrement the request counter
+    fn decrement() {
+        ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed);
+println!("DEQ: {:?}", ACTIVE_REQUESTS);
+    }
+
+    /// RAII guard that automatically increments the counter on creation
+    /// and decrements it on drop
+    #[derive(Debug)]
+    pub struct RequestGuard {
+        _marker: (),
+    }
+
+    impl RequestGuard {
+        /// Create a new RequestGuard, incrementing the active request counter
+        pub fn new() -> Self {
+            increment();
+            RequestGuard { _marker: () }
+        }
+    }
+
+    impl Drop for RequestGuard {
+        fn drop(&mut self) {
+            decrement();
+        }
+    }
+}
+
+pub use request_counter::{RequestGuard, get_count};
+
+
 use std::io::{self, Write};
 
 /// Prints text with a red heart emoji (❤️) prepended to each line.
