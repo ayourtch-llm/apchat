@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "apchat-main",
-    "crates/apchat-agents",
     "crates/apchat-models",
+    "crates/apchat-progress",
     "crates/apchat-logging",
     "crates/apchat-llm-api",
     "crates/apchat-mspc",

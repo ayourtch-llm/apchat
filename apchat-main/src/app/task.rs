@@ -19,11 +19,6 @@ pub async fn run_task_mode(
 ) -> Result<()> {
     print_heart_red(&format!("{}", "🤖 APChat - Task Mode".bright_cyan().bold()), true);
     print_heart_red(&format!("{}", format!("Working directory: {}", work_dir.display()).bright_black()), true);
-
-    if cli.agents {
-        print_heart_red(&format!("{}", "🚀 Multi-Agent System ENABLED".green().bold()), true);
-    }
-
     print_heart_red(&format!("{}", format!("Task: {}", task_text).bright_yellow()), true);
     print_heart_red("", true);
 
@@ -33,7 +28,6 @@ pub async fn run_task_mode(
     let mut chat = APChat::new_with_config(
         client_config.clone(),
         work_dir.clone(),
-        cli.agents,
         policy_manager.clone(),
         cli.stream,
         cli.verbose,
@@ -50,38 +44,19 @@ pub async fn run_task_mode(
         }
     };
 
-    let response = if chat.use_agents && chat.agent_coordinator.is_some() {
-        // Use agent system
-        match chat.process_with_agents(&task_text, None).await {
-            Ok(response) => response,
-            Err(e) => {
-                print_heart_yellow(&format!("{} {}\n", "Agent Error:".bright_red().bold(), e), true);
-                // Fallback to regular chat (no cancellation in task mode)
-                match crate::chat::session::chat(&mut chat, &task_text, None).await {
-                    Ok(response) => response,
-                    Err(e) => {
-                        print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
-                        return Ok(());
-                    }
-                }
-            }
-        }
-    } else {
-        // Use regular chat (no cancellation in task mode)
-        match crate::chat::session::chat(&mut chat, &task_text, None).await {
-            Ok(response) => response,
-            Err(e) => {
-                print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
-                return Ok(());
-            }
+    // Use regular chat (no cancellation in task mode)
+    let response = match crate::chat::session::chat(&mut chat, &task_text, None).await {
+        Ok(response) => response,
+        Err(e) => {
+            print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
+            return Ok(());
         }
     };
 
     if cli.pretty {
         print_heart_red(
             &serde_json::to_string_pretty(&serde_json::json!({
-                "response": response,
-                "agents_used": chat.use_agents
+                "response": response
             }))
             .unwrap_or_else(|_| response.to_string()),
             true

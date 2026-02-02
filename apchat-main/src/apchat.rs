@@ -11,16 +11,12 @@ use tokio::sync::Mutex;
 
 use apchat_vty::{print_heart_yellow, print_heart_red};
 
-use apchat_agents::{
-    PlanningCoordinator, GroqLlmClient,
-    ChatMessage, ExecutionContext,
-};
 use apchat_logging::ConversationLogger;
 use apchat_policy::PolicyManager;
 use apchat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
 use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext, parameter_validation::validate_tool_call};
 use crate::cli::Cli;
-use crate::config::{ClientConfig, initialize_tool_registry, initialize_agent_system};
+use crate::config::{ClientConfig, initialize_tool_registry};
 use crate::chat::{save_state, load_state};
 use apchat_models::{
     ModelColor, Message, ToolCall, FunctionCall, ModelProvider,
@@ -41,9 +37,6 @@ pub struct APChat {
     pub(crate) total_tokens_used: usize,
     pub(crate) logger: Option<ConversationLogger>,
     pub(crate) tool_registry: ToolRegistry,
-    // Agent system
-    pub(crate) agent_coordinator: Option<PlanningCoordinator>,
-    pub(crate) use_agents: bool,
     // Client configuration
     pub(crate) client_config: ClientConfig,
     // Policy manager
@@ -121,29 +114,6 @@ impl APChat {
         Self::new_with_config(
             config,
             work_dir,
-            false,
-            policy_manager,
-            false,
-            false,
-            TerminalBackendType::Pty,
-            false, // Default early_superpowers to false
-        )
-    }
-
-    pub(crate) fn new_with_agents(api_key: String, work_dir: PathBuf, use_agents: bool) -> Self {
-        let config = ClientConfig {
-            api_key: api_key.clone(),
-            model_providers: [
-                ModelProvider::new(ModelColor::BluModel.default_model()),
-                ModelProvider::new(ModelColor::GrnModel.default_model()),
-                ModelProvider::new(ModelColor::RedModel.default_model()),
-            ],
-        };
-        let policy_manager = PolicyManager::new();
-        Self::new_with_config(
-            config,
-            work_dir,
-            use_agents,
             policy_manager,
             false,
             false,
@@ -170,7 +140,6 @@ impl APChat {
     pub fn new_with_config(
         client_config: ClientConfig,
         work_dir: PathBuf,
-        use_agents: bool,
         policy_manager: PolicyManager,
         stream_responses: bool,
         verbose: bool,
@@ -193,19 +162,6 @@ impl APChat {
                 print_heart_yellow(&format!("{} Skills will not be available", "⚠️".yellow()), true);
                 None
             }
-        };
-
-        let agent_coordinator = if use_agents {
-            match initialize_agent_system(&client_config, &tool_registry, &policy_manager) {
-                Ok(coordinator) => Some(coordinator),
-                Err(e) => {
-                    print_heart_yellow(&format!("{} Failed to initialize agent system: {}", "❌".red(), e), true);
-                    print_heart_yellow(&format!("{} Falling back to non-agent mode", "⚠️".yellow()), true);
-                    None
-                }
-            }
-        } else {
-            None
         };
 
         // Initialize terminal manager with specified backend
@@ -240,8 +196,6 @@ impl APChat {
             total_tokens_used: 0,
             logger: None,
             tool_registry: tool_registry.with_content_limiter(content_limiter_clone.unwrap()),
-            agent_coordinator,
-            use_agents,
             client_config,
             policy_manager,
             terminal_manager,
@@ -296,91 +250,6 @@ impl APChat {
                 },
             }
         }).collect()
-    }
-
-    /// Process user request using the agent system
-    pub async fn process_with_agents(&mut self, user_request: &str, cancellation_token: Option<tokio_util::sync::CancellationToken>) -> Result<String> {
-        // Get API URL before mutable borrow
-        let api_url = crate::config::get_api_url(&self.client_config, &self.current_model);
-        let api_key = crate::config::get_api_key(&self.client_config, &self.api_key, &self.current_model);
-
-        if let Some(coordinator) = &mut self.agent_coordinator {
-            // Create execution context for agents
-            let tool_registry_arc = std::sync::Arc::new(self.tool_registry.clone());
-            let llm_client = std::sync::Arc::new(GroqLlmClient::new(
-                api_key,
-                self.current_model.as_str(
-                    self.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
-                    self.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
-                    self.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
-                ).to_string(),
-                api_url,
-                "process_with_agents".to_string()
-            ));
-
-            // Convert message history to agent format
-            let conversation_history: Vec<ChatMessage> = self.messages.iter().map(|msg| {
-                ChatMessage {
-                    role: msg.role.clone(),
-                    content: msg.content.clone(),
-                    tool_calls: msg.tool_calls.clone().map(|calls| {
-                        calls.into_iter().map(|call| apchat_agents::agent::ToolCall {
-                            id: call.id,
-                            function: apchat_agents::agent::FunctionCall {
-                                name: call.function.name,
-                                arguments: call.function.arguments,
-                            },
-                        }).collect()
-                    }),
-                    tool_call_id: msg.tool_call_id.clone(),
-                    name: msg.name.clone(),
-                    reasoning: None,
-                }
-            }).collect();
-
-            let context = ExecutionContext {
-                workspace_dir: self.work_dir.clone(),
-                session_id: format!("session_{}", chrono::Utc::now().timestamp()),
-                tool_registry: tool_registry_arc,
-                llm_client,
-                conversation_history,
-                terminal_manager: Some(self.terminal_manager.clone()),
-                skill_registry: self.skill_registry.clone(),
-                todo_manager: Some(self.todo_manager.clone()),
-                cancellation_token,
-            };
-
-            // Debug: Log current model
-            if self.debug_level > 0 {
-                print_heart_yellow(&format!("[DEBUG] Processing with agents using model: {}", self.current_model.display_name()), true);
-            }
-
-            // Process request through coordinator
-            let result = coordinator.process_user_request(user_request, &context).await?;
-
-            // Update message history
-            self.messages.push(Message {
-                role: "user".to_string(),
-                content: user_request.to_string(),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
-            });
-
-            self.messages.push(Message {
-                role: "assistant".to_string(),
-                content: result.content.clone(),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
-            });
-
-            Ok(result.content)
-        } else {
-            Err(anyhow::anyhow!("Agent coordinator not initialized"))
-        }
     }
 
     pub fn read_file(&self, file_path: &str) -> Result<String> {
@@ -488,39 +357,33 @@ impl APChat {
                 let params = ToolParameters::from_json(arguments)
                     .with_context(|| format!("Failed to parse tool arguments for '{}'.", name))?;
 
-                // Add parameter validation only in single LLM mode (not multi-agent mode)
-                if !self.use_agents {
-                    // Get tool schema for validation
-                    let tool = self.tool_registry.get_tool(name)
-                        .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in registry.", name))?;
+                // Get tool schema for validation
+                let tool = self.tool_registry.get_tool(name)
+                    .ok_or_else(|| anyhow::anyhow!("Tool '{}' not found in registry.", name))?;
 
-                    // Get parameter definitions from the tool
-                    let param_definitions: HashMap<String, Value> = tool.parameters()
-                        .iter()
-                        .map(|(key, def)| {
-                            (key.clone(), serde_json::to_value(def).unwrap_or(Value::Null))
-                        })
-                        .collect();
+                // Get parameter definitions from the tool
+                let param_definitions: HashMap<String, Value> = tool.parameters()
+                    .iter()
+                    .map(|(key, def)| {
+                        (key.clone(), serde_json::to_value(def).unwrap_or(Value::Null))
+                    })
+                    .collect();
 
-                    // Create a minimal ToolCall for validation (only need function name and arguments)
-                    let tool_call = apchat_models::ToolCall {
-                        id: format!("call_{}", chrono::Utc::now().timestamp_millis()),
-                        tool_type: "function".to_string(),
-                        function: apchat_models::FunctionCall {
-                            name: name.to_string(),
-                            arguments: arguments.to_string(),
-                        },
-                    };
+                // Create a minimal ToolCall for validation (only need function name and arguments)
+                let tool_call = apchat_models::ToolCall {
+                    id: format!("call_{}", chrono::Utc::now().timestamp_millis()),
+                    tool_type: "function".to_string(),
+                    function: apchat_models::FunctionCall {
+                        name: name.to_string(),
+                        arguments: arguments.to_string(),
+                    },
+                };
 
-                    // Validate the tool call against the schema
-                    let validated_params = match validate_tool_call(&tool_call, &params, &param_definitions) {
-                        Ok(params) => params,
-                        Err(e) => return Err(anyhow::anyhow!("Parameter validation failed for '{}': {}", name, e)),
-                    };
-
-                    // Use validated parameters for execution
-                    let params = validated_params;
-                }
+                // Validate the tool call against the schema
+                let params = match validate_tool_call(&tool_call, &params, &param_definitions) {
+                    Ok(params) => params,
+                    Err(e) => return Err(anyhow::anyhow!("Parameter validation failed for '{}': {}", name, e)),
+                };
 
                 // Format current model string for subagent tools
                 let current_model_string = self.format_current_model_string();

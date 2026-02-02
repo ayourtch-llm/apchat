@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 // Import from library
 use apchat::{APChat, resolve_terminal_backend};
 use apchat::cli::{Cli, Commands};
-use apchat::app::{setup_from_cli, run_task_mode, run_subagent_mode, run_repl_mode};
+use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
 use apchat_vty::{print_heart_red, print_heart_yellow};
@@ -61,27 +61,14 @@ async fn main() -> Result<()> {
 
     // Handle task mode if requested
     if let Some(task_text) = cli.task.clone() {
-        // Use subagent mode for single-agent mode (when --agents is NOT specified)
-        if !cli.agents {
-            return run_subagent_mode(
-                &cli,
-                task_text,
-                app_config.client_config,
-                app_config.work_dir,
-                app_config.policy_manager,
-            )
-            .await;
-        } else {
-            // Use regular task mode for multi-agent system (when --agents IS specified)
-            return run_task_mode(
-                &cli,
-                task_text,
-                app_config.client_config,
-                app_config.work_dir,
-                app_config.policy_manager,
-            )
-            .await;
-        }
+        return run_subagent_mode(
+            &cli,
+            task_text,
+            app_config.client_config,
+            app_config.work_dir,
+            app_config.policy_manager,
+        )
+        .await;
     }
 
     // Handle web server mode

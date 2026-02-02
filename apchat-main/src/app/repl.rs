@@ -348,8 +348,6 @@ mod repl_compact_tests {
             total_tokens_used: 0,
             logger: None,
             tool_registry: ToolRegistry::new(),
-            agent_coordinator: None,
-            use_agents: false,
             client_config: crate::config::ClientConfig::new(),
             policy_manager: PolicyManager::new(),
             terminal_manager: Arc::new(Mutex::new(TerminalManager::new(work_dir))),

@@ -20,7 +20,6 @@ mod tests {
         
         assert!(cli.command.is_none());
         assert!(!cli.interactive); // Default should be false
-        assert!(!cli.agents);
         assert!(!cli.auto_confirm);
         assert!(!cli.stream);
         assert!(!cli.verbose);
@@ -47,15 +46,6 @@ mod tests {
         let cli = parse_cli_from_args(&["-i"])?;
         
         assert!(cli.interactive);
-        
-        Ok(())
-    }
-
-    #[test]
-    fn test_agents_flag() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = parse_cli_from_args(&["--agents"])?;
-        
-        assert!(cli.agents);
         
         Ok(())
     }

@@ -702,9 +702,6 @@ async fn handle_send_message(
         reasoning: None,
     });
 
-    // Capture the use_agents flag before dropping the lock
-    let use_agents = apchat.use_agents;
-
     // Broadcast user message to all clients in this session
     drop(apchat); // Release lock before broadcast
     session.broadcast(ServerMessage::UserMessage {
@@ -726,38 +723,13 @@ async fn handle_send_message(
         }
     }
 
-    // Handle based on mode
-    if use_agents {
-        // Multi-agent mode - use existing process_with_agents
-        match session.apchat.lock().await
-            .process_with_agents(&content, None)
-            .await
-        {
-            Ok(response) => {
-                let msg = ServerMessage::AssistantMessage {
-                    content: response,
-                    streaming: false,
-                };
-                session.broadcast(msg).await;
-                session.broadcast(ServerMessage::AssistantMessageComplete).await;
-            }
-            Err(e) => {
-                let error_msg = ServerMessage::Error {
-                    message: format!("Agent processing failed: {}", e),
-                    recoverable: true,
-                };
-                session.broadcast(error_msg).await;
-            }
-        }
-    } else {
-        // Single LLM mode - use custom loop with broadcasts
-        if let Err(e) = handle_chat_with_broadcast(session).await {
-            let error_msg = ServerMessage::Error {
-                message: format!("Chat failed: {}", e),
-                recoverable: true,
-            };
-            session.broadcast(error_msg).await;
-        }
+    // Process chat with broadcasts
+    if let Err(e) = handle_chat_with_broadcast(session).await {
+        let error_msg = ServerMessage::Error {
+            message: format!("Chat failed: {}", e),
+            recoverable: true,
+        };
+        session.broadcast(error_msg).await;
     }
 
     // Save session to disk after processing message

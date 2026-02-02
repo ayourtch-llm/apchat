@@ -7,7 +7,7 @@ use crate::APChat;
 use crate::MAX_RETRIES;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, ChatResponse, ToolCall, FunctionCall};
-use apchat_agents::{ToolDefinition, ChatMessage};
+use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
 use apchat_logging::safe_truncate;
 use apchat_toolcore::parse_xml_tool_calls;
@@ -223,9 +223,9 @@ pub(crate) async fn call_api_with_llm_client(
             role: msg.role.clone(),
             content: msg.content.clone(),
             tool_calls: msg.tool_calls.clone().map(|calls| {
-                calls.into_iter().map(|call| apchat_agents::ToolCall {
+                calls.into_iter().map(|call| apchat_llm_api::ToolCall {
                     id: call.id,
-                    function: apchat_agents::FunctionCall {
+                    function: apchat_llm_api::FunctionCall {
                         name: call.function.name,
                         arguments: call.function.arguments,
                     },

@@ -48,7 +48,6 @@ pub async fn run_subagent_mode(
     let mut subagent = APChat::new_with_config(
         client_config.clone(),
         work_dir.clone(),
-        false, // Always use single-agent mode for subagent
         policy_manager.clone(),
         false, // No streaming in subagent mode
         cli.verbose,
@@ -67,14 +66,8 @@ pub async fn run_subagent_mode(
     let mut tools_used = Vec::new();
     let mut files_modified = Vec::new();
 
-    // Execute the task internally
-    let result = if cli.agents && subagent.agent_coordinator.is_some() {
-        // Use agent system if enabled and available
-        subagent.process_with_agents(&task_text, None).await
-    } else {
-        // Use regular chat
-        crate::chat::session::chat(&mut subagent, &task_text, None).await
-    };
+    // Execute the task
+    let result = crate::chat::session::chat(&mut subagent, &task_text, None).await;
 
     let duration = start_time.elapsed();
 
@@ -104,7 +97,6 @@ pub async fn run_subagent_mode(
         duration_ms: duration.as_millis() as u64,
         error,
         metadata: json!({
-            "agents_used": subagent.use_agents,
             "model_used": subagent.current_model.display_name(),
             "work_directory": work_dir.to_string_lossy().to_string(),
         }),

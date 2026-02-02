@@ -30,11 +30,6 @@ pub async fn initialize_repl(
 ) -> Result<(APChat, Option<IdleConfig>)> {
     print_heart_red(&format!("{}", "🤖 APChat - Claude Code-like Experience".bright_cyan().bold()), true);
     print_heart_red(&format!("{}", format!("Working directory: {}", work_dir.display()).bright_black()), true);
-
-    if cli.agents {
-        print_heart_red(&format!("{}", "🚀 Multi-Agent System ENABLED - Specialized agents will handle your tasks".green().bold()), true);
-    }
-
     print_heart_red(&format!("{}", "Type 'exit' or 'quit' to exit, '/model' to switch models, '/history' to view history, or '/skills' for all commands\n".bright_black()), true);
 
     // Resolve terminal backend and create APChat
@@ -43,7 +38,6 @@ pub async fn initialize_repl(
     let mut chat = APChat::new_with_config(
         client_config,
         work_dir,
-        cli.agents,
         policy_manager,
         cli.stream,
         cli.verbose,

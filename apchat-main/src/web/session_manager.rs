@@ -250,7 +250,6 @@ impl SessionManager {
         let mut apchat = APChat::new_with_config(
             self.client_config.clone(),
             self.work_dir.clone(),
-            config.agents_enabled,
             self.policy_manager.clone(),
             config.stream_responses,
             false, // verbose
@@ -335,7 +334,6 @@ impl SessionManager {
                         let mut apchat = APChat::new_with_config(
                             self.client_config.clone(),
                             self.work_dir.clone(),
-                            false, // agents_enabled - default to false for loaded sessions
                             self.policy_manager.clone(),
                             false, // stream_responses - default to false
                             false, // verbose

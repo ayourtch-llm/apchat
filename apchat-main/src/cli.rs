@@ -31,10 +31,6 @@ pub struct Cli {
     #[arg(short, long, action = clap::ArgAction::SetTrue)]
     pub interactive: bool,
 
-    /// Enable multi-agent system for specialized task handling
-    #[arg(long, action = clap::ArgAction::SetTrue)]
-    pub agents: bool,
-
     /// Generate shell completions
     #[arg(long, value_enum)]
     pub generate: Option<Shell>,
@@ -532,7 +528,6 @@ mod tests {
         
         assert!(cli.command.is_none());
         assert!(!cli.interactive); // Default should be false
-        assert!(!cli.agents);
         assert!(!cli.auto_confirm);
         assert!(!cli.stream);
         assert!(!cli.verbose);
@@ -550,15 +545,6 @@ mod tests {
         let cli = Cli::try_parse_from(&["apchat", "--interactive"])?;
         
         assert!(cli.interactive);
-        
-        Ok(())
-    }
-
-    #[test]
-    fn test_agents_flag() -> Result<(), Box<dyn std::error::Error>> {
-        let cli = Cli::try_parse_from(&["apchat", "--agents"])?;
-        
-        assert!(cli.agents);
         
         Ok(())
     }

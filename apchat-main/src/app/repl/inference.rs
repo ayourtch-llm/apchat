@@ -32,78 +32,7 @@ pub async fn run_inference(
     mspc_channel: &Arc<MspcChannel>,
 ) -> InferenceOutcome {
     let _request_guard = RequestGuard::new();
-    if chat.use_agents && chat.agent_coordinator.is_some() {
-        run_agent_inference(chat, input, cancel_token, mspc_channel).await
-    } else {
-        run_chat_inference(chat, input, cancel_token, mspc_channel).await
-    }
-}
-
-async fn run_agent_inference(
-    chat: &mut APChat,
-    input: &str,
-    cancel_token: &tokio_util::sync::CancellationToken,
-    mspc_channel: &Arc<MspcChannel>,
-) -> InferenceOutcome {
-    loop {
-        tokio::select! {
-            result = chat.process_with_agents(input, Some(cancel_token.clone())) => {
-                match result {
-                    Ok(response) => {
-                        return InferenceOutcome::Response(response);
-                    }
-                    Err(e) if e.to_string().contains("cancelled") || e.to_string().contains("interrupted") => {
-                        print_heart_yellow(&format!("{} Unexpected interruption: {}", "⚠️".yellow(), e), true);
-                        chat.messages.push(Message {
-                            role: "assistant".to_string(),
-                            content: format!("[Interrupted: {}]", e),
-                            tool_calls: None,
-                            tool_call_id: None,
-                            name: None,
-                            reasoning: None,
-                        });
-                        return InferenceOutcome::Interrupted;
-                    }
-                    Err(e) => {
-                        print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
-                        chat.messages.push(Message {
-                            role: "assistant".to_string(),
-                            content: format!("[Error: {}]", e),
-                            tool_calls: None,
-                            tool_call_id: None,
-                            name: None,
-                            reasoning: None,
-                        });
-                        return InferenceOutcome::Error;
-                    }
-                }
-            }
-            interrupt_msg = mspc_channel.recv() => {
-                if let Some(msg) = interrupt_msg {
-                    match msg {
-                        MspcMessage::InterruptSignal(_content, _sender) => {
-                            print_heart_red(&format!("\n{}", "^C - Interrupting current operation...".bright_yellow()), true);
-                            cancel_token.cancel();
-                            chat.messages.push(Message {
-                                role: "assistant".to_string(),
-                                content: "[Interrupted by user]".to_string(),
-                                tool_calls: None,
-                                tool_call_id: None,
-                                name: None,
-                                reasoning: None,
-                            });
-                            return InferenceOutcome::Interrupted;
-                        }
-                        _ => {
-                            // Non-interrupt message - ignore during inference
-                        }
-                    }
-                } else {
-                    return InferenceOutcome::Response(String::new());
-                }
-            }
-        }
-    }
+    run_chat_inference(chat, input, cancel_token, mspc_channel).await
 }
 
 async fn run_chat_inference(

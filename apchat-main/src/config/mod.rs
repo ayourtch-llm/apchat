@@ -1,10 +1,3 @@
-use anyhow::Result;
-use colored::Colorize;
-use std::sync::Arc;
-
-use apchat_agents::{
-    PlanningCoordinator, AgentFactory,
-};
 use apchat_toolcore::ToolRegistry;
 use apchat_policy::PolicyManager;
 use apchat_tools::*;
@@ -183,70 +176,4 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
 
     registry
-}
-
-/// Initialize the agent system with configuration files
-pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry, policy_manager: &PolicyManager) -> Result<PlanningCoordinator> {
-    print_heart_red(&format!("{} Initializing agent system...", "🤖".blue()), true);
-
-    // Create agent factory
-    let tool_registry_arc = Arc::new((*tool_registry).clone());
-    let mut agent_factory = AgentFactory::new(tool_registry_arc, policy_manager.clone());
-
-    // Determine model names from providers
-    let blu_model = client_config.get_model_name(ModelColor::BluModel).to_string();
-    let grn_model = client_config.get_model_name(ModelColor::GrnModel).to_string();
-    let red_model = client_config.get_model_name(ModelColor::RedModel).to_string();
-
-    // Register LLM clients based on per-model configuration
-    // Use the centralized helper function to create clients for all three models
-
-    let blu_model_client = create_model_client(
-        "blu",
-        client_config.get_backend(ModelColor::BluModel).cloned(),
-        client_config.get_api_url(ModelColor::BluModel).cloned(),
-        client_config.get_api_key(ModelColor::BluModel).cloned(),
-        Some(blu_model.clone()),
-        &client_config.api_key,
-        false,  // verbose
-    );
-
-    let grn_model_client = create_model_client(
-        "grn",
-        client_config.get_backend(ModelColor::GrnModel).cloned(),
-        client_config.get_api_url(ModelColor::GrnModel).cloned(),
-        client_config.get_api_key(ModelColor::GrnModel).cloned(),
-        Some(grn_model.clone()),
-        &client_config.api_key,
-        false,  // verbose
-    );
-
-    let red_model_client = create_model_client(
-        "red",
-        client_config.get_backend(ModelColor::RedModel).cloned(),
-        client_config.get_api_url(ModelColor::RedModel).cloned(),
-        client_config.get_api_key(ModelColor::RedModel).cloned(),
-        Some(red_model.clone()),
-        &client_config.api_key,
-        false,  // verbose
-    );
-
-    agent_factory.register_llm_client("blu_model".to_string(), blu_model_client);
-    agent_factory.register_llm_client("grn_model".to_string(), grn_model_client);
-    agent_factory.register_llm_client("red_model".to_string(), red_model_client);
-
-    // Create coordinator
-    let agent_factory_arc = Arc::new(agent_factory);
-    let mut coordinator = PlanningCoordinator::new(agent_factory_arc);
-
-    // Load agent configurations (from embedded + optional filesystem)
-    let config_path = std::path::Path::new("agents/configs");
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(
-            coordinator.load_agent_configs(config_path)
-        )
-    })?;
-
-    print_heart_red(&format!("{} Agent system initialized successfully!", "✅".green()), true);
-    Ok(coordinator)
 }

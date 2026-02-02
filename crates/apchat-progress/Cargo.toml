@@ -1,0 +1,12 @@
+[package]
+name = "apchat-progress"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+apchat-llm-api = { path = "../apchat-llm-api" }
