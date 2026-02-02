@@ -150,6 +150,7 @@ pub(crate) async fn chat(
             // Display token usage
             if let Some(usage) = &usage {
                 chat.total_tokens_used += usage.total_tokens;
+                print_heart_red(&format!("======stats for user message: {}", user_message), true);
                 print_heart_red(&format!(
                     "{} Prompt: {} | Completion: {} | Total: {} | Session: {}",
                     "📊".bright_black(),
