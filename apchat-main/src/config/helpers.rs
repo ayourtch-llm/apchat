@@ -43,8 +43,12 @@ pub fn get_system_prompt(
     Only use the tools that are provided to you - do not make up tool names or attempt to use tools that are not available. \
     When making multiple file edits, use plan_edits to create a complete plan, then apply_edit_plan to execute all changes atomically. \
     This prevents issues where you lose track of file state between sequential edits.\n\n\
+    SUBAGENT USAGE: When using launch_subagent or launch_subagent_pretty, you MUST only request ONE subagent at a time. \
+    Wait for the subagent to complete and review its results before deciding whether to launch another subagent. \
+    Do NOT request multiple subagent calls in a single response - this prevents you from seeing intermediate results \
+    and making informed decisions about subsequent tasks.\n\n\
     Model switches may happen automatically during the conversation based on tool usage and errors. \
-    The currently active model will be indicated in system messages as the conversation progresses.\n    
+    The currently active model will be indicated in system messages as the conversation progresses.\n
     📅 Current Date: {}",
     grn_model_name, blu_model_name, red_model_name, current_date);
 
