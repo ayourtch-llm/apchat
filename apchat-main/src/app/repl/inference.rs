@@ -75,6 +75,7 @@ async fn run_chat_inference(
                 }
             }
             interrupt_msg = mspc_channel.recv() => {
+                eprintln!("AYXXXX: {:?}", &interrupt_msg);
                 if let Some(msg) = interrupt_msg {
                     match msg {
                         MspcMessage::InterruptSignal(_content, _sender) => {

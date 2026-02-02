@@ -120,10 +120,11 @@ fn enable_raw_mode_on_stdin() -> io::Result<termios> {
         }
         
         let original = term;
-        
-        // Set raw mode flags (clear ICANON, ECHO, ISIG)
-        term.c_lflag &= !(ICANON | ECHO | ISIG);
-        
+
+        // Set raw mode flags (clear ICANON, ECHO)
+        // We keep ISIG set so Ctrl-C and other signal characters work as expected
+        term.c_lflag &= !(ICANON | ECHO);
+
         // Set minimum characters to read and timeout
         term.c_cc[libc::VMIN] = 1;   // Minimum number of characters for non-canonical read
         term.c_cc[libc::VTIME] = 0;  // Timeout in deciseconds (0 = blocking)
