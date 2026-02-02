@@ -8,14 +8,20 @@ use serde_json::Value;
 use apchat_vty::print_heart_yellow;
 
 /// llama.cpp server LLM client implementation with OpenAI-compatible API
+#[derive(Debug)]
 pub struct LlamaCppClient {
     base_url: String,
     model: String,
     client: reqwest::Client,
+    verbose: bool,
 }
 
 impl LlamaCppClient {
     pub fn new(base_url: String, model: String) -> Self {
+        Self::new_with_verbose(base_url, model, false)
+    }
+
+    pub fn new_with_verbose(base_url: String, model: String, verbose: bool) -> Self {
         // Ensure base_url doesn't end with a slash
         let base_url = base_url.trim_end_matches('/').to_string();
 
@@ -32,6 +38,7 @@ impl LlamaCppClient {
             base_url,
             model,
             client,
+            verbose,
         }
     }
 
@@ -168,6 +175,7 @@ impl LlmClient for LlamaCppClient {
         }
 
         let byte_stream = response.bytes_stream();
+        let verbose = self.verbose;
 
         let stream = stream! {
             let mut buffer = String::new();
@@ -176,7 +184,9 @@ impl LlmClient for LlamaCppClient {
             let start_time = std::time::Instant::now();
             let mut last_chunk_time = start_time;
 
-            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Starting stream at {:?}", start_time), true);
+            if verbose {
+                print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Starting stream at {:?}", start_time), true);
+            }
 
             while let Some(chunk_result) = byte_stream.next().await {
                 match chunk_result {
@@ -188,27 +198,33 @@ impl LlmClient for LlamaCppClient {
                         last_chunk_time = now;
 
                         // Print raw bytes received (before any conversion)
-                        print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
-                            chunk_counter, chunk.len(), elapsed_total, elapsed_since_last), true);
-                        print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Raw bytes (hex): {}",
-                            chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")), true);
-                        print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Raw bytes (debug): {:?}",
-                            &chunk[..chunk.len().min(200)]), true);
+                        if verbose {
+                            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Chunk #{}: {} bytes [total: {:?}, since last: {:?}]",
+                                chunk_counter, chunk.len(), elapsed_total, elapsed_since_last), true);
+                            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Raw bytes (hex): {}",
+                                chunk.iter().take(200).map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")), true);
+                            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Raw bytes (debug): {:?}",
+                                &chunk[..chunk.len().min(200)]), true);
+                        }
 
                         // Convert bytes to string, handling UTF-8 errors gracefully
                         let chunk_str = match String::from_utf8(chunk.to_vec()) {
                             Ok(s) => s,
                             Err(e) => {
-                                print_heart_yellow(&format!("❌ [llama.cpp Streaming] Invalid UTF-8 in stream: {}", e), true);
-                                print_heart_yellow(&format!("❌ [llama.cpp Streaming] Failed bytes (hex): {}",
-                                    chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")), true);
+                                if verbose {
+                                    print_heart_yellow(&format!("❌ [llama.cpp Streaming] Invalid UTF-8 in stream: {}", e), true);
+                                    print_heart_yellow(&format!("❌ [llama.cpp Streaming] Failed bytes (hex): {}",
+                                        chunk.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" ")), true);
+                                }
                                 yield Err(anyhow::anyhow!("Invalid UTF-8 in stream: {}", e));
                                 break;
                             }
                         };
 
                         // Print raw chunk content after UTF-8 decoding
-                        print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Decoded UTF-8 string ({} chars):\n{}", chunk_str.len(), chunk_str), true);
+                        if verbose {
+                            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Decoded UTF-8 string ({} chars):\n{}", chunk_str.len(), chunk_str), true);
+                        }
 
                         buffer.push_str(&chunk_str);
 
@@ -220,20 +236,28 @@ impl LlmClient for LlamaCppClient {
                             buffer = buffer[newline_pos + 1..].to_string();
 
                             // Print each line being processed
-                            print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Processing line #{}: {:?}", line_num, line), true);
+                            if verbose {
+                                print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Processing line #{}: {:?}", line_num, line), true);
+                            }
 
                             // Parse SSE line and yield result (including errors)
                             match Self::parse_openai_sse_line(&line) {
                                 Ok(Some(streaming_chunk)) => {
-                                    print_heart_yellow(&format!("✅ [llama.cpp Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
-                                        streaming_chunk.delta.len(), streaming_chunk.finish_reason), true);
+                                    if verbose {
+                                        print_heart_yellow(&format!("✅ [llama.cpp Streaming] Yielding chunk: delta_len={}, finish_reason={:?}",
+                                            streaming_chunk.delta.len(), streaming_chunk.finish_reason), true);
+                                    }
                                     yield Ok(streaming_chunk);
                                 }
                                 Ok(None) => {
-                                    print_heart_yellow(&format!("⏭️  [llama.cpp Streaming] No content in line"), true);
+                                    if verbose {
+                                        print_heart_yellow(&format!("⏭️  [llama.cpp Streaming] No content in line"), true);
+                                    }
                                 }
                                 Err(e) => {
-                                    print_heart_yellow(&format!("❌ [llama.cpp Streaming] Parse error: {}", e), true);
+                                    if verbose {
+                                        print_heart_yellow(&format!("❌ [llama.cpp Streaming] Parse error: {}", e), true);
+                                    }
                                     yield Err(e);
                                     // Continue processing other lines instead of breaking
                                 }
@@ -241,7 +265,9 @@ impl LlmClient for LlamaCppClient {
                         }
                     }
                     Err(e) => {
-                        print_heart_yellow(&format!("❌ [llama.cpp Streaming] Stream error: {}", e), true);
+                        if verbose {
+                            print_heart_yellow(&format!("❌ [llama.cpp Streaming] Stream error: {}", e), true);
+                        }
                         yield Err(anyhow::anyhow!("Stream error: {}", e));
                         break;
                     }
@@ -250,24 +276,34 @@ impl LlmClient for LlamaCppClient {
 
             // Process any remaining complete line in the buffer
             if !buffer.is_empty() && !buffer.trim().is_empty() {
-                print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Processing remaining buffer: {:?}", buffer), true);
+                if verbose {
+                    print_heart_yellow(&format!("🔍 [llama.cpp Streaming] Processing remaining buffer: {:?}", buffer), true);
+                }
                 match Self::parse_openai_sse_line(&buffer) {
                     Ok(Some(streaming_chunk)) => {
-                        print_heart_yellow(&format!("✅ [llama.cpp Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len()), true);
+                        if verbose {
+                            print_heart_yellow(&format!("✅ [llama.cpp Streaming] Yielding final chunk: delta_len={}", streaming_chunk.delta.len()), true);
+                        }
                         yield Ok(streaming_chunk);
                     }
                     Ok(None) => {
-                        print_heart_yellow(&format!("⏭️  [llama.cpp Streaming] No content in remaining buffer"), true);
+                        if verbose {
+                            print_heart_yellow(&format!("⏭️  [llama.cpp Streaming] No content in remaining buffer"), true);
+                        }
                     }
                     Err(e) => {
-                        print_heart_yellow(&format!("❌ [llama.cpp Streaming] Final parse error: {}", e), true);
+                        if verbose {
+                            print_heart_yellow(&format!("❌ [llama.cpp Streaming] Final parse error: {}", e), true);
+                        }
                         yield Err(e);
                     }
                 }
             }
 
-            let total_duration = std::time::Instant::now().duration_since(start_time);
-            print_heart_yellow(&format!("🏁 [llama.cpp Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration), true);
+            if verbose {
+                let total_duration = std::time::Instant::now().duration_since(start_time);
+                print_heart_yellow(&format!("🏁 [llama.cpp Streaming] Stream ended. Total chunks: {}, Total duration: {:?}", chunk_counter, total_duration), true);
+            }
         };
 
         Ok(Box::new(Box::pin(stream)))

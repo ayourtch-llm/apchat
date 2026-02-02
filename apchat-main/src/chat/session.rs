@@ -6,6 +6,32 @@ use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message};
 use apchat_logging::safe_truncate;
 
+/// Prepare for an LLM call by adding the user message and summarizing history.
+///
+/// This function extracts the preparation logic that happens before the tool-calling
+/// loop starts. It:
+/// 1. Adds the user message to the conversation history
+/// 2. Performs history summarization/trimming (once, before the loop)
+///
+/// This is called by the REPL task before entering the tool loop.
+pub(crate) async fn prepare_for_llm_call(chat: &mut APChat, user_message: &str) -> Result<()> {
+    // Add user message to history
+    chat.messages.push(Message {
+        role: "user".to_string(),
+        content: user_message.to_string(),
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+        reasoning: None,
+    });
+
+    // Summarize ONCE before starting the tool-calling loop, not during it
+    // This prevents discarding recent tool results mid-conversation
+    crate::chat::history::summarize_and_trim_history(chat).await?;
+
+    Ok(())
+}
+
 /// Main chat loop - handles user messages, tool calls, and model interactions
 pub(crate) async fn chat(
     chat: &mut APChat,

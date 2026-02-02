@@ -2,6 +2,7 @@ mod init;
 mod commands;
 mod input_router;
 mod inference;
+pub mod llm_task;
 
 use anyhow::Result;
 use colored::Colorize;
@@ -171,11 +172,11 @@ pub async fn run_repl_mode(
             *guard = Some(cancel_token.clone());
         }
 
-        let outcome = inference::run_inference(
+        // Use the tool loop (calls existing API functions directly)
+        let outcome = run_tool_loop(
             &mut chat,
             line,
             &cancel_token,
-            &mspc_channel,
         ).await;
 
         // Always clear the cancellation token, regardless of outcome
@@ -198,20 +199,15 @@ pub async fn run_repl_mode(
                     }
                 }
 
-                // Display response (streaming already printed it inline)
-                if !chat.stream_responses {
-                    let model_name = get_model_name_for_prompt(&chat.current_model, &chat.client_config);
-                    let model_label     = format!("[{} ({})]", chat.current_model.display_name(), model_name).bright_magenta();
-                    let assistant_label = "Assistant:".bright_blue().bold();
-                    print_heart_red(&format!("\n{} {} {}\n", model_label, assistant_label, response), true);
-                } else {
-                    // Separator after streaming output
+                // Response display is now handled by run_tool_loop
+                // Just add a separator after streaming output
+                if chat.stream_responses {
                     print_heart_red(&format!(""), true);
                 }
             }
 
             InferenceOutcome::Interrupted | InferenceOutcome::Error => {
-                // Error/interrupted messages were already pushed by run_inference
+                // Error/interrupted messages were already pushed by run_tool_loop
                 continue 'outer;
             }
         }
@@ -319,6 +315,48 @@ async fn save_input_and_log(chat: &mut APChat, line: &str) {
             if chat.debug_level > 0 {
                 print_heart_yellow(&format!("{} Auto-save failed: {}", "⚠️".yellow(), e), true);
             }
+        }
+    }
+}
+
+/// Run the tool-calling loop by delegating to the existing session::chat() function.
+///
+/// This is a thin wrapper that calls the battle-tested session::chat() function
+/// which handles all the complexity of API calls, streaming, tool execution, etc.
+pub(crate) async fn run_tool_loop(
+    chat: &mut APChat,
+    input: &str,
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> InferenceOutcome {
+    use apchat_vty::print_heart_yellow;
+    use apchat_models::Message;
+
+    // Call the existing session::chat() function which has all the working logic
+    match crate::chat::session::chat(chat, input, Some(cancel_token.clone())).await {
+        Ok(response) => InferenceOutcome::Response(response),
+        Err(e) if e.to_string().contains("interrupted") => {
+            print_heart_yellow(&format!("{} Interrupted: {}", "⚠️".yellow(), e), true);
+            chat.messages.push(Message {
+                role: "assistant".to_string(),
+                content: format!("[Interrupted: {}]", e),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                reasoning: None,
+            });
+            InferenceOutcome::Interrupted
+        }
+        Err(e) => {
+            print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
+            chat.messages.push(Message {
+                role: "assistant".to_string(),
+                content: format!("[Error: {}]", e),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                reasoning: None,
+            });
+            InferenceOutcome::Error
         }
     }
 }

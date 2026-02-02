@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use apchat_logging::get_logs_dir;
 
 /// Groq LLM client implementation (OpenAI-compatible API)
+#[derive(Debug)]
 pub struct GroqLlmClient {
     api_key: String,
     model: String,

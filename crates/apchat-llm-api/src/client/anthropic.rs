@@ -12,6 +12,7 @@ use apchat_logging::get_logs_dir;
 use apchat_vty::print_heart_yellow;
 
 /// Anthropic LLM client implementation using native Anthropic API
+#[derive(Debug)]
 pub struct AnthropicLlmClient {
     api_key: String,
     model: String,

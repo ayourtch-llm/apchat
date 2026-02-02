@@ -62,7 +62,7 @@ pub struct StreamingChunk {
 
 /// LLM client trait - unified interface for all LLM providers
 #[async_trait]
-pub trait LlmClient: Send + Sync {
+pub trait LlmClient: Send + Sync + std::fmt::Debug {
     /// Chat with tools support (non-streaming)
     async fn chat(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<LlmResponse>;
 

@@ -249,9 +249,10 @@ pub fn create_model_client(
         BackendType::Llama => {
             let url = api_url.expect(&format!("llama.cpp backend requires api_url_{}_model", model_name));
             print_heart_red(&format!("{} Using llama.cpp for '{}_model' at: {}", "🦙".cyan(), model_name, url), true);
-            Arc::new(LlamaCppClient::new(
+            Arc::new(LlamaCppClient::new_with_verbose(
                 url,
-                model_str
+                model_str,
+                verbose
             ))
         }
         BackendType::Groq => {
