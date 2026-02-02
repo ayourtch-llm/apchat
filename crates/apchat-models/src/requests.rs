@@ -2,7 +2,7 @@ use super::types::Message;
 use serde::{Deserialize, Serialize};
 
 /// Tool definition for chat API
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tool {
     #[serde(rename = "type")]
     pub tool_type: String,
@@ -10,7 +10,7 @@ pub struct Tool {
 }
 
 /// Function definition within a tool
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDef {
     pub name: String,
     pub description: String,
