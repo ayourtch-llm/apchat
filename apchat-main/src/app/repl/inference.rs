@@ -74,6 +74,7 @@ async fn run_chat_inference(
                     }
                 }
             }
+            /***** keep commented out for now to avoid spurious request interrupt 
             interrupt_msg = mspc_channel.recv() => {
                 eprintln!("AYXXXX: {:?}", &interrupt_msg);
                 if let Some(msg) = interrupt_msg {
@@ -99,6 +100,7 @@ async fn run_chat_inference(
                     return InferenceOutcome::Response(String::new());
                 }
             }
+            ****************/
         }
     }
 }
