@@ -22,7 +22,7 @@ apchat-logging = { path = "../crates/apchat-logging" }
 apchat-models = { path = "../crates/apchat-models" }
 apchat-mspc = { path = "../crates/apchat-mspc" }
 apchat-policy = { path = "../crates/apchat-policy" }
-apchat-skills = { path = "../crates/apchat-skills", features = ["embeddings"] }
+apchat-skills = { path = "../crates/apchat-skills" }
 apchat-terminal = { path = "../crates/apchat-terminal" }
 apchat-todo = { path = "../crates/apchat-todo" }
 apchat-toolcore = { path = "../crates/apchat-toolcore" }
