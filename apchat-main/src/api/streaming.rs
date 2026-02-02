@@ -339,7 +339,33 @@ pub(crate) async fn call_api_streaming(
                                             tool_call.function.name = name.clone();
                                         }
                                         if let Some(args) = &function_delta.arguments {
-                                            tool_call.function.arguments.push_str(args);
+                                            // Some models (e.g., GLM) send a final complete JSON object
+                                            // as the arguments chunk instead of incremental additions.
+                                            // Detect this: if args starts with '{' and is valid JSON, replace
+                                            // rather than append to avoid duplication.
+                                            if args.trim().starts_with('{') {
+                                                // Check if this looks like a complete JSON object
+                                                // If it parses as valid JSON and we already have content,
+                                                // this might be a duplicate - prefer the complete version
+                                                if tool_call.function.arguments.is_empty()
+                                                    || !tool_call.function.arguments.trim().starts_with('{') {
+                                                    tool_call.function.arguments.push_str(args);
+                                                } else {
+                                                    // We already have accumulated content and this is a complete JSON
+                                                    // Check if this appears to be a duplicate (same semantic content)
+                                                    // For safety, use the complete version if it looks valid
+                                                    let args_trimmed = args.trim();
+                                                    if let Ok(_) = serde_json::from_str::<serde_json::Value>(args_trimmed) {
+                                                        // This is valid JSON - replace instead of append
+                                                        tool_call.function.arguments = args_trimmed.to_string();
+                                                    } else {
+                                                        // Not valid JSON, just append normally
+                                                        tool_call.function.arguments.push_str(args);
+                                                    }
+                                                }
+                                            } else {
+                                                tool_call.function.arguments.push_str(args);
+                                            }
                                         }
                                     }
                                 }
