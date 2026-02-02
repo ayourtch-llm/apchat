@@ -30,8 +30,8 @@ pub(crate) async fn chat(
         const MAX_TOOL_ITERATIONS: usize = 250; // Increased limit with intelligent evaluation
         const LOOP_DETECTION_WINDOW: usize = 8; // Check last 8 tool calls
         const PROGRESS_EVAL_INTERVAL: u32 = 50; // Evaluate progress every 50 tool calls
-        const CONSECUTIVE_REPEAT_THRESHOLD: usize = 4; // Warn if same call 4+ times in a row
-        const SCATTERED_REPEAT_THRESHOLD: usize = 6; // Warn if same call 6+ times in window
+        const CONSECUTIVE_REPEAT_THRESHOLD: usize = 25;
+        const SCATTERED_REPEAT_THRESHOLD: usize = 40;
 
         // Initialize progress evaluator for all operations
         let blu_model_url = crate::config::get_api_url(&chat.client_config, &ModelColor::BluModel);
