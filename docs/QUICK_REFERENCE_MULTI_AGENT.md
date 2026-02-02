@@ -1,123 +1,174 @@
-# Quick Reference: Multi-Agent Mode Configuration
+# Quick Reference: Multi-Agent Mode Removal
 
-## Primary Control (One Single Location)
+## Critical Warning
 
-### CLI Flag: `--agents`
+**DO NOT** relocate `ToolDefinition`, `ChatMessage`, `ToolCall`, or `FunctionCall` types.
+They are **defined in `apchat-llm-api`** and merely re-exported by `apchat-agents`.
+Change import paths, not type locations.
 
-**File:** `apchat-main/src/cli.rs` (line 30)
+---
+
+## Import Path Changes (Copy-Paste Ready)
+
+### `apchat-main/src/api/client.rs` (line 10)
 ```rust
-/// Enable multi-agent system for specialized task handling
-#[arg(long, action = clap::ArgAction::SetTrue)]
-pub agents: bool,
+// FROM:
+use apchat_agents::{ToolDefinition, ChatMessage};
+// TO:
+use apchat_llm_api::{ToolDefinition, ChatMessage};
 ```
 
-This is the ONLY way to enable multi-agent mode. When this flag is NOT present (default), the application runs in single-agent mode.
+### `apchat-main/src/api/client.rs` (lines 226-228)
+```rust
+// FROM:
+calls.into_iter().map(|call| apchat_agents::ToolCall {
+    id: call.id,
+    function: apchat_agents::FunctionCall {
+// TO:
+calls.into_iter().map(|call| apchat_llm_api::ToolCall {
+    id: call.id,
+    function: apchat_llm_api::FunctionCall {
+```
 
-## What Controls Multi-Agent Mode
+### `apchat-main/src/api/streaming.rs` (line 7)
+```rust
+// FROM:
+use apchat_agents::{ToolDefinition, ChatMessage};
+// TO:
+use apchat_llm_api::{ToolDefinition, ChatMessage};
+```
 
-| Control Type | Location | Value | Notes |
-|-------------|----------|-------|-------|
-| **CLI Flag** | `--agents` | `true`/`false` | Only control mechanism |
-| **Environment Variable** | None | N/A | Does not exist |
-| **Feature Flag** | None | N/A | Not behind a Cargo feature |
-| **Config File** | None | N/A | No config file setting |
+### `apchat-main/src/api/streaming.rs` (lines 447-449)
+```rust
+// FROM:
+calls.into_iter().map(|call| apchat_agents::ToolCall {
+    id: call.id,
+    function: apchat_agents::FunctionCall {
+// TO:
+calls.into_iter().map(|call| apchat_llm_api::ToolCall {
+    id: call.id,
+    function: apchat_llm_api::FunctionCall {
+```
 
-## Dependencies
+### `apchat-main/src/chat/session.rs` (lines 39-40)
+```rust
+// FROM:
+let mut progress_evaluator = Some(apchat_agents::progress_evaluator::ProgressEvaluator::new(
+    std::sync::Arc::new(apchat_agents::GroqLlmClient::new(
+// TO:
+let mut progress_evaluator = Some(apchat_progress::ProgressEvaluator::new(
+    std::sync::Arc::new(apchat_llm_api::client::groq::GroqLlmClient::new(
+```
 
-**Required Crate:**
-- `crates/apchat-agents` - Multi-agent orchestration and coordination
+### `apchat-main/src/chat/session.rs` (line 51)
+```rust
+// FROM:
+let mut tool_call_history: Vec<apchat_agents::progress_evaluator::ToolCallInfo> = Vec::new();
+// TO:
+let mut tool_call_history: Vec<apchat_progress::ToolCallInfo> = Vec::new();
+```
 
-**Dependency Status:**
-- Workspace member: Yes (Cargo.toml line 4)
-- Main crate dependency: Yes (apchat-main/Cargo.toml line 19)
-- Optional dependency: NO - always included
+### `apchat-main/src/chat/session.rs` (line 285)
+```rust
+// FROM:
+let summary = apchat_agents::progress_evaluator::ToolCallSummary {
+// TO:
+let summary = apchat_progress::ToolCallSummary {
+```
 
-## Agent Configuration Files
+### `apchat-main/src/chat/session.rs` (line 510)
+```rust
+// FROM:
+let call_info = apchat_agents::progress_evaluator::ToolCallInfo {
+// TO:
+let call_info = apchat_progress::ToolCallInfo {
+```
 
-**Location:** `agents/configs/`
-- `code_analyzer.json`
-- `code_reviewer.json`
-- `file_manager.json`
-- `planner.json`
-- `search_specialist.json`
-- `system_operator.json`
-- `terminal_specialist.json`
+---
 
-## Key Code Locations
+## Type Definitions Location
 
-| Component | File | Lines |
-|-----------|------|-------|
-| CLI Argument | `apchat-main/src/cli.rs` | 30 |
-| Task Mode Handler | `apchat-main/src/main.rs` | 45-64 |
-| Agent Coordinator Field | `apchat-main/src/apchat.rs` | 45 |
-| use_agents Field | `apchat-main/src/apchat.rs` | 46 |
-| Agent Initialization | `apchat-main/src/apchat.rs` | 198-215 |
-| Agent Processing Method | `apchat-main/src/apchat.rs` | 302-342 |
-| Agent System Init | `apchat-main/src/config/mod.rs` | 189-240 |
-| Task Mode Logic | `apchat-main/src/app/task.rs` | 44-47 |
-| Subagent Mode Logic | `apchat-main/src/app/subagent.rs` | 70-73 |
-| REPL Inference | `apchat-main/src/app/repl/inference.rs` | 35-59 |
-| Web Server Handler | `apchat-main/src/web/routes.rs` | 705-746 |
+| Type | Defined In | NOT In |
+|------|------------|--------|
+| `ToolDefinition` | `apchat-llm-api/src/client/mod.rs:100` | ~~apchat-agents~~ |
+| `ChatMessage` | `apchat-llm-api/src/client/mod.rs:12` | ~~apchat-agents~~ |
+| `ToolCall` | `apchat-llm-api/src/client/mod.rs:26` | ~~apchat-agents~~ |
+| `FunctionCall` | `apchat-llm-api/src/client/mod.rs:33` | ~~apchat-agents~~ |
+| `GroqLlmClient` | `apchat-llm-api/src/client/groq.rs` | ~~apchat-agents~~ |
+| `ProgressEvaluator` | Move to `apchat-progress` | ~~apchat-agents~~ |
+| `ToolCallInfo` | Move to `apchat-progress` | ~~apchat-agents~~ |
+| `ToolCallSummary` | Move to `apchat-progress` | ~~apchat-agents~~ |
 
-## Default Behavior
+---
 
-**Without `--agents` flag:**
-- Application runs in single-agent mode
-- Direct conversation with one LLM
-- All 20+ tools are available
-- Subagent tools (`launch_subagent`) still work for task delegation
+## Files Requiring Changes
 
-**With `--agents` flag:**
-- Planner-first architecture
-- Task decomposition by planner agent
-- Delegation to specialized agents:
-  - planner (task decomposition)
-  - code_analyzer (code review)
-  - code_reviewer (mandatory skill workflows)
-  - file_manager (file operations)
-  - search_specialist (code search)
-  - system_operator (command execution)
-  - terminal_specialist (PTY/terminal management)
+### Critical for Tool Use (Fix These First!)
+1. `apchat-main/src/api/client.rs` - Import + inline types
+2. `apchat-main/src/api/streaming.rs` - Import + inline types
 
-## Environment Variables That Don't Control Agents
+### Critical for Chat Loop
+3. `apchat-main/src/chat/session.rs` - ProgressEvaluator references
 
-There are NO environment variables that control multi-agent mode. The following environment variables exist but control OTHER things:
-- `GROQ_API_KEY` - API key for Groq models
-- `ANTHROPIC_AUTH_TOKEN` - API key for Anthropic models
-- `OPENAI_API_KEY` - API key for OpenAI models
-- `APCHAT_MEMORY_DB_PATH` - Path to memory database
-- `APCHAT_TERMINAL_BACKEND` - Terminal backend choice (pty/tmux)
-- `APCHAT_WEB_PORT` - Web server port
-- `APCHAT_WEB_BIND` - Web server bind address
-- `OKAYCHAT_SESSIONS_DIR` - Web session storage directory
+### Agent-Specific Code Removal
+4. `apchat-main/src/cli.rs` - Remove `agents` field
+5. `apchat-main/src/apchat.rs` - Remove fields, imports, methods
+6. `apchat-main/src/config/mod.rs` - Remove imports, function
+7. `apchat-main/src/app/task.rs` - Remove agent check
+8. `apchat-main/src/app/subagent.rs` - Remove agent check
+9. `apchat-main/src/app/repl/inference.rs` - Remove agent check
+10. `apchat-main/src/web/routes.rs` - Remove agent handling
+11. `apchat-main/src/main.rs` - Simplify task mode
 
-## Feature Flags
+### Dependencies
+12. `Cargo.toml` (workspace) - Remove `apchat-agents`, add `apchat-progress`
+13. `apchat-main/Cargo.toml` - Remove `apchat-agents`, add `apchat-progress`
 
-There are NO feature flags related to multi-agent mode. The only feature flags in the codebase are:
-- `embeddings` - Enables semantic skill search (default: true)
+---
 
-## Configuration Files
+## New Crate: `apchat-progress`
 
-There are NO configuration files that control multi-agent mode. The only configuration files are:
-- `policies.toml` - Action approval policies
-- `.env` - Environment variables (for API keys, not agent control)
-- `agents/configs/*.json` - Agent definitions (only used when `--agents` is set)
+Create before removing `apchat-agents`:
 
-## Summary
+```bash
+mkdir -p crates/apchat-progress/src
+```
 
-To completely disable multi-agent mode, you have TWO options:
+Copy `crates/apchat-agents/src/progress_evaluator.rs` to `crates/apchat-progress/src/lib.rs`
 
-### Option 1: Remove --agents flag (Recommended)
-Simply never use the `--agents` flag. The application defaults to single-agent mode.
+Update `crate::GroqLlmClient` to `dyn apchat_llm_api::LlmClient`
 
-### Option 2: Remove entire multi-agent system
-Follow the detailed removal guide in `docs/MULTI_AGENT_REMOVAL_GUIDE.md`. This removes:
-- The `apchat-agents` crate
-- All agent configuration files
-- All agent-related code
-- The `--agents` CLI flag
-- Documentation references to multi-agent mode
+---
 
-## Key Insight
+## Verification Commands
 
-**Multi-agent mode is optional and OFF by default.** The application is designed to work perfectly in single-agent mode. The multi-agent system is an enhancement for complex tasks, not a requirement for basic functionality.
+```bash
+# 1. Build
+cargo build --release
+
+# 2. Check --agents is gone
+cargo run -- --agents -i 2>&1 | grep -q "unexpected argument" && echo "OK"
+
+# 3. Test tool use
+cargo run -- -i
+# Then test: /help, file operations, search operations
+```
+
+---
+
+## Why Tool Use Breaks
+
+The conversion in `client.rs:221-247` and `streaming.rs:441-468`:
+
+```
+Message (old) → ChatMessage (new)
+Tool (old)    → ToolDefinition (new)
+```
+
+If `apchat_agents::ToolCall` references are broken, tools don't convert correctly → API calls fail → no tool use.
+
+---
+
+## Full Guide
+
+See `docs/MULTI_AGENT_REMOVAL_GUIDE.md` for complete step-by-step instructions.

@@ -1,78 +1,136 @@
 # Multi-Agent Mode Removal Guide
 
-This document identifies all configuration files, command-line arguments, environment variables, and settings that enable multi-agent mode in APChat. Removing these will completely eliminate the multi-agent functionality.
+This document provides accurate, step-by-step instructions to remove multi-agent mode from APChat while preserving all single-agent functionality including tool use.
 
 ## Summary
 
-Multi-agent mode is controlled solely through the `--agents` CLI flag. There are NO environment variables or feature flags that control multi-agent mode. The agent system is implemented in the `crates/apchat-agents` crate, which is a direct dependency (not optional).
+Multi-agent mode is controlled solely through the `--agents` CLI flag. The agent system is implemented in `crates/apchat-agents`, which is a direct dependency.
+
+**CRITICAL:** Many types used for LLM API calls (`ToolDefinition`, `ChatMessage`, `ToolCall`, `FunctionCall`) are **defined in `apchat-llm-api`** and merely re-exported by `apchat-agents`. The fix is to change import paths, NOT relocate types.
+
+## Pre-Removal: Create `apchat-progress` Crate
+
+The `ProgressEvaluator` feature is used in the main chat loop (single-agent mode) and should be preserved by moving it to a new crate.
+
+### Step 0.1: Create the new crate
+
+```bash
+mkdir -p crates/apchat-progress/src
+```
+
+### Step 0.2: Create `crates/apchat-progress/Cargo.toml`
+
+```toml
+[package]
+name = "apchat-progress"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+apchat-llm-api = { path = "../apchat-llm-api" }
+```
+
+### Step 0.3: Move `progress_evaluator.rs`
+
+Copy `crates/apchat-agents/src/progress_evaluator.rs` to `crates/apchat-progress/src/lib.rs` and update the import:
+
+```rust
+// Change this line:
+llm_client: Option<std::sync::Arc<crate::GroqLlmClient>>,
+
+// To:
+llm_client: Option<std::sync::Arc<dyn apchat_llm_api::LlmClient>>,
+```
+
+Also update the `new()` function signature:
+
+```rust
+pub fn new(
+    llm_client: std::sync::Arc<dyn apchat_llm_api::LlmClient>,
+    min_confidence: f32,
+    eval_interval: u32,
+) -> Self {
+```
+
+### Step 0.4: Add to workspace
+
+In root `Cargo.toml`, add to members:
+```toml
+members = [
+    # ... existing members
+    "crates/apchat-progress",
+]
+```
+
+### Step 0.5: Add dependency to `apchat-main/Cargo.toml`
+
+```toml
+apchat-progress = { path = "../crates/apchat-progress" }
+```
+
+---
 
 ## Complete Removal Checklist
 
-### 1. CLI Argument (Primary Control)
+### 1. CLI Argument
 
 **File:** `apchat-main/src/cli.rs`
-**Line:** 30
+
+**Remove:**
 ```rust
 /// Enable multi-agent system for specialized task handling
 #[arg(long, action = clap::ArgAction::SetTrue)]
 pub agents: bool,
 ```
 
-**ACTION:** Remove the `agents` field from the `Cli` struct.
-
 ### 2. Dependency Removal
 
 **File:** `apchat-main/Cargo.toml`
-**Line:** 19
+
+**Remove:**
 ```toml
 apchat-agents = { path = "../crates/apchat-agents" }
 ```
 
-**File:** `Cargo.toml`
-**Line:** 4
+**File:** `Cargo.toml` (workspace root)
+
+**Remove from members:**
 ```toml
 "crates/apchat-agents",
 ```
 
-**ACTION:** Remove the `apchat-agents` dependency from both files and remove `crates/apchat-agents` from the workspace members list.
-
-### 3. Main Entry Point Logic
+### 3. Main Entry Point
 
 **File:** `apchat-main/src/main.rs`
-**Lines:** 45-64 (task mode handling)
+
+**Change** the task mode handling (around lines 45-64) from:
 ```rust
-// Handle task mode if requested
 if let Some(task_text) = cli.task.clone() {
-    // Use subagent mode for single-agent mode (when --agents is NOT specified)
     if !cli.agents {
-        return run_subagent_mode(
-            &cli,
-            task_text,
-            app_config.client_config,
-            app_config.work_dir,
-            app_config.policy_manager,
-        )
-        .await;
+        return run_subagent_mode(...).await;
     } else {
-        // Use regular task mode for multi-agent system (when --agents IS specified)
-        return run_task_mode(
-            &cli,
-            task_text,
-            app_config.client_config,
-            app_config.work_dir,
-            app_config.policy_manager,
-        )
-        .await;
+        return run_task_mode(...).await;
     }
 }
 ```
 
-**ACTION:** Simplify to always call `run_task_mode` (or rename it back to the non-agent version).
+**To:**
+```rust
+if let Some(task_text) = cli.task.clone() {
+    return run_subagent_mode(...).await;
+}
+```
 
-### 4. APChat Struct Fields
+### 4. APChat Struct - Imports
 
 **File:** `apchat-main/src/apchat.rs`
-**Lines:** 14-17 (imports)
+
+**Remove these imports (lines 14-17):**
 ```rust
 use apchat_agents::{
     PlanningCoordinator, GroqLlmClient,
@@ -80,26 +138,32 @@ use apchat_agents::{
 };
 ```
 
-**Lines:** 45-46 (struct fields)
+**Add if needed for other code:**
 ```rust
-// Agent system
+use apchat_llm_api::{ChatMessage, ToolCall as LlmToolCall, FunctionCall as LlmFunctionCall};
+```
+
+### 5. APChat Struct - Fields
+
+**File:** `apchat-main/src/apchat.rs`
+
+**Remove these fields (around lines 45-46):**
+```rust
 pub(crate) agent_coordinator: Option<PlanningCoordinator>,
 pub(crate) use_agents: bool,
 ```
 
-**ACTION:** Remove the agent-related imports and fields from the `APChat` struct.
-
-### 5. APChat Constructor Logic
+### 6. APChat Constructor
 
 **File:** `apchat-main/src/apchat.rs`
-**Lines:** 198-215 (agent coordinator initialization)
+
+**Remove the agent coordinator initialization (lines 198-215):**
 ```rust
 let agent_coordinator = if use_agents {
     match initialize_agent_system(&client_config, &tool_registry, &policy_manager) {
         Ok(coordinator) => Some(coordinator),
         Err(e) => {
-            print_heart_yellow(&format!("{} Failed to initialize agent system: {}", "❌".red(), e), true);
-            print_heart_yellow(&format!("{} Falling back to non-agent mode", "⚠️".yellow()), true);
+            // ... error handling
             None
         }
     }
@@ -108,314 +172,366 @@ let agent_coordinator = if use_agents {
 };
 ```
 
-**Line:** 245 (passed to struct)
+**Remove from struct construction:**
 ```rust
 agent_coordinator,
-```
-
-**Line:** 246 (passed to struct)
-```rust
 use_agents,
 ```
 
-**ACTION:** Remove the conditional agent coordinator initialization and pass `None` for `agent_coordinator` and set `use_agents` to `false` in the struct construction.
+### 7. APChat - process_with_agents Method
 
-### 6. Agent System Import in config/mod.rs
+**File:** `apchat-main/src/apchat.rs`
+
+**Remove the entire method (around lines 302-342):**
+```rust
+pub async fn process_with_agents(...) -> Result<String> {
+    // ... entire method
+}
+```
+
+### 8. APChat - Inline Type References
+
+**File:** `apchat-main/src/apchat.rs`
+
+**Change (around lines 327-329):**
+```rust
+apchat_agents::agent::ToolCall
+apchat_agents::agent::FunctionCall
+```
+
+**To:**
+```rust
+apchat_llm_api::ToolCall
+apchat_llm_api::FunctionCall
+```
+
+### 9. Config Module - Imports and Function
 
 **File:** `apchat-main/src/config/mod.rs`
-**Lines:** 5-6
+
+**Remove these imports (lines 5-7):**
 ```rust
 use apchat_agents::{
     PlanningCoordinator, AgentFactory,
 };
 ```
 
-**Lines:** 189-240 (initialize_agent_system function)
+**Remove the entire `initialize_agent_system` function (lines 189-240).**
+
+### 10. API Client - Imports (CRITICAL FOR TOOL USE)
+
+**File:** `apchat-main/src/api/client.rs`
+
+**Change line 10:**
 ```rust
-/// Initialize the agent system with configuration files
-pub fn initialize_agent_system(client_config: &ClientConfig, tool_registry: &ToolRegistry, policy_manager: &PolicyManager) -> Result<PlanningCoordinator> {
-    // ... entire function implementation
-}
+use apchat_agents::{ToolDefinition, ChatMessage};
 ```
 
-**ACTION:** Remove the imports and the `initialize_agent_system` function.
+**To:**
+```rust
+use apchat_llm_api::{ToolDefinition, ChatMessage};
+```
 
-### 7. Task Mode Logic
+### 11. API Client - Inline References (CRITICAL FOR TOOL USE)
+
+**File:** `apchat-main/src/api/client.rs`
+
+**Change lines 226-228:**
+```rust
+calls.into_iter().map(|call| apchat_agents::ToolCall {
+    id: call.id,
+    function: apchat_agents::FunctionCall {
+```
+
+**To:**
+```rust
+calls.into_iter().map(|call| apchat_llm_api::ToolCall {
+    id: call.id,
+    function: apchat_llm_api::FunctionCall {
+```
+
+### 12. API Streaming - Imports (CRITICAL FOR TOOL USE)
+
+**File:** `apchat-main/src/api/streaming.rs`
+
+**Change line 7:**
+```rust
+use apchat_agents::{ToolDefinition, ChatMessage};
+```
+
+**To:**
+```rust
+use apchat_llm_api::{ToolDefinition, ChatMessage};
+```
+
+### 13. API Streaming - Inline References (CRITICAL FOR TOOL USE)
+
+**File:** `apchat-main/src/api/streaming.rs`
+
+**Change lines 447-449:**
+```rust
+calls.into_iter().map(|call| apchat_agents::ToolCall {
+    id: call.id,
+    function: apchat_agents::FunctionCall {
+```
+
+**To:**
+```rust
+calls.into_iter().map(|call| apchat_llm_api::ToolCall {
+    id: call.id,
+    function: apchat_llm_api::FunctionCall {
+```
+
+### 14. Chat Session - Progress Evaluator (CRITICAL)
+
+**File:** `apchat-main/src/chat/session.rs`
+
+**Change these references:**
+
+Line 39-40:
+```rust
+let mut progress_evaluator = Some(apchat_agents::progress_evaluator::ProgressEvaluator::new(
+    std::sync::Arc::new(apchat_agents::GroqLlmClient::new(
+```
+
+**To:**
+```rust
+let mut progress_evaluator = Some(apchat_progress::ProgressEvaluator::new(
+    std::sync::Arc::new(apchat_llm_api::client::groq::GroqLlmClient::new(
+```
+
+Line 51:
+```rust
+let mut tool_call_history: Vec<apchat_agents::progress_evaluator::ToolCallInfo> = Vec::new();
+```
+
+**To:**
+```rust
+let mut tool_call_history: Vec<apchat_progress::ToolCallInfo> = Vec::new();
+```
+
+Line 285:
+```rust
+let summary = apchat_agents::progress_evaluator::ToolCallSummary {
+```
+
+**To:**
+```rust
+let summary = apchat_progress::ToolCallSummary {
+```
+
+Line 510:
+```rust
+let call_info = apchat_agents::progress_evaluator::ToolCallInfo {
+```
+
+**To:**
+```rust
+let call_info = apchat_progress::ToolCallInfo {
+```
+
+### 15. Task Mode Logic
 
 **File:** `apchat-main/src/app/task.rs`
-**Lines:** 44-45 (check for agents)
+
+**Remove the agent check (around lines 44-47):**
 ```rust
 if chat.use_agents && chat.agent_coordinator.is_some() {
-    // Use agent system
     match chat.process_with_agents(&task_text, None).await {
-        Ok(response) => response,
-        // ... error handling
+        // ...
     }
 }
 ```
 
-**Line:** 47 (agent processing)
+**Always use direct chat:**
 ```rust
-chat.process_with_agents(&task_text, None).await
+match chat.chat(&mut chat, &task_text, None).await {
+    // ...
+}
 ```
 
-**ACTION:** Remove the conditional check and `process_with_agents` call. Always use `chat()` function (non-agent mode).
-
-### 8. Subagent Mode Logic
+### 16. Subagent Mode Logic
 
 **File:** `apchat-main/src/app/subagent.rs`
-**Lines:** 70-73 (conditional agent processing)
+
+**Change lines 70-73:**
 ```rust
 let result = if cli.agents && subagent.agent_coordinator.is_some() {
-    // Use agent system if enabled and available
     subagent.process_with_agents(&task_text, None).await
 } else {
-    // Use regular chat
     crate::chat::session::chat(&mut subagent, &task_text, None).await
 };
 ```
 
-**ACTION:** Remove the conditional check and always use `chat()` function (non-agent mode).
+**To:**
+```rust
+let result = crate::chat::session::chat(&mut subagent, &task_text, None).await;
+```
 
-### 9. REPL Inference Logic
+### 17. REPL Inference
 
 **File:** `apchat-main/src/app/repl/inference.rs`
-**Lines:** 35-59 (agent processing)
+
+**Remove the agent check (around lines 35-59):**
 ```rust
 if chat.use_agents && chat.agent_coordinator.is_some() {
     match chat.process_with_agents(input, Some(cancel_token.clone())) {
-        // ... agent handling
+        // ...
     }
 }
 ```
 
-**ACTION:** Remove the conditional check and agent processing logic.
+**Always use direct chat.**
 
-### 10. Web Server Routes Agent Flag Capture
+### 18. Web Server Routes
 
 **File:** `apchat-main/src/web/routes.rs`
-**Lines:** 705-706
+
+**Remove (around lines 705-706):**
 ```rust
-// Capture the use_agents flag before dropping the lock
 let use_agents = apchat.use_agents;
 ```
 
-**Lines:** 730-746 (agent handling)
+**Remove the agent handling (around lines 730-746):**
 ```rust
 if use_agents {
-    // Multi-agent mode - use existing process_with_agents
     match session.apchat.lock().await
         .process_with_agents(&content, None)
         .await
     {
-        // ... agent response handling
+        // ...
     }
 }
 ```
 
-**ACTION:** Remove the `use_agents` flag capture and conditional agent handling.
-
-### 11. process_with_agents Method
-
-**File:** `apchat-main/src/apchat.rs`
-**Lines:** 302-342
-```rust
-pub async fn process_with_agents(&mut self, user_request: &str, cancellation_token: Option<tokio_util::sync::CancellationToken>) -> Result<String> {
-    if let Some(coordinator) = &mut self.agent_coordinator {
-        // ... agent processing logic
-    } else {
-        Err(anyhow::anyhow!("Agent coordinator not initialized"))
-    }
-}
-```
-
-**ACTION:** Remove the entire `process_with_agents` method.
-
-### 12. API Client Imports
-
-**File:** `apchat-main/src/api/client.rs`
-**Line:** 10
-```rust
-use apchat_agents::{ToolDefinition, ChatMessage};
-```
-
-**File:** `apchat-main/src/api/streaming.rs`
-**Line:** 7
-```rust
-use apchat_agents::{ToolDefinition, ChatMessage};
-```
-
-**ACTION:** Remove or replace these imports. Note: These types might need to be re-exported from another crate or defined locally if they're used outside of agent context.
-
-**WARNING:** These types (ToolDefinition, ChatMessage) are used in the non-agent API code as well. You'll need to either:
-- Keep the `apchat-agents` crate for just these type definitions, OR
-- Move these types to a more appropriate location (like `apchat-models` or create a new shared types crate)
-
-### 13. Functions that use use_agents check
-
-**File:** `apchat-main/src/apchat.rs`
-**Lines:** 492-494
-```rust
-if !self.use_agents {
-    // ... logic
-}
-```
-
-**ACTION:** Remove any conditional logic based on `use_agents` flag.
-
-### 14. Configuration Files in src/config/mod.rs
-
-**File:** `apchat-main/src/config/mod.rs`
-Line 189-240: The entire `initialize_agent_system` function
-
-**ACTION:** Remove this function entirely.
-
-### 15. Import in chat/tests.rs
-
-**File:** `apchat-main/src/chat/tests.rs`
-**Line:** 29
-```rust
-use_agents: false,
-```
-
-**Line:** 28
-```rust
-agent_coordinator: None,
-```
-
-**ACTION:** Remove these test struct field initializations (they'll no longer exist).
-
-### 16. Documentation Updates
-
-Multiple documentation files reference the `--agents` flag:
-
-**Files to update:**
-- `CLAUDE.md` - Lines 46, 81-127, 240, 242-263
-- `README.md` - Lines 113, 202, 290
-- `docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md` - Entire file
-- `docs/reorg-workspace/MIGRATION_PLAN.md` - Line 131
-- `docs/project/CLAUDE.md` - Lines 8, 31, 262, 300, 306, 309, 312, 386
-
-**ACTION:** Remove or update all references to multi-agent mode and the `--agents` flag.
-
-### 17. Agent Configuration Files
-
-**Directory:** `agents/configs/`
-**Files:**
-- `agents/configs/code_analyzer.json`
-- `agents/configs/code_reviewer.json`
-- `agents/configs/file_manager.json`
-- `agents/configs/planner.json`
-- `agents/configs/search_specialist.json`
-- `agents/configs/system_operator.json`
-- `agents/configs/terminal_specialist.json`
-
-**ACTION:** Remove the entire `agents/` directory and all its contents.
-
-### 18. Subagent Tools (Keep These!)
-
-**File:** `crates/apchat-tools/src/subagent_tools.rs`
-
-**IMPORTANT:** The `launch_subagent` and `launch_subagent_pretty` tools should be KEPT. These are tools that allow the AI to delegate to an isolated instance of itself for specific tasks. This is different from multi-agent mode and provides benefits like context savings and parallel execution.
+**Always use direct chat.**
 
 ### 19. Test Files
 
-**File:** `apchat-main/src/app/subagent_tests.rs`
-**File:** `crates/apchat-agents/src/agent_tests.rs`
+**File:** `apchat-main/src/chat/tests.rs`
 
-**ACTION:** Remove `crates/apchat-agents/src/agent_tests.rs`. Review `apchat-main/src/app/subagent_tests.rs` - this tests subagent mode (which should be kept), not multi-agent mode.
-
-### 20. Workspace Member
-
-**File:** `Cargo.toml`
-**Line:** 3
-```toml
-"crates/apchat-agents",
+**Remove:**
+```rust
+use_agents: false,
+agent_coordinator: None,
 ```
 
-**ACTION:** Remove from workspace members list.
+### 20. Agent Configuration Files
 
-## Critical Path Analysis
+**Remove the entire directory:**
+```bash
+rm -rf agents/
+```
 
-If you want to remove multi-agent mode cleanly, follow this order:
+### 21. Agent Crate
 
-1. **Start with the dependency** - Remove `apchat-agents` from Cargo.toml and workspace
-2. **This will cause compilation errors** - Fix them by:
-   - Removing imports from `apchat_agents`
-   - Removing the `agents` field from `Cli` struct
-   - Removing `agent_coordinator` and `use_agents` from `APChat` struct
-   - Removing `initialize_agent_system` function
-   - Removing `process_with_agents` method
-   - Simplifying task/subagent/repl/web-server logic to NOT check for agents
-3. **Handle type re-exports** - If `ToolDefinition` and `ChatMessage` are needed outside of agent context, move them to `apchat-models` or create a shared types crate
-4. **Remove agent config directory** - Delete `agents/` directory
-5. **Update documentation** - Remove references to `--agents` flag
+**Remove the entire directory:**
+```bash
+rm -rf crates/apchat-agents/
+```
 
-## What to Keep
+---
 
-Do NOT remove:
-- **Subagent tools** (`launch_subagent`, `launch_subagent_pretty`) - these are different from multi-agent mode
-- **Task mode** (`--task`) - this works in single-agent mode too
-- **Web server mode** - works in single-agent mode
-- **All other tools** - they work in single-agent mode
+## Type Reference Summary
+
+These types are **defined in `apchat-llm-api`**, NOT `apchat-agents`:
+
+| Type | Definition Location |
+|------|---------------------|
+| `ChatMessage` | `apchat-llm-api/src/client/mod.rs:12` |
+| `ToolCall` | `apchat-llm-api/src/client/mod.rs:26` |
+| `FunctionCall` | `apchat-llm-api/src/client/mod.rs:33` |
+| `ToolDefinition` | `apchat-llm-api/src/client/mod.rs:100` |
+| `LlmClient` | `apchat-llm-api/src/client/mod.rs:65` |
+| `LlmResponse` | `apchat-llm-api/src/client/mod.rs:84` |
+| `TokenUsage` | `apchat-llm-api/src/client/mod.rs:91` |
+| `StreamingChunk` | `apchat-llm-api/src/client/mod.rs:55` |
+| `GroqLlmClient` | `apchat-llm-api/src/client/groq.rs` |
+| `AnthropicLlmClient` | `apchat-llm-api/src/client/anthropic.rs` |
+
+The `apchat-agents` crate re-exports these in `agent.rs:7-10`:
+```rust
+pub use apchat_llm_api::{
+    LlmClient, ChatMessage, ToolCall, FunctionCall, LlmResponse,
+    TokenUsage, ToolDefinition, StreamingChunk,
+};
+```
+
+**NEVER** try to relocate these types - just change import paths.
+
+---
+
+## Files Summary
+
+### Files to Modify (14 files):
+
+| File | Changes |
+|------|---------|
+| `apchat-main/src/cli.rs` | Remove `agents` field |
+| `apchat-main/src/main.rs` | Simplify task mode logic |
+| `apchat-main/src/apchat.rs` | Remove agent fields, imports, methods; fix inline types |
+| `apchat-main/src/config/mod.rs` | Remove agent imports and `initialize_agent_system` |
+| `apchat-main/src/api/client.rs` | Change imports from `apchat_agents` to `apchat_llm_api` |
+| `apchat-main/src/api/streaming.rs` | Change imports from `apchat_agents` to `apchat_llm_api` |
+| `apchat-main/src/chat/session.rs` | Change to use `apchat_progress` |
+| `apchat-main/src/app/task.rs` | Remove agent processing logic |
+| `apchat-main/src/app/subagent.rs` | Remove agent processing logic |
+| `apchat-main/src/app/repl/inference.rs` | Remove agent processing logic |
+| `apchat-main/src/web/routes.rs` | Remove agent handling |
+| `apchat-main/src/chat/tests.rs` | Remove agent test fields |
+| `Cargo.toml` | Remove from workspace, add `apchat-progress` |
+| `apchat-main/Cargo.toml` | Remove `apchat-agents`, add `apchat-progress` |
+
+### Files/Directories to Remove:
+
+- `crates/apchat-agents/` (entire directory)
+- `agents/` (entire directory)
+
+### Files/Directories to Create:
+
+- `crates/apchat-progress/` (new crate for ProgressEvaluator)
+
+---
 
 ## Testing After Removal
 
-After removal, test:
-1. `cargo build --release` - ensure clean compilation
-2. `cargo run -- -i` - interactive mode should work
-3. `cargo run -- --task "hello world"` - task mode should work
-4. `cargo run -- --web` - web server should work
-5. `cargo run -- -i --auto-confirm` - auto-confirm mode should work
-6. Tool usage - all 20+ tools should work in single-agent mode
+```bash
+# 1. Clean build
+cargo clean
+cargo build --release
 
-## No Environment Variables
+# 2. Verify --agents flag is gone
+cargo run -- --agents -i
+# Should print: error: unexpected argument '--agents' found
 
-There are NO environment variables that control multi-agent mode. The only control is the `--agents` CLI flag.
+# 3. Test interactive mode
+cargo run -- -i
 
-## No Feature Flags
+# 4. Test task mode
+cargo run -- --task "hello world"
 
-Multi-agent mode is NOT behind a feature flag. The `apchat-agents` crate is a direct dependency, not an optional one.
+# 5. Test web server
+cargo run -- --web
 
-## Complexity Warning
+# 6. Test tool use (CRITICAL)
+# In interactive mode, test that tools work:
+# - File operations (open_file, write_file, edit_file)
+# - Search operations (grep_search, glob_search)
+# - System operations (execute_command)
+```
 
-The removal is moderately complex because:
-1. The `apchat-agents` crate defines some types (`ToolDefinition`, `ChatMessage`) that are used in the non-agent API code
-2. The removal affects multiple files across the codebase
-3. Documentation references are widespread
+---
 
-## Alternative: Disable via CLI Flag
+## Why Tool Use Breaks Without Correct Fixes
 
-If you want to keep the code but disable multi-agent mode temporarily, you can:
-1. Keep all code as-is
-2. Simply never use the `--agents` flag
-3. The application will always use single-agent mode (which is the default behavior when `--agents` is not specified)
+The `call_api_with_llm_client` and `call_api_streaming_with_llm_client` functions in `client.rs` and `streaming.rs` convert between formats:
 
-## Summary of Files to Modify
+1. **Old format** (`apchat_models::Message`) → **New format** (`apchat_llm_api::ChatMessage`)
+2. **Old tools** (`apchat_models::Tool`) → **New format** (`apchat_llm_api::ToolDefinition`)
 
-### Remove completely (7 files):
-- `crates/apchat-agents/src/` - entire directory (6 files)
-- `agents/configs/` - entire directory (7 config files)
-- `agents/` - entire directory
+If the imports or inline type references are broken, this conversion fails and:
+- Tools aren't sent to the API correctly
+- Tool call responses aren't parsed correctly
+- The entire tool-calling loop breaks
 
-### Modify (10 files):
-1. `apchat-main/src/main.rs` - simplify task mode logic
-2. `apchat-main/src/cli.rs` - remove `agents` field
-3. `apchat-main/src/apchat.rs` - remove agent fields, imports, and methods
-4. `apchat-main/src/config/mod.rs` - remove agent imports and initialization function
-5. `apchat-main/src/app/task.rs` - remove agent processing logic
-6. `apchat-main/src/app/subagent.rs` - remove agent processing logic
-7. `apchat-main/src/app/repl/inference.rs` - remove agent processing logic
-8. `apchat-main/src/web/routes.rs` - remove agent handling
-9. `apchat-main/src/api/client.rs` - remove or replace agent imports
-10. `apchat-main/src/api/streaming.rs` - remove or replace agent imports
-11. `apchat-main/src/chat/tests.rs` - remove agent test fields
-12. `Cargo.toml` - remove from workspace members
-13. `apchat-main/Cargo.toml` - remove dependency
-14. Documentation files (5+ files) - remove references
-
-### Type definitions to relocate (if needed):
-- `ToolDefinition` - from `apchat-agents`
-- `ChatMessage` - from `apchat-agents`
-
-These two types are used in the non-agent API code and may need to be moved to a more appropriate location.
+This is why changing `apchat_agents::ToolCall` to `apchat_llm_api::ToolCall` (and similar) is **critical**.
