@@ -631,6 +631,22 @@ impl Readline {
         self.saved_lines.clear();
     }
 
+    /// Exits history navigation and clears the line buffer.
+    ///
+    /// This is used when the user starts typing a new character while viewing
+    /// history - they want to start a new line, not edit the history entry.
+    fn exit_history_navigation_with_clear(&mut self) {
+        self.history_index = None;
+        self.saved_lines.clear();
+        // Clear the lines and reset cursor to start a fresh line
+        self.lines = vec![String::new()];
+        self.cursor_line = 0;
+        self.cursor_col = 0;
+        // Sync deprecated fields
+        self.line = String::new();
+        self.cursor = 0;
+    }
+
     /// Enters reverse search mode (Ctrl-R).
     ///
     /// Saves the current line and cursor position, then switches to search mode.
@@ -782,12 +798,9 @@ impl Readline {
     /// ```
     pub fn handle_char(&mut self, c: char) -> bool {
         // Exit history navigation if we were in it
+        // Preserves the current line content for editing (bug fix)
         if self.history_index.is_some() {
-            self.lines = vec![String::new()];
-            self.cursor_line = 0;
-            self.cursor_col = 0;
-            self.history_index = None;
-            self.saved_lines.clear();
+            self.exit_history_navigation();
         }
 
         // Insert character at cursor position in the current line
@@ -2618,7 +2631,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn test_handle_char_exits_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.add_history_entry("old");
@@ -2628,9 +2640,30 @@ mod tests {
         assert_eq!(readline.line(), "old");
         assert!(readline.history_index.is_some());
 
-        // Insert char - should exit history navigation
+        // Insert char - should append to preserved history entry (bug fix)
         readline.handle_char('x');
-        assert_eq!(readline.line(), "x");
+        assert_eq!(readline.line(), "oldx");  // Fixed: preserves history entry
+        assert!(readline.history_index.is_none());
+    }
+
+    #[test]
+    fn test_handle_char_edits_history_in_middle() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("hello");
+
+        // Navigate to history
+        readline.history_up();
+        assert_eq!(readline.line(), "hello");
+        assert!(readline.history_index.is_some());
+
+        // Move cursor to middle
+        readline.set_cursor(2, None);
+        assert_eq!(readline.cursor(), 2);
+
+        // Insert char - should insert 'X' at cursor position (fix for editing bug)
+        readline.handle_char('X');
+        assert_eq!(readline.line(), "heXllo");  // Fixed: preserves history entry and edits it
+        assert_eq!(readline.cursor(), 3);
         assert!(readline.history_index.is_none());
     }
 
