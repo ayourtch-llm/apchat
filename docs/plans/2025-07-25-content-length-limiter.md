@@ -319,7 +319,6 @@ impl APChat {
 pub async fn setup_chat(
     client_config: ClientConfig,
     work_dir: PathBuf,
-    use_agents: bool,
     policy_manager: PolicyManager,
     stream: bool,
     verbose: bool,
@@ -336,7 +335,6 @@ pub async fn setup_chat(
     let mut chat = APChat::new_with_config(
         client_config,
         work_dir,
-        use_agents,
         policy_manager.clone(),
         stream,
         verbose,
