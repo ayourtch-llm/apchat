@@ -98,7 +98,7 @@ features = [
 version = "1.0"
 
 [features]
-default = ["embeddings"]
+default = []
 embeddings = ["fastembed"]
 
 [target."cfg(unix)".dependencies]
