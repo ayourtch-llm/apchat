@@ -70,6 +70,9 @@ impl OutputDestination for TerminalOutputDestination {
             OutputMessage::Error(text) => {
                 print_heart_yellow(&format!("{} {}", "❌ Error:".bright_red(), text), true);
             }
+            OutputMessage::TextOutput(text) => {
+                print_heart_red(&format!("{} {}", text.emoji, text.content), text.newline);
+            }
         }
         
         Ok(())

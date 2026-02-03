@@ -51,6 +51,14 @@ pub use output::{TextOutput, OutputMessage};
 ```
 
 ## Resolution
+Issue was already implemented before processing. The `apchat-main/src/mspc/output.rs` file contains:
+1. `TextOutput` struct with fields: `emoji: String`, `content: String`, `newline: bool`
+2. `OutputMessage` enum with a `TextOutput` variant
+
+Also fixed a dependency issue in `crates/apchat-mspc/Cargo.toml` where the tokio dev-dependencies incorrectly specified a `test` feature which doesn't exist.
+
+Commit: `32d1548`
 
 ---
 *Created: 2026-02-03*
+*Resolved: 2026-02-03*

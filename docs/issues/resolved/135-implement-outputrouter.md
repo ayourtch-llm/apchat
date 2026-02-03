@@ -81,6 +81,16 @@ impl OutputRouter {
 ```
 
 ## Resolution
+Implemented the `OutputRouter` component in `apchat-main/src/mspc/router.rs`. The implementation:
+- Creates an OutputRouter struct with `destinations: Arc<RwLock<Vec<Arc<dyn OutputDestination>>>>`
+- Provides `new()` and `Default` implementation
+- `start_monitoring()` subscribes to `TEXT_OUTPUT_TX` and spawns a tokio task to broadcast messages to all registered destinations
+- `register()` and `unregister()` for managing destinations
+- `active_count()` for filtering and counting only active destinations
+- Router is exported in `apchat-main/src/mspc/mod.rs`
+
+Commit: `4a28fe2`
 
 ---
 *Created: 2026-02-03*
+*Resolved: 2026-02-03*

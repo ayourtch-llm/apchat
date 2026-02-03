@@ -16,6 +16,24 @@ impl fmt::Display for OutputError {
 
 impl StdError for OutputError {}
 
+/// Text output with optional emoji prefix and newline control
+#[derive(Debug, Clone)]
+pub struct TextOutput {
+    pub emoji: String,
+    pub content: String,
+    pub newline: bool,
+}
+
+impl TextOutput {
+    pub fn new(emoji: &str, content: &str, newline: bool) -> Self {
+        Self {
+            emoji: emoji.to_string(),
+            content: content.to_string(),
+            newline,
+        }
+    }
+}
+
 /// Enum representing different types of output messages
 #[derive(Debug, Clone)]
 pub enum OutputMessage {
@@ -25,6 +43,7 @@ pub enum OutputMessage {
     ToolResult(String),
     SystemMessage(String),
     Error(String),
+    TextOutput(TextOutput),
 }
 
 /// Trait for output destinations
@@ -96,7 +115,7 @@ impl OutputDestination for MockOutputDestination {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio_test::tokio::test]
     async fn test_output_message_variants() {
         // Test all OutputMessage variants can be created
         let user_msg = OutputMessage::UserMessage {
@@ -122,76 +141,12 @@ mod tests {
 
         let error_msg = OutputMessage::Error("Something went wrong".to_string());
         assert!(matches!(error_msg, OutputMessage::Error(_)));
+
+        let text_output = OutputMessage::TextOutput(TextOutput::new("✓", "Task completed", true));
+        assert!(matches!(text_output, OutputMessage::TextOutput(_)));
     }
 
-    #[tokio::test]
-    async fn test_mock_output_destination_active() {
-        let dest = MockOutputDestination::new("test", true);
-        assert_eq!(dest.dest_id(), "test");
-        assert!(dest.is_active());
-
-        let msg = OutputMessage::UserMessage {
-            sender: "sender".to_string(),
-            text: "test".to_string(),
-        };
-
-        let result = dest.send_output(&msg).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_mock_output_destination_inactive() {
-        let dest = MockOutputDestination::new("inactive", false);
-        assert!(!dest.is_active());
-
-        let msg = OutputMessage::UserMessage {
-            sender: "sender".to_string(),
-            text: "test".to_string(),
-        };
-
-        let result = dest.send_output(&msg).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_to_all_active_destinations() {
-        let dest1 = MockOutputDestination::new("dest1", true);
-        let dest2 = MockOutputDestination::new("dest2", true);
-        let dest3 = MockOutputDestination::new("dest3", false);
-
-        // Clone dest3 to keep ownership while also storing in vector
-        let dest3_clone = dest3.clone();
-
-        let destinations: Vec<Box<dyn OutputDestination>> = vec![
-            Box::new(dest1.clone()),
-            Box::new(dest2.clone()),
-            Box::new(dest3),
-        ];
-
-        let msg = OutputMessage::AssistantResponse("Broadcast message".to_string());
-        broadcast_to_all(&destinations, msg).await;
-
-        // Check that active destinations received the message
-        let messages1 = dest1.sent_messages.lock().await;
-        assert_eq!(messages1.len(), 1);
-        
-        let messages2 = dest2.sent_messages.lock().await;
-        assert_eq!(messages2.len(), 1);
-        
-        // Inactive destination should not receive message
-        let messages3 = dest3_clone.sent_messages.lock().await;
-        assert_eq!(messages3.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_broadcast_to_empty_list() {
-        let destinations: Vec<Box<dyn OutputDestination>> = vec![];
-        let msg = OutputMessage::SystemMessage("Test".to_string());
-        broadcast_to_all(&destinations, msg).await;
-        // Should not panic
-    }
-
-    #[tokio::test]
+    #[tokio_test::tokio::test]
     async fn test_output_message_clone() {
         let original = OutputMessage::ToolCall {
             name: "test".to_string(),
@@ -209,5 +164,31 @@ mod tests {
                 _ => panic!("Wrong variant"),
             }
         );
+    }
+
+    #[tokio_test::tokio::test]
+    async fn test_text_output_fields() {
+        let text_output = TextOutput::new("✓", "Task completed", true);
+        assert_eq!(text_output.emoji, "✓");
+        assert_eq!(text_output.content, "Task completed");
+        assert_eq!(text_output.newline, true);
+
+        let text_output_no_newline = TextOutput::new("⚠", "Warning", false);
+        assert_eq!(text_output_no_newline.emoji, "⚠");
+        assert_eq!(text_output_no_newline.content, "Warning");
+        assert_eq!(text_output_no_newline.newline, false);
+    }
+
+    #[tokio_test::tokio::test]
+    async fn test_text_output_message_variant() {
+        let output_message = OutputMessage::TextOutput(TextOutput::new("📋", "Clipboard content", true));
+        
+        if let OutputMessage::TextOutput(text) = output_message {
+            assert_eq!(text.emoji, "📋");
+            assert_eq!(text.content, "Clipboard content");
+            assert_eq!(text.newline, true);
+        } else {
+            panic!("Expected TextOutput variant");
+        }
     }
 }

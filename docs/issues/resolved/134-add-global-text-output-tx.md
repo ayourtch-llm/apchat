@@ -35,6 +35,15 @@ Dependencies:
 - May need to add `once_cell` if not present
 
 ## Resolution
+Added the `TEXT_OUTPUT_TX` global broadcast channel in `apchat-main/src/mspc/mod.rs`. The channel:
+- Is a `Lazy<broadcast::Sender<apchat_mspc::output::TextOutput>>` static
+- Has a buffer size of 100
+- Allows non-blocking sends from synchronous code to async destinations via the OutputRouter system
+
+The `once_cell` dependency was already present in `apchat-main/Cargo.toml`.
+
+Commit: `2f61237`
 
 ---
 *Created: 2026-02-03*
+*Resolved: 2026-02-03*

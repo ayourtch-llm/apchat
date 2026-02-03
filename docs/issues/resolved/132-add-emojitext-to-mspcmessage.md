@@ -42,6 +42,15 @@ pub enum MspcMessage {
 ```
 
 ## Resolution
+Added the `EmojiText` variant to the `MspcMessage` enum in `crates/apchat-mspc/src/channel.rs`. The variant includes three fields:
+- `emoji: String` - The emoji to display
+- `content: String` - The content to display
+- `newline: bool` - Whether to add a newline after the content
+
+This enables routing of emoji-prefixed text through the MSPC channel system for the OutputRouter to communicate with the readline display.
+
+Commit: `91f5d13`
 
 ---
 *Created: 2026-02-03*
+*Resolved: 2026-02-03*
