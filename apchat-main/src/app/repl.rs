@@ -20,6 +20,9 @@ use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::mspc::{MspcChannel, MspcMessage};
 
+use crate::app::repl::llm_task::LLMTaskChannels;
+use crate::app::repl::llm_task::spawn_llm_task;
+
 use commands::CommandResult;
 use inference::InferenceOutcome;
 
@@ -35,6 +38,70 @@ pub(crate) fn get_model_name_for_prompt(color: &ModelColor, client_config: &Clie
         let provider = client_config.get_provider(*color);
         provider.model_name.clone()
     }
+}
+
+
+pub enum ApchatReplLoopState {
+    Idle,
+}
+
+pub enum ApchatCommandResult {
+    Continue,
+    Break,
+    DoInference(String)
+}
+
+async fn process_repl_command(chat: &mut APChat, message: MspcMessage, interrupt_sender_for_main: tokio::sync::mpsc::Sender<MspcMessage>, mspc_channel: &Arc<MspcChannel>, current_model_for_main: Arc<std::sync::RwLock<ModelColor>>) -> ApchatCommandResult {
+        let _ = apchat_vty::print_heart_to_file(&format!("RCVD: {:?}", &message), true);
+
+        // Route special message types before extracting the text payload
+        let line = match message {
+            MspcMessage::UserInput(content, _sender) => content,
+            MspcMessage::Command(content, _sender)   => content,
+
+            MspcMessage::InterruptSignal(content, sender) => {
+                // Forward to tools, then inform user there's nothing to cancel
+                let _ = interrupt_sender_for_main
+                    .send(MspcMessage::InterruptSignal(content, sender)).await;
+                print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
+                return ApchatCommandResult::Continue;
+            }
+
+            MspcMessage::ConfirmationRequest(content, _sender) => {
+                handle_confirmation_request(&content, &mspc_channel).await;
+                return ApchatCommandResult::Continue;
+            }
+
+            _ => {
+                return ApchatCommandResult::Continue;
+            }
+        };
+
+        let line = line.trim();
+        if line.is_empty() {
+            return ApchatCommandResult::Continue;
+        }
+
+        // Exit commands
+        if line == "exit" || line == "quit" {
+            print_heart_red(&format!("{}", "Goodbye!".bright_cyan()), true);
+            if let Err(e) = apchat_vty::ReadlineInstance::save_history() {
+                if chat.debug_level > 0 {
+                    print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);
+                }
+            }
+            return ApchatCommandResult::Break;
+        }
+
+        // Slash-command dispatch
+        match commands::dispatch_command(chat, line, &current_model_for_main).await {
+            CommandResult::Handled    => return ApchatCommandResult::Continue,
+            CommandResult::NotACommand => {} // fall through to inference
+        }
+
+        // Persist input, log it, and auto-save chat state
+        save_input_and_log(chat, line).await;
+        ApchatCommandResult::DoInference(line.to_string())
 }
 
 /// Run interactive REPL mode.
@@ -73,6 +140,8 @@ pub async fn run_repl_mode(
         }
     });
 
+    let mut repl_state = ApchatReplLoopState::Idle;
+
     // ── MSPC channel & confirmation plumbing ───────────────────────────────
     let mspc_channel = mspc_channel_opt.unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
     chat.mspc_channel = Some(mspc_channel.clone());
@@ -103,6 +172,9 @@ pub async fn run_repl_mode(
 
     let interrupt_sender_for_main = interrupt_sender;
 
+    // Spawn the LLM task
+    let mut llm_channels = spawn_llm_task();
+
     // ── Main REPL loop ─────────────────────────────────────────────────────
     'outer: loop {
         // Wait for next message from the input router
@@ -120,53 +192,17 @@ pub async fn run_repl_mode(
             }
         };
 
-        let _ = apchat_vty::print_heart_to_file(&format!("RCVD: {:?}", &message), true);
-
-        // Route special message types before extracting the text payload
-        let line = match message {
-            MspcMessage::UserInput(content, _sender) => content,
-            MspcMessage::Command(content, _sender)   => content,
-
-            MspcMessage::InterruptSignal(content, sender) => {
-                // Forward to tools, then inform user there's nothing to cancel
-                let _ = interrupt_sender_for_main
-                    .send(MspcMessage::InterruptSignal(content, sender)).await;
-                print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
+        let line = match process_repl_command(&mut chat, message, interrupt_sender_for_main.clone(), &mspc_channel, current_model_for_main.clone()).await {
+            ApchatCommandResult::Continue => {
                 continue;
             }
-
-            MspcMessage::ConfirmationRequest(content, _sender) => {
-                handle_confirmation_request(&content, &mspc_channel).await;
-                continue;
+            ApchatCommandResult::Break => {
+                break;
             }
-
-            _ => continue,
+            ApchatCommandResult::DoInference(line) => {
+                line
+            }
         };
-
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        // Exit commands
-        if line == "exit" || line == "quit" {
-            print_heart_red(&format!("{}", "Goodbye!".bright_cyan()), true);
-            if let Err(e) = apchat_vty::ReadlineInstance::save_history() {
-                if chat.debug_level > 0 {
-                    print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);
-                }
-            }
-            break;
-        }
-
-        // Slash-command dispatch
-        match commands::dispatch_command(&mut chat, line, &current_model_for_main).await {
-            CommandResult::Handled    => continue,
-            CommandResult::NotACommand => {} // fall through to inference
-        }
-
-        // Persist input, log it, and auto-save chat state
-        save_input_and_log(&mut chat, line).await;
 
         // ── Inference with interrupt support ───────────────────────────────
         let cancel_token = tokio_util::sync::CancellationToken::new();
@@ -178,7 +214,8 @@ pub async fn run_repl_mode(
         // Use the tool loop (calls existing API functions directly)
         let outcome = run_tool_loop(
             &mut chat,
-            line,
+            &mut llm_channels,
+            &line,
             &cancel_token,
         ).await;
 
@@ -328,6 +365,7 @@ async fn save_input_and_log(chat: &mut APChat, line: &str) {
 /// enabling proper cancellation handling and channel-based communication.
 pub(crate) async fn run_tool_loop(
     chat: &mut APChat,
+    llm_channels: &mut LLMTaskChannels,
     input: &str,
     cancel_token: &tokio_util::sync::CancellationToken,
 ) -> InferenceOutcome {
@@ -335,8 +373,6 @@ pub(crate) async fn run_tool_loop(
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
-    // Spawn the LLM task
-    let mut llm_channels = spawn_llm_task();
 
     // Prepare for LLM call (add user message, summarize history)
     chat.messages.push(Message {
