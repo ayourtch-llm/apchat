@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::TEXT_OUTPUT_TX;
 use crate::mspc::{OutputDestination, OutputMessage, TextOutput};
@@ -10,6 +11,7 @@ use crate::mspc::{OutputDestination, OutputMessage, TextOutput};
 /// Router for broadcasting output messages to multiple destinations
 pub struct OutputRouter {
     destinations: Arc<RwLock<Vec<Arc<dyn OutputDestination>>>>,
+    readline_active: Arc<AtomicBool>,
 }
 
 impl OutputRouter {
@@ -17,24 +19,42 @@ impl OutputRouter {
     pub fn new() -> Self {
         Self {
             destinations: Arc::new(RwLock::new(Vec::new())),
+            readline_active: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// Start monitoring the TEXT_OUTPUT_TX broadcast channel
     /// Spawns a tokio task that receives TextOutput messages and broadcasts them
     /// to all registered destinations.
+    /// If readline is active, TerminalDestination is temporarily deactivated to avoid duplicates.
     pub fn start_monitoring(&self) {
         let destinations = self.destinations.clone();
+        let readline_active = self.readline_active.clone();
         let mut rx = TEXT_OUTPUT_TX.subscribe();
 
         tokio::spawn(async move {
             while let Ok(text_output) = rx.recv().await {
                 let destinations_lock = destinations.read().await;
                 for dest in destinations_lock.iter() {
+                    let dest_id = dest.dest_id();
+                    let is_terminal = dest_id == "terminal";
+                    let is_readline = dest_id == "readline";
+                    
+                    // If readline is active, skip terminal destination to avoid duplicates
+                    if is_terminal && readline_active.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    
+                    // If terminal is active and we're sending to readline, skip
+                    // (this handles the reverse case - though readline shouldn't get terminal output)
+                    if is_readline && !readline_active.load(Ordering::Relaxed) {
+                        continue;
+                    }
+                    
                     if dest.is_active() {
                         let message = OutputMessage::TextOutput(text_output.clone());
                         if let Err(e) = dest.send_output(&message).await {
-                            eprintln!("OutputRouter: Failed to send to {}: {}", dest.dest_id(), e);
+                            eprintln!("OutputRouter: Failed to send to {}: {}", dest_id, e);
                         }
                     }
                 }
@@ -60,6 +80,11 @@ impl OutputRouter {
     pub async fn active_count(&self) -> usize {
         let destinations = self.destinations.read().await;
         destinations.iter().filter(|d| d.is_active()).count()
+    }
+
+    /// Mark readline as active (for duplicate suppression)
+    pub fn set_readline_active(&self, active: bool) {
+        self.readline_active.store(active, Ordering::Relaxed);
     }
 }
 
