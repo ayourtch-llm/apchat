@@ -101,30 +101,89 @@ impl Tool for RunCommandTool {
 
         // Execute command in work directory with timeout
         let timeout_duration = std::time::Duration::from_secs(timeout_secs);
-        let output = match tokio::time::timeout(timeout_duration, async {
-            AsyncCommand::new("bash")
+        let (stdout, stderr, exit_code) = match tokio::time::timeout(timeout_duration, async {
+            // Spawn the process
+            let mut child = match AsyncCommand::new("bash")
                 .args(["-c", &orig_command])
                 .current_dir(&context.work_dir)
-                .output()
-                .await
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(e) => return Err(format!("Failed to execute command: {}", e)),
+            };
+
+            let stdout = child.stdout.take().expect("Failed to capture stdout");
+            let stderr = child.stderr.take().expect("Failed to capture stderr");
+
+            // Read stdout and stderr concurrently using stream merging
+            use tokio::io::{AsyncBufReadExt, BufReader};
+            use tokio::select;
+
+            let mut stdout_reader = BufReader::new(stdout).lines();
+            let mut stderr_reader = BufReader::new(stderr).lines();
+            let mut stdout_lines = Vec::new();
+            let mut stderr_lines = Vec::new();
+
+            // Drain both streams concurrently
+            loop {
+                select! {
+                    // Read stdout line
+                    result = stdout_reader.next_line() => {
+                        match result {
+                            Ok(Some(line)) => stdout_lines.push(line),
+                            Ok(None) => {}, // stdout closed
+                            Err(e) => return Err(format!("Error reading stdout: {}", e)),
+                        }
+                    }
+                    // Read stderr line
+                    result = stderr_reader.next_line() => {
+                        match result {
+                            Ok(Some(line)) => stderr_lines.push(line),
+                            Ok(None) => {}, // stderr closed
+                            Err(e) => return Err(format!("Error reading stderr: {}", e)),
+                        }
+                    }
+                    // Wait for process to exit if both streams are done
+                    _ = child.wait() => {
+                        break;
+                    }
+                };
+            }
+
+            // Drain any remaining lines
+            while let Ok(Some(line)) = stdout_reader.next_line().await {
+                stdout_lines.push(line);
+            }
+            while let Ok(Some(line)) = stderr_reader.next_line().await {
+                stderr_lines.push(line);
+            }
+
+            // Wait for process to finish and get exit code
+            let status = child.wait().await.map_err(|e| format!("Failed to wait for command: {}", e))?;
+            let exit_code = status.code().unwrap_or(-1);
+
+            Ok::<(String, String, i32), String>((
+                stdout_lines.join("\n"),
+                stderr_lines.join("\n"),
+                exit_code
+            ))
         }).await {
-            Ok(Ok(output)) => output,
+            Ok(Ok(result)) => result,
             Ok(Err(e)) => {
-                return ToolResult::error(format!("Failed to execute command: {}", e));
+                return ToolResult::error(e);
             }
             Err(_) => {
                 return ToolResult::error(format!("Command timed out after {} seconds", timeout_secs));
             }
         };
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
         let result = if !stderr.is_empty() {
             format!(
                 "Command: {}\nExit code: {}\nSTDOUT:\n{}\nSTDERR:\n{}",
                 command,
-                output.status.code().unwrap_or(-1),
+                exit_code,
                 stdout,
                 stderr
             )
@@ -132,7 +191,7 @@ impl Tool for RunCommandTool {
             format!(
                 "Command: {}\nExit code: {}\nSTDOUT:\n{}",
                 command,
-                output.status.code().unwrap_or(-1),
+                exit_code,
                 stdout
             )
         };
