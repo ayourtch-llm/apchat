@@ -75,7 +75,7 @@ pub struct StreamDelta {
     #[serde(default)]
     pub content: Option<String>,
     #[serde(default)]
-    pub reasoning_content: Option<String>,
+    pub reasoning: Option<String>,
     #[serde(default)]
     pub tool_calls: Option<Vec<StreamToolCallDelta>>,
 }

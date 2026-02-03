@@ -9,7 +9,7 @@ use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
-use apchat_vty::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red, print_heart_to_file};
 
 use super::ApiCallParams;
 
@@ -235,6 +235,7 @@ pub(crate) async fn call_api_streaming_stateless(
                 let chunk_str = String::from_utf8_lossy(&bytes);
                 raw_response_body.push_str(&chunk_str); // Capture raw response
                 buffer.push_str(&chunk_str);
+                print_heart_to_file(&format!("CHUNK: '{}'", &chunk_str), true);
 
                 // Process complete lines (SSE format: "data: {json}\n\n")
                 while let Some(line_end) = buffer.find("\n\n") {
@@ -263,6 +264,7 @@ pub(crate) async fn call_api_streaming_stateless(
 
                     // Parse the JSON chunk
                     if let Ok(chunk) = serde_json::from_str::<StreamChunk>(data) {
+                        print_heart_to_file(&format!("PARSED-CHUNK: '{}'", &chunk_str), true);
                         if let Some(usage_data) = chunk.usage {
                             usage = Some(usage_data);
                             // Update metrics with usage information
@@ -287,7 +289,7 @@ pub(crate) async fn call_api_streaming_stateless(
                             }
 
                             // Accumulate and display reasoning content (thinking process)
-                            if let Some(reasoning) = &delta.reasoning_content {
+                            if let Some(reasoning) = &delta.reasoning {
                                 if first_chunk {
                                     // Clear thinking indicator
                                     print_heart_red(&format!("\r\x1B[K"), false);
@@ -310,11 +312,11 @@ pub(crate) async fn call_api_streaming_stateless(
                                         text: chunk_text.clone(),
                                         is_final: false,
                                     });
+                                } else {
+                                    // Display reasoning in dim color to distinguish from actual response
+                                    print_heart_red(&format!("{}", reasoning.bright_black()), false);
+                                    io::stdout().flush().unwrap();
                                 }
-                                
-                                // Display reasoning in dim color to distinguish from actual response
-                                print_heart_red(&format!("{}", reasoning.bright_black()), false);
-                                io::stdout().flush().unwrap();
                             }
 
                             // Accumulate content and display it
@@ -340,13 +342,14 @@ pub(crate) async fn call_api_streaming_stateless(
                                         text: chunk_text.clone(),
                                         is_final: false,
                                     });
+                                } else {
+                                    print_heart_red(&format!("{}", content), false);
+                                    io::stdout().flush().unwrap();
                                 }
                                 
                                 // Update token count in metrics (rough estimate: 1 token ≈ 4 characters)
                                 metrics.completion_tokens += content.len() / 4;
                                 metrics.total_tokens += content.len() / 4;
-                                print_heart_red(&format!("{}", content), false);
-                                io::stdout().flush().unwrap();
                             }
 
                             // Accumulate tool calls if present (streaming deltas)

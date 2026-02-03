@@ -10,6 +10,8 @@ pub mod instance;
 pub use readline::{Readline, ReadlineResult};
 pub use history::{ReadlineEntry, ReadlineHistory, load_history, save_history, load_and_add_to_editor, save_to_file};
 pub use instance::ReadlineInstance;
+use std::io::BufWriter;
+use std::fs::OpenOptions;
 
 /// Atomic counter for tracking active HTTP requests
 /// This module provides thread-safe tracking of ongoing LLM API requests
@@ -99,6 +101,22 @@ pub fn print_heart_red(text: &str, newline: bool) {
 /// ```
 pub fn print_heart_yellow(text: &str, newline: bool) {
     print_with_emoji("💛", text, newline, io::stderr());
+}
+
+pub fn print_heart_to_file(text: &str, newline: bool) -> Result<(), std::io::Error> {
+    let file = OpenOptions::new()
+        .append(true) // Open file in append mode
+        .create(true) // Create the file if it doesn't exist
+        .open("/tmp/apchat-debug.txt")?; // Actually open file
+
+    let mut writer = BufWriter::new(file);
+
+    write!(writer, "{}", text)?;
+    if newline {
+        writeln!(writer, "")?;
+    }
+    writer.flush()?;
+    Ok(())
 }
 
 /// Internal helper that prints with an emoji prepended to each line.
