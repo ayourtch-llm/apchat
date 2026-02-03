@@ -9,7 +9,7 @@ use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
-use apchat_vty::{print_heart_yellow, print_heart_red, print_heart_to_file};
+use apchat_vty::{print_heart_yellow, print_heart_red, print_heart_to_file, token_counter};
 
 use super::ApiCallParams;
 
@@ -230,6 +230,7 @@ pub(crate) async fn call_api_streaming_stateless(
     let mut chunk_counter = 0;
 
     while let Some(chunk_result) = stream.next().await {
+        token_counter::increment(1);
         match chunk_result {
             Ok(bytes) => {
                 let chunk_str = String::from_utf8_lossy(&bytes);

@@ -78,6 +78,27 @@ pub mod request_counter {
     }
 }
 
+pub mod token_counter {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// Global atomic counter for active HTTP requests
+    static TOKEN_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    /// Get the current count of active requests
+    ///
+    /// # Returns
+    /// * `usize` - The number of currently active HTTP requests
+    pub fn get_count() -> usize {
+        TOKEN_COUNT.load(Ordering::Relaxed)
+    }
+
+    /// Increment the request counter
+    pub fn increment(x: usize) {
+        TOKEN_COUNT.fetch_add(x, Ordering::Relaxed);
+    }
+}
+
 pub use request_counter::{RequestGuard, get_count};
 
 
