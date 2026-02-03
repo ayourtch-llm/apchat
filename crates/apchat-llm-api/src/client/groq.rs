@@ -51,8 +51,8 @@ impl LlmClient for GroqLlmClient {
         let response_text = response.text().await?;
         let chat_response: apchat_models::ChatResponse = serde_json::from_str(&response_text)?;
 
-        let message = if let Some(choice) = chat_response.choices.into_iter().next() {
-            ChatMessage {
+        let (message, finish_reason) = if let Some(choice) = chat_response.choices.into_iter().next() {
+            let msg = ChatMessage {
                 role: choice.message.role,
                 content: choice.message.content,
                 tool_calls: choice.message.tool_calls.map(|calls| {
@@ -67,16 +67,17 @@ impl LlmClient for GroqLlmClient {
                 tool_call_id: choice.message.tool_call_id,
                 name: choice.message.name,
                 reasoning: None,
-            }
+            };
+            (msg, choice.finish_reason)
         } else {
-            ChatMessage {
+            (ChatMessage {
                 role: "assistant".to_string(),
                 content: "No response generated".to_string(),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
                 reasoning: None,
-            }
+            }, None)
         };
 
         Ok(LlmResponse {
@@ -86,6 +87,7 @@ impl LlmClient for GroqLlmClient {
                 completion_tokens: usage.completion_tokens as u32,
                 total_tokens: usage.total_tokens as u32,
             }),
+            finish_reason,
         })
     }
 

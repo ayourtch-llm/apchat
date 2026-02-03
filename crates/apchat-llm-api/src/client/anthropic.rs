@@ -231,9 +231,15 @@ impl LlmClient for AnthropicLlmClient {
             }
         });
 
+        // Anthropic uses "stop_reason" instead of "finish_reason"
+        let finish_reason = response_json.get("stop_reason")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         Ok(LlmResponse {
             message,
             usage,
+            finish_reason,
         })
     }
 

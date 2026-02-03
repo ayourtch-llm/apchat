@@ -89,7 +89,7 @@ impl StreamingMetrics {
 pub(crate) async fn call_api_streaming(
     chat: &APChat,
     orig_messages: &[Message],
-) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>, StreamingMetrics)> {
     use std::io::{self, Write};
     use futures_util::StreamExt;
 
@@ -196,6 +196,7 @@ pub(crate) async fn call_api_streaming(
     let mut usage: Option<Usage> = None;
     let mut buffer = String::new();
     let mut raw_response_body = String::new(); // Capture raw response body
+    let mut final_finish_reason: Option<String> = None; // Track finish_reason from streaming
 
     // Show thinking indicator
     print_heart_red(&format!("🤔 Thinking..."), false);
@@ -252,6 +253,11 @@ pub(crate) async fn call_api_streaming(
                         }
 
                         if let Some(choice) = chunk.choices.first() {
+                            // Capture finish_reason if present
+                            if choice.finish_reason.is_some() {
+                                final_finish_reason = choice.finish_reason.clone();
+                            }
+
                             let delta = &choice.delta;
 
                             // Update role if present
@@ -451,7 +457,7 @@ pub(crate) async fn call_api_streaming(
         }
     }
 
-    Ok((message, usage, current_model, metrics))
+    Ok((message, usage, current_model, final_finish_reason, metrics))
 }
 
 /// Streaming API call using the new LlmClient system (for Anthropic and llama.cpp)
@@ -459,7 +465,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     chat: &APChat,
     messages: &[Message],
     model: &ModelColor,
-) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>, StreamingMetrics)> {
     if chat.should_show_debug(1) {
         print_heart_red(&format!("🔧 DEBUG: call_api_streaming_with_llm_client called with model: {:?}", model), true);
     }
@@ -520,6 +526,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     let mut accumulated_tool_calls: Vec<ToolCall> = Vec::new();
     let mut tool_calls_in_progress: std::collections::HashMap<usize, (String, String, String)> = std::collections::HashMap::new(); // index -> (id, name, arguments)
     let mut role = String::new();
+    let mut final_finish_reason: Option<String> = None; // Track finish_reason from streaming
 
     // Get the streaming response
     let mut stream = llm_client.chat_streaming(chat_messages.clone(), tools.clone()).await?;
@@ -578,6 +585,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
                 // Check if we're done
                 if let Some(ref reason) = chunk.finish_reason {
+                    final_finish_reason = Some(reason.clone());
                     if reason == "stop" {
                         // Finalize tool calls
                         for (index, (id, name, arguments)) in &tool_calls_in_progress {
@@ -640,5 +648,5 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     
     let _ = log_response_to_file(&status, &headers, &response_body, request_timestamp, model);
 
-    Ok((message, usage, model.clone(), metrics))
+    Ok((message, usage, model.clone(), final_finish_reason, metrics))
 }

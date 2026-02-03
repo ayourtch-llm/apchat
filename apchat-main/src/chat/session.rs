@@ -70,7 +70,7 @@ pub(crate) async fn chat(
             }
 
             // Race API call against cancellation token
-            let (response, usage, current_model, streaming_metrics) = if let Some(ref token) = cancellation_token {
+            let (response, usage, current_model, finish_reason, streaming_metrics) = if let Some(ref token) = cancellation_token {
                 tokio::select! {
                     result = async {
                         if chat.stream_responses {
@@ -92,7 +92,7 @@ pub(crate) async fn chat(
                             }
                         } else {
                             // For non-streaming calls, create dummy metrics
-                            let (response, usage, current_model) = crate::api::call_api(chat, &chat.messages).await?;
+                            let (response, usage, current_model, finish_reason) = crate::api::call_api(chat, &chat.messages).await?;
                             let metrics = crate::api::StreamingMetrics {
                                 start_time: std::time::Instant::now(),
                                 total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
@@ -100,7 +100,7 @@ pub(crate) async fn chat(
                                 prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
                                 duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
                             };
-                            Ok((response, usage, current_model, metrics))
+                            Ok((response, usage, current_model, finish_reason, metrics))
                         }
                     } => result?,
                     _ = token.cancelled() => {
@@ -128,7 +128,7 @@ pub(crate) async fn chat(
                     }
                 } else {
                     // For non-streaming calls, create dummy metrics
-                    let (response, usage, current_model) = crate::api::call_api(chat, &chat.messages).await?;
+                    let (response, usage, current_model, finish_reason) = crate::api::call_api(chat, &chat.messages).await?;
                     let metrics = crate::api::StreamingMetrics {
                         start_time: std::time::Instant::now(),
                         total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
@@ -136,7 +136,7 @@ pub(crate) async fn chat(
                         prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
                         duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
                     };
-                    (response, usage, current_model, metrics)
+                    (response, usage, current_model, finish_reason, metrics)
                 }
             };
 
@@ -532,6 +532,14 @@ pub(crate) async fn chat(
                 }
             } else {
                 chat.messages.push(response.clone());
+                // If finish_reason is "stop", the agent has naturally finished
+                // This explicit check allows agents to signal completion
+                if finish_reason.as_deref() == Some("stop") {
+                    if chat.should_show_debug(1) {
+                        print_heart_red("🔧 DEBUG: Agent signaled completion via finish_reason: stop", true);
+                    }
+                    return Ok(response.content);
+                }
                 return Ok(response.content);
             }
         }

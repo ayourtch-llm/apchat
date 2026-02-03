@@ -280,7 +280,7 @@ async fn handle_chat_with_broadcast(
         let apchat = session.apchat.lock().await;
 
         // Make API call
-        let (response, usage, _model) = call_api(
+        let (response, usage, _model, _finish_reason) = call_api(
             &apchat,
             &apchat.messages,
         )
@@ -650,7 +650,7 @@ async fn generate_session_title(
     // Make an isolated API call
     let apchat = session.apchat.lock().await;
     match call_api(&apchat, &title_prompt).await {
-        Ok((response, _, _)) => {
+        Ok((response, _, _, _)) => {
             let title = response.content.trim().to_string();
             // Remove quotes if present
             let title = title.trim_matches('"').trim_matches('\'').to_string();

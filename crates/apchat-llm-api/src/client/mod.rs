@@ -85,6 +85,8 @@ pub trait LlmClient: Send + Sync {
 pub struct LlmResponse {
     pub message: ChatMessage,
     pub usage: Option<TokenUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub finish_reason: Option<String>,
 }
 
 /// Token usage information

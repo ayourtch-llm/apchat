@@ -16,7 +16,7 @@ use apchat_toolcore::parse_xml_tool_calls;
 pub(crate) async fn call_api(
     chat: &APChat,
     orig_messages: &[Message],
-) -> Result<(Message, Option<Usage>, ModelColor)> {
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
     let current_model = chat.current_model.clone();
     // Clone messages and strip reasoning field (only supported by some models like Groq)
     let messages: Vec<Message> = orig_messages.iter().map(|m| {
@@ -181,11 +181,11 @@ pub(crate) async fn call_api(
         let chat_response: ChatResponse = serde_json::from_str(&response_text)
             .with_context(|| format!("Failed to parse API response: {}", response_text))?;
 
-        let mut message = chat_response
+        let (mut message, finish_reason) = chat_response
             .choices
             .into_iter()
             .next()
-            .map(|c| c.message)
+            .map(|c| (c.message, c.finish_reason))
             .context("No response from API")?;
 
         // If no structured tool calls were received, check for XML format in content
@@ -198,7 +198,7 @@ pub(crate) async fn call_api(
             }
         }
 
-        return Ok((message, chat_response.usage, current_model));
+        return Ok((message, chat_response.usage, current_model, finish_reason));
     }
 }
 
@@ -207,7 +207,7 @@ pub(crate) async fn call_api_with_llm_client(
     chat: &APChat,
     messages: &[Message],
     model: &ModelColor,
-) -> Result<(Message, Option<Usage>, ModelColor)> {
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
     if chat.should_show_debug(1) {
         print_heart_red(&format!("🔧 DEBUG: call_api_with_llm_client called with model: {:?}", model), true);
     }
@@ -281,5 +281,5 @@ pub(crate) async fn call_api_with_llm_client(
         total_tokens: u.total_tokens as usize,
     });
 
-    Ok((message, usage, model.clone()))
+    Ok((message, usage, model.clone(), response.finish_reason))
 }
