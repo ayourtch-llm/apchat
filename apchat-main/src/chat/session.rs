@@ -349,6 +349,14 @@ pub(crate) async fn chat(
                         }
                     }
                 }
+                /// Normal exit
+                let STOP = "stop".to_string();
+                if let Some(reason) = finish_reason {
+                    if reason == STOP {
+                        print_heart_red(&format!("LLM has finished evaluation after {} iterations", tool_call_iterations), true);
+                        return Ok("LLM has finished the execution loop.".to_string());
+                    }
+                }
 
                 // Conservative hard limit as final fallback
                 if tool_call_iterations > MAX_TOOL_ITERATIONS {
