@@ -152,12 +152,13 @@ pub(crate) async fn chat(
                 chat.total_tokens_used += usage.total_tokens;
                 print_heart_red(&format!("======stats for user message: {}", user_message), true);
                 print_heart_red(&format!(
-                    "{} Prompt: {} | Completion: {} | Total: {} | Session: {}",
+                    "{} Prompt: {} | Completion: {} | Total: {} | Session: {} | Finish reason: {:?}",
                     "📊".bright_black(),
                     usage.prompt_tokens.to_string().bright_black(),
                     usage.completion_tokens.to_string().bright_black(),
                     usage.total_tokens.to_string().bright_black(),
-                    chat.total_tokens_used.to_string().cyan()
+                    chat.total_tokens_used.to_string().cyan(),
+                    &finish_reason,
                 ), true);
             }
 
