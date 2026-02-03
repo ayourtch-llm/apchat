@@ -17,6 +17,24 @@ impl fmt::Display for OutputError {
 
 impl StdError for OutputError {}
 
+/// Text output with optional emoji prefix and newline control
+#[derive(Debug, Clone)]
+pub struct TextOutput {
+    pub emoji: String,
+    pub content: String,
+    pub newline: bool,
+}
+
+impl TextOutput {
+    pub fn new(emoji: &str, content: &str, newline: bool) -> Self {
+        Self {
+            emoji: emoji.to_string(),
+            content: content.to_string(),
+            newline,
+        }
+    }
+}
+
 /// Enum representing different types of output messages
 #[derive(Debug, Clone)]
 pub enum OutputMessage {
@@ -26,6 +44,7 @@ pub enum OutputMessage {
     ToolResult(String),
     SystemMessage(String),
     Error(String),
+    TextOutput(TextOutput),
 }
 
 /// Trait for output destinations
@@ -123,6 +142,9 @@ mod tests {
 
         let error_msg = OutputMessage::Error("Something went wrong".to_string());
         assert!(matches!(error_msg, OutputMessage::Error(_)));
+
+        let text_output = OutputMessage::TextOutput(TextOutput::new("✓", "Task completed", true));
+        assert!(matches!(text_output, OutputMessage::TextOutput(_)));
     }
 
     #[tokio::test]
@@ -210,5 +232,31 @@ mod tests {
                 _ => panic!("Wrong variant"),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn test_text_output_fields() {
+        let text_output = TextOutput::new("✓", "Task completed", true);
+        assert_eq!(text_output.emoji, "✓");
+        assert_eq!(text_output.content, "Task completed");
+        assert_eq!(text_output.newline, true);
+
+        let text_output_no_newline = TextOutput::new("⚠", "Warning", false);
+        assert_eq!(text_output_no_newline.emoji, "⚠");
+        assert_eq!(text_output_no_newline.content, "Warning");
+        assert_eq!(text_output_no_newline.newline, false);
+    }
+
+    #[tokio::test]
+    async fn test_text_output_message_variant() {
+        let output_message = OutputMessage::TextOutput(TextOutput::new("📋", "Clipboard content", true));
+        
+        if let OutputMessage::TextOutput(text) = output_message {
+            assert_eq!(text.emoji, "📋");
+            assert_eq!(text.content, "Clipboard content");
+            assert_eq!(text.newline, true);
+        } else {
+            panic!("Expected TextOutput variant");
+        }
     }
 }
