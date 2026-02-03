@@ -19,7 +19,7 @@ use crate::APChat;
 use crate::api::OutputChunk;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
-use crate::mspc::{MspcChannel, MspcMessage};
+use crate::mspc::{MspcChannel, MspcMessage, get_readline_receiver};
 
 use crate::app::repl::llm_task::LLMTaskChannels;
 use crate::app::repl::llm_task::spawn_llm_task;
@@ -85,7 +85,7 @@ async fn process_repl_command(chat: &mut APChat, message: MspcMessage, interrupt
 
         // Exit commands
         if line == "exit" || line == "quit" {
-            print_heart_red(&format!("{}", "Goodbye!".bright_cyan()), true);
+            print_heart_red(&format!("{}", "Goodbye - exit command!".bright_cyan()), true);
             if let Err(e) = apchat_vty::ReadlineInstance::save_history() {
                 if chat.debug_level > 0 {
                     print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), e), true);

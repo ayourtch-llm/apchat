@@ -170,7 +170,7 @@ impl OutputDestination for TerminalDestination {
                         if text.newline {
                             writeln!(stdout, "{} {}", text.emoji, text.content)?;
                         } else {
-                            write!(stdout, "{} {}", text.emoji, text.content)?;
+                            write!(stdout, "{}", text.content)?;
                         }
                     } else if !text.content.is_empty() {
                         if text.newline {

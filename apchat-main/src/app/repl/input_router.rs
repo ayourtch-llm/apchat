@@ -6,7 +6,7 @@ use apchat_vty::{print_heart_yellow, request_counter};
 use apchat_models::ModelColor;
 use apchat_toolcore::confirmation::ConfirmationRegistry;
 
-use crate::mspc::{MspcChannel, MspcMessage};
+use crate::mspc::{MspcChannel, MspcMessage, get_readline_receiver};
 use crate::input_router::TerminalInputRouter;
 use crate::config::ClientConfig;
 
@@ -63,13 +63,14 @@ pub fn spawn_input_router(config: RouterConfig) -> JoinHandle<()> {
 
             // Clone the Arc for use in spawn_blocking
             let receiver_mutex_clone = signal_receiver_mutex.clone();
+            let mut readline_receiver = get_readline_receiver();
 
             // Use spawn_blocking for readline (it's a blocking operation)
             let line_result = tokio::task::spawn_blocking(move || {
                 let mut receiver_guard = receiver_mutex_clone.blocking_lock();
                 let receiver_ref = &mut *receiver_guard;
 
-                apchat_vty::ReadlineInstance::readline_with_mspc(&prompt_string, Some(receiver_ref))
+                apchat_vty::ReadlineInstance::readline_with_mspc(&prompt_string, Some(receiver_ref), Some(&mut readline_receiver))
             }).await;
 
             match line_result {

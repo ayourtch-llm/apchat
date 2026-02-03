@@ -12,6 +12,7 @@ use std::time::Duration;
 use chrono::prelude::*;
 
 use apchat_mspc::MspcMessage;
+use apchat_mspc::output::TextOutput;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -2160,10 +2161,12 @@ impl Readline {
     ///
     /// * `prompt` - The prompt string to display
     /// * `mspc_receiver` - Optional mutable reference to tokio MPSC receiver
+    /// * `readline_receiver` - Optional broadcast receiver for TextOutput messages from ReadlineDestination
     pub fn readline(
         &mut self,
         prompt: &str,
         mut mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<MspcMessage>>,
+        mut readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
     ) -> io::Result<ReadlineResult> {
         // Display the initial prompt
         self.redraw(prompt);
@@ -2263,6 +2266,41 @@ impl Readline {
                             return Ok(ReadlineResult::Signal(msg));
                         }
                     }
+                }
+            }
+
+            // Timeout occurred - check ReadlineDestination messages if receiver provided
+            if let Some(ref mut receiver) = readline_receiver {
+                // Try to receive a message without blocking
+                if let Ok(text_output) = receiver.try_recv() {
+                    // Print emoji text directly to stdout
+                    let emoji = &text_output.emoji;
+                    let content = &text_output.content;
+                    let newline = text_output.newline;
+                    let mut stdout = std::io::stdout();
+                    // Save cursor position
+                    let _ = self.cursor();
+                    // Clear the current line
+                    stdout.queue(MoveToColumn(0)).ok();
+                    stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+                    // Print emoji text
+                    if !emoji.is_empty() && !content.is_empty() {
+                        if newline {
+                            writeln!(stdout, "{} {}", emoji, content).ok();
+                        } else {
+                            write!(stdout, "{} {}", emoji, content).ok();
+                        }
+                    } else if !content.is_empty() {
+                        if newline {
+                            writeln!(stdout, "{}", content).ok();
+                        } else {
+                            write!(stdout, "{}", content).ok();
+                        }
+                    }
+                    stdout.flush().ok();
+                    // Restore cursor position and redraw prompt
+                    self.redraw(prompt);
+                    continue;
                 }
             }
         }

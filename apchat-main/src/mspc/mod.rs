@@ -29,6 +29,14 @@ pub use router::OutputRouter;
 pub use apchat_mspc::output;
 pub use apchat_mspc::output::TextOutput;
 
+/// Get the readline destination's broadcast receiver
+/// This allows the REPL to receive emoji text messages from the output router
+pub fn get_readline_receiver() -> broadcast::Receiver<TextOutput> {
+    // Create a new receiver from the TEXT_OUTPUT_TX
+    // This will receive all TextOutput messages including those from ReadlineDestination
+    TEXT_OUTPUT_TX.subscribe()
+}
+
 /// Initialize the OutputRouter and connect it to vty's TEXT_OUTPUT_TX
 /// This should be called during application startup
 pub async fn initialize_output_router() -> Arc<OutputRouter> {

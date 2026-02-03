@@ -137,7 +137,7 @@ impl ReadlineInstance {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt, None)? {
+        match rl.readline(prompt, None, None)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)
@@ -164,6 +164,7 @@ impl ReadlineInstance {
     ///
     /// * `prompt` - The prompt string to display
     /// * `mspc_receiver` - Optional mutable reference to the MSPC receiver
+    /// * `readline_receiver` - Optional broadcast receiver for TextOutput messages from ReadlineDestination
     ///
     /// # Returns
     ///
@@ -176,11 +177,12 @@ impl ReadlineInstance {
     pub fn readline_with_mspc(
         prompt: &str,
         mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<apchat_mspc::MspcMessage>>,
+        readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
     ) -> Result<Option<String>> {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt, mspc_receiver)? {
+        match rl.readline(prompt, mspc_receiver, readline_receiver)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)
