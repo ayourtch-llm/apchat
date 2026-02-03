@@ -320,10 +320,10 @@ async fn save_input_and_log(chat: &mut APChat, line: &str) {
     }
 }
 
-/// Run the tool-calling loop by delegating to the existing session::chat() function.
+/// Run the tool-calling loop using the LLM task channels.
 ///
-/// This is a thin wrapper that calls the battle-tested session::chat() function
-/// which handles all the complexity of API calls, streaming, tool execution, etc.
+/// This implementation spawns an LLM task and uses it for all API calls,
+/// enabling proper cancellation handling and channel-based communication.
 pub(crate) async fn run_tool_loop(
     chat: &mut APChat,
     input: &str,
@@ -331,33 +331,258 @@ pub(crate) async fn run_tool_loop(
 ) -> InferenceOutcome {
     use apchat_vty::print_heart_yellow;
     use apchat_models::Message;
+    use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
-    // Call the existing session::chat() function which has all the working logic
-    match crate::chat::session::chat(chat, input, Some(cancel_token.clone())).await {
-        Ok(response) => InferenceOutcome::Response(response),
-        Err(e) if e.to_string().contains("interrupted") => {
-            print_heart_yellow(&format!("{} Interrupted: {}", "⚠️".yellow(), e), true);
+    // Spawn the LLM task
+    let mut llm_channels = spawn_llm_task();
+
+    // Prepare for LLM call (add user message, summarize history)
+    chat.messages.push(Message {
+        role: "user".to_string(),
+        content: input.to_string(),
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+        reasoning: None,
+    });
+
+    crate::chat::history::summarize_and_trim_history(chat).await;
+
+    // Tool loop configuration
+    let mut tool_call_iterations = 0;
+    let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
+    const MAX_TOOL_ITERATIONS: usize = 250;
+    const LOOP_DETECTION_WINDOW: usize = 8;
+
+    // Track total tokens for the session
+    let total_tokens_start = chat.total_tokens_used;
+
+    loop {
+        // Check for cancellation
+        if cancel_token.is_cancelled() {
+            print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "Interrupted by user"), true);
             chat.messages.push(Message {
                 role: "assistant".to_string(),
-                content: format!("[Interrupted: {}]", e),
+                content: "[Interrupted by user]".to_string(),
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
                 reasoning: None,
             });
-            InferenceOutcome::Interrupted
+            return InferenceOutcome::Interrupted;
         }
-        Err(e) => {
-            print_heart_yellow(&format!("{} {}\n", "Error:".bright_red().bold(), e), true);
-            chat.messages.push(Message {
-                role: "assistant".to_string(),
-                content: format!("[Error: {}]", e),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
+
+        // Validate and fix tool calls in the conversation history
+        if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
+            if fixed {
+                print_heart_yellow(&format!("{} {}", "✅".green(), "Tool calls were automatically fixed in conversation history"), true);
+            }
+        }
+
+        // Create API call parameters
+        let params = crate::api::ApiCallParams {
+            messages: chat.messages.clone(),
+            current_model: chat.current_model.clone(),
+            client_config: chat.client_config.clone(),
+            api_key: chat.api_key.clone(),
+            tools: chat.get_tools(),
+            stream_responses: chat.stream_responses,
+            verbose: chat.verbose,
+            debug_level: chat.debug_level,
+            http_client: chat.client.clone(),
+        };
+
+        // Prepare streaming channel if needed
+        let stream_sender = if chat.stream_responses {
+            let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::api::OutputChunk>(100);
+            tokio::spawn(async move {
+                while let Some(chunk) = rx.recv().await {
+                    print_heart_red(&format!("{}", chunk.text), false);
+                }
             });
-            InferenceOutcome::Error
+            Some(tx)
+        } else {
+            None
+        };
+
+        // Send request to LLM task
+        let request = LLMRequest {
+            params,
+            cancel_token: cancel_token.clone(),
+            stream_sender,
+        };
+
+        if let Err(_) = llm_channels.request_tx.send(request).await {
+            print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
+            return InferenceOutcome::Error;
+        }
+
+        // Wait for response from LLM task
+        let llm_response = match llm_channels.response_rx.recv().await {
+            Some(response) => response,
+            None => {
+                print_heart_yellow(&format!("{} {}", "❌".bright_red(), "LLM task channel closed unexpectedly"), true);
+                return InferenceOutcome::Error;
+            }
+        };
+
+        // Process the LLM response
+        match llm_response {
+            LLMResponse::Success {
+                content,
+                usage,
+                tool_calls,
+                model: current_model,
+            } => {
+                // Update model if it changed
+                if chat.current_model != current_model {
+                    print_heart_red(&format!("Model switched: {:?} -> {:?}", &chat.current_model, &current_model), true);
+                    chat.current_model = current_model;
+                }
+
+                // Display token usage
+                if let Some(usage) = &usage {
+                    chat.total_tokens_used = total_tokens_start + usage.total_tokens;
+                    print_heart_red(&format!("📊 Prompt: {} | Completion: {} | Total: {} | Session: {}",
+                        usage.prompt_tokens,
+                        usage.completion_tokens,
+                        usage.total_tokens,
+                        chat.total_tokens_used), true);
+                }
+
+                // Handle tool calls
+                if let Some(calls) = tool_calls {
+                    tool_call_iterations += 1;
+
+                    if tool_call_iterations > MAX_TOOL_ITERATIONS {
+                        print_heart_yellow(&format!("{} {} tool calls - stopping to avoid infinite loop.",
+                            "⚠️".yellow(), tool_call_iterations), true);
+                        chat.messages.push(Message {
+                            role: "assistant".to_string(),
+                            content: format!("[Stopped after {} tool calls]", tool_call_iterations),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        });
+                        return InferenceOutcome::Response("".to_string());
+                    }
+
+                    // Loop detection
+                    let current_signature = calls.iter()
+                        .map(|tc| format!("{}:{}", tc.function.name, tc.function.arguments))
+                        .collect::<Vec<_>>()
+                        .join("|");
+
+                    recent_tool_calls.push((current_signature.clone(), String::new()));
+                    if recent_tool_calls.len() > LOOP_DETECTION_WINDOW {
+                        recent_tool_calls.remove(0);
+                    }
+
+                    let consecutive_count = recent_tool_calls.iter()
+                        .rev()
+                        .take_while(|(sig, _)| sig == &current_signature)
+                        .count();
+
+                    if consecutive_count >= LOOP_DETECTION_WINDOW {
+                        print_heart_yellow(&format!("{} Detected infinite tool call loop - stopping.",
+                            "🔄".yellow()), true);
+                        chat.messages.push(Message {
+                            role: "assistant".to_string(),
+                            content: "[Detected tool call loop, stopping]".to_string(),
+                            tool_calls: None,
+                            tool_call_id: None,
+                            name: None,
+                            reasoning: None,
+                        });
+                        return InferenceOutcome::Response("".to_string());
+                    }
+
+                    // Execute tools
+                    let assistant_message = Message {
+                        role: "assistant".to_string(),
+                        content: String::new(), // Will be filled if there's also text content
+                        tool_calls: Some(calls.clone()),
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    };
+
+                    chat.messages.push(assistant_message.clone());
+
+                    if chat.verbose {
+                        print_heart_yellow(&format!("{} Executing {} tool(s)...",
+                            "🔧".bright_yellow(), calls.len()), true);
+                    }
+
+                    // Execute each tool call
+                    for tool_call in &calls {
+                        let tool_result = match chat.execute_tool(
+                            &tool_call.function.name,
+                            &tool_call.function.arguments,
+                        ).await {
+                            Ok(r) => r,
+                            Err(e) => {
+                                let error_msg = format!("Error executing tool {}: {}", &tool_call.function.name, e);
+                                print_heart_yellow(&format!("{} {}", "❌".bright_red(), &error_msg), true);
+                                error_msg
+                            }
+                        };
+
+                        let tool_response_message = Message {
+                            role: "tool".to_string(),
+                            content: tool_result,
+                            tool_calls: None,
+                            tool_call_id: Some(tool_call.id.clone()),
+                            name: Some(tool_call.function.name.clone()),
+                            reasoning: None,
+                        };
+
+                        chat.messages.push(tool_response_message);
+                    }
+
+                    print_heart_red("", true); // New line after tool outputs
+
+                    // Continue the loop to get the next response
+                } else {
+                    // No tool calls - this is the final response
+                    let final_message = Message {
+                        role: "assistant".to_string(),
+                        content: content.clone(),
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    };
+
+                    chat.messages.push(final_message);
+                    return InferenceOutcome::Response(content);
+                }
+            }
+            LLMResponse::Interrupted => {
+                print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "LLM call interrupted"), true);
+                chat.messages.push(Message {
+                    role: "assistant".to_string(),
+                    content: "[Interrupted]".to_string(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+                });
+                return InferenceOutcome::Interrupted;
+            }
+            LLMResponse::Error(e) => {
+                print_heart_yellow(&format!("{} {}: {}", "❌".bright_red(), "LLM API Error", e), true);
+                chat.messages.push(Message {
+                    role: "assistant".to_string(),
+                    content: format!("[Error: {}]", e),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+                });
+                return InferenceOutcome::Error;
+            }
         }
     }
 }
