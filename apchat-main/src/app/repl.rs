@@ -120,6 +120,8 @@ pub async fn run_repl_mode(
             }
         };
 
+        let _ = apchat_vty::print_heart_to_file(&format!("RCVD: {:?}", &message), true);
+
         // Route special message types before extracting the text payload
         let line = match message {
             MspcMessage::UserInput(content, _sender) => content,
