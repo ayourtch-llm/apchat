@@ -10,6 +10,7 @@ mod llm_oneshot_direct_test {
     use async_trait::async_trait;
 
     // Mock LLM Client for testing
+    #[derive(Debug)]
     struct MockLlmClient;
 
     #[async_trait]
@@ -26,6 +27,7 @@ mod llm_oneshot_direct_test {
                     reasoning: None,
                 },
                 usage: None,
+                finish_reason: Some("stop".to_string()),
             })
         }
 

@@ -40,5 +40,5 @@ impl ApiCallParams {
 mod streaming;
 mod client;
 
-pub(crate) use streaming::{call_api_streaming, call_api_streaming_with_llm_client, StreamingMetrics};
+pub(crate) use streaming::{call_api_streaming, call_api_streaming_with_llm_client, call_api_streaming_stateless, call_api_streaming_with_llm_client_stateless, OutputChunk, StreamingMetrics};
 pub(crate) use client::{call_api, call_api_with_llm_client, call_api_stateless, call_api_with_llm_client_stateless};

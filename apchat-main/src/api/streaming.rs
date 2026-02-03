@@ -1,6 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::time::{Instant, Duration};
+use tokio::sync::mpsc as tokio_mpsc;
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk, ToolCall, FunctionCall};
@@ -9,6 +10,15 @@ use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
 use apchat_vty::{print_heart_yellow, print_heart_red};
+
+use super::ApiCallParams;
+
+/// Simple chunk type for streaming output
+#[derive(Debug, Clone)]
+pub struct OutputChunk {
+    pub text: String,
+    pub is_final: bool,
+}
 
 /// Metrics for token generation rate tracking
 #[derive(Debug, Clone)]
@@ -90,10 +100,21 @@ pub(crate) async fn call_api_streaming(
     chat: &APChat,
     orig_messages: &[Message],
 ) -> Result<(Message, Option<Usage>, ModelColor, Option<String>, StreamingMetrics)> {
+    let mut params = ApiCallParams::from_apchat(chat);
+    params.messages = orig_messages.to_vec();
+    let (message, usage, model, metrics) = call_api_streaming_stateless(&params, None).await?;
+    Ok((message, usage, model, None, metrics))
+}
+
+/// Handle streaming API response for Groq-style APIs (stateless version)
+pub(crate) async fn call_api_streaming_stateless(
+    params: &ApiCallParams,
+    output_tx: Option<tokio_mpsc::Sender<OutputChunk>>,
+) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
     use std::io::{self, Write};
     use futures_util::StreamExt;
 
-    let current_model = chat.current_model.clone();
+    let current_model = params.current_model.clone();
 
     // Convert messages for Mistral/Ministral compatibility:
     // Ministral allows ONE optional system message at the start, then alternating user/assistant.
@@ -102,7 +123,7 @@ pub(crate) async fn call_api_streaming(
     let mut leading_system_contents: Vec<String> = Vec::new();
     let mut past_leading_systems = false;
 
-    for m in orig_messages.iter() {
+    for m in params.messages.iter() {
         let mut msg = m.clone();
         msg.reasoning = None; // Strip reasoning field to avoid compatibility issues
 
@@ -131,18 +152,18 @@ pub(crate) async fn call_api_streaming(
 
     let request = ChatRequest {
         model: current_model.as_str(
-            chat.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
-            chat.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
-            chat.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
+            params.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
+            params.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
+            params.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
         ).to_string(),
         messages,
-        tools: chat.get_tools(),
+        tools: params.tools.clone(),
         tool_choice: "auto".to_string(),
         stream: Some(true),
     };
 
     // Get the appropriate API URL based on the current model
-    let api_url = crate::config::get_api_url(&chat.client_config, &current_model);
+    let api_url = crate::config::get_api_url(&params.client_config, &current_model);
 
     // Capture request timestamp for response logging correlation
     let request_timestamp = std::time::SystemTime::now()
@@ -151,14 +172,14 @@ pub(crate) async fn call_api_streaming(
         .as_secs();
 
     // Log request details in verbose mode
-    log_request(&api_url, &request, &chat.api_key, chat.verbose);
+    log_request(&api_url, &request, &params.api_key, params.verbose);
 
     // Log request to file for persistent debugging
-    let _ = log_request_to_file(&api_url, &request, &current_model, &chat.api_key);
+    let _ = log_request_to_file(&api_url, &request, &current_model, &params.api_key);
 
-    let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &current_model);
-    let response = chat
-        .client
+    let api_key = crate::config::get_api_key(&params.client_config, &params.api_key, &current_model);
+    let response = params
+        .http_client
         .post(&api_url)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
@@ -173,14 +194,14 @@ pub(crate) async fn call_api_streaming(
         let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
 
         // Log error response
-        log_response(&status, &headers, &error_body, chat.verbose);
+        log_response(&status, &headers, &error_body, params.verbose);
         let _ = log_response_to_file(&status, &headers, &error_body, request_timestamp, &current_model);
         let _ = log_raw_response_to_file(&error_body, request_timestamp, &current_model);
 
         return Err(anyhow::anyhow!("API request failed with status {}: {}", status, error_body));
     }
 
-    if chat.verbose {
+    if params.verbose {
         print_heart_red(&format!("\n{}", "📡 Starting streaming response...".bright_cyan()), true);
         print_heart_red(&format!("{}", "═".repeat(80).bright_cyan()), true);
     }
@@ -229,11 +250,11 @@ pub(crate) async fn call_api_streaming(
 
                     // Log stream chunk in verbose mode
                     chunk_counter += 1;
-                    log_stream_chunk(chunk_counter, data, chat.verbose);
+                    log_stream_chunk(chunk_counter, data, params.verbose);
 
                     // Check for stream end marker
                     if data.trim() == "[DONE]" {
-                        if chat.verbose {
+                        if params.verbose {
                             print_heart_red(&format!("{}", "✓ Stream completed".bright_green()), true);
                             print_heart_red(&format!("{}", "═".repeat(80).bright_green()), true);
                         }
@@ -281,6 +302,16 @@ pub(crate) async fn call_api_streaming(
                                 }
 
                                 accumulated_reasoning.push_str(reasoning);
+                                let chunk_text = reasoning.to_string();
+                                
+                                // Send to channel if provided
+                                if let Some(ref tx) = output_tx {
+                                    let _ = tx.try_send(OutputChunk {
+                                        text: chunk_text.clone(),
+                                        is_final: false,
+                                    });
+                                }
+                                
                                 // Display reasoning in dim color to distinguish from actual response
                                 print_heart_red(&format!("{}", reasoning.bright_black()), false);
                                 io::stdout().flush().unwrap();
@@ -301,6 +332,16 @@ pub(crate) async fn call_api_streaming(
                                 }
 
                                 accumulated_content.push_str(content);
+                                let chunk_text = content.to_string();
+                                
+                                // Send to channel if provided
+                                if let Some(ref tx) = output_tx {
+                                    let _ = tx.try_send(OutputChunk {
+                                        text: chunk_text.clone(),
+                                        is_final: false,
+                                    });
+                                }
+                                
                                 // Update token count in metrics (rough estimate: 1 token ≈ 4 characters)
                                 metrics.completion_tokens += content.len() / 4;
                                 metrics.total_tokens += content.len() / 4;
@@ -457,7 +498,7 @@ pub(crate) async fn call_api_streaming(
         }
     }
 
-    Ok((message, usage, current_model, final_finish_reason, metrics))
+    Ok((message, usage, current_model, metrics))
 }
 
 /// Streaming API call using the new LlmClient system (for Anthropic and llama.cpp)
@@ -466,12 +507,23 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     messages: &[Message],
     model: &ModelColor,
 ) -> Result<(Message, Option<Usage>, ModelColor, Option<String>, StreamingMetrics)> {
-    if chat.should_show_debug(1) {
-        print_heart_red(&format!("🔧 DEBUG: call_api_streaming_with_llm_client called with model: {:?}", model), true);
+    let mut params = ApiCallParams::from_apchat(chat);
+    params.current_model = model.clone();
+    let (message, usage, _, metrics) = call_api_streaming_with_llm_client_stateless(&params, None).await?;
+    Ok((message, usage, model.clone(), None, metrics))
+}
+
+/// Streaming API call using the new LlmClient system (for Anthropic and llama.cpp) - stateless version
+pub(crate) async fn call_api_streaming_with_llm_client_stateless(
+    params: &ApiCallParams,
+    output_tx: Option<tokio_mpsc::Sender<OutputChunk>>,
+) -> Result<(Message, Option<Usage>, ModelColor, StreamingMetrics)> {
+    if params.should_show_debug(1) {
+        print_heart_red(&format!("🔧 DEBUG: call_api_streaming_with_llm_client_stateless called with model: {:?}", params.current_model), true);
     }
 
     // Convert old Message format to new ChatMessage format
-    let chat_messages: Vec<ChatMessage> = messages.iter().map(|msg| {
+    let chat_messages: Vec<ChatMessage> = params.messages.iter().map(|msg| {
         ChatMessage {
             role: msg.role.clone(),
             content: msg.content.clone(),
@@ -491,24 +543,24 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     }).collect();
 
     // Convert tools to the new format
-    let tools: Vec<ToolDefinition> = chat.get_tools().into_iter().map(|tool| {
+    let tools: Vec<ToolDefinition> = params.tools.iter().map(|tool| {
         ToolDefinition {
-            name: tool.function.name,
-            description: tool.function.description,
-            parameters: tool.function.parameters,
+            name: tool.function.name.clone(),
+            description: tool.function.description.clone(),
+            parameters: tool.function.parameters.clone(),
         }
     }).collect();
 
     // Create the appropriate LlmClient using the centralized helper
     let llm_client = crate::config::helpers::create_client_for_model_color_with_verbose(
-        model,
-        &chat.client_config,
-        &chat.api_key,
-        chat.verbose,
+        &params.current_model,
+        &params.client_config,
+        &params.api_key,
+        params.verbose,
     );
 
     // Get the appropriate API URL based on the current model
-    let _api_url = crate::config::get_api_url(&chat.client_config, model);
+    let _api_url = crate::config::get_api_url(&params.client_config, &params.current_model);
 
     // Capture request timestamp for response logging correlation
     let request_timestamp = std::time::SystemTime::now()
@@ -554,6 +606,16 @@ pub(crate) async fn call_api_streaming_with_llm_client(
 
                 // Print the delta immediately without any buffering
                 if !chunk.delta.is_empty() {
+                    let chunk_text = chunk.delta.clone();
+                    
+                    // Send to channel if provided
+                    if let Some(ref tx) = output_tx {
+                        let _ = tx.try_send(OutputChunk {
+                            text: chunk_text.clone(),
+                            is_final: false,
+                        });
+                    }
+                    
                     // Use direct write and flush for minimal latency
                     io::stdout().write_all(chunk.delta.as_bytes()).unwrap();
                     io::stdout().flush().unwrap();
@@ -567,13 +629,13 @@ pub(crate) async fn call_api_streaming_with_llm_client(
                 if let Some(ref tool_event) = chunk.tool_call_event {
                     match tool_event {
                         ToolCallEvent::Start { index, id, name } => {
-                            if chat.verbose {
+                            if params.verbose {
                                 print_heart_yellow(&format!("🔧 Tool call started: index={}, id={}, name={}", index, id, name), true);
                             }
                             tool_calls_in_progress.insert(*index, (id.clone(), name.clone(), String::new()));
                         }
                         ToolCallEvent::Delta { index, arguments_delta } => {
-                            if chat.verbose {
+                            if params.verbose {
                                 print_heart_yellow(&format!("🔧 Tool call delta: index={}, delta={}", index, arguments_delta), true);
                             }
                             if let Some((id, name, args)) = tool_calls_in_progress.get_mut(index) {
@@ -646,7 +708,7 @@ pub(crate) async fn call_api_streaming_with_llm_client(
     headers.insert("content-type", "application/json".parse().unwrap());
     headers.insert("x-streaming", "anthropic".parse().unwrap());
     
-    let _ = log_response_to_file(&status, &headers, &response_body, request_timestamp, model);
+    let _ = log_response_to_file(&status, &headers, &response_body, request_timestamp, &params.current_model);
 
-    Ok((message, usage, model.clone(), final_finish_reason, metrics))
+    Ok((message, usage, params.current_model.clone(), metrics))
 }

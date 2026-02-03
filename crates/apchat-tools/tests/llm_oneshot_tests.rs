@@ -13,6 +13,7 @@ mod llm_oneshot_tests {
     use apchat_toolcore::tool_registry::ToolRegistry;
     
     /// Mock LLM client for testing
+    #[derive(Debug)]
     struct MockLlmClient;
     
     #[async_trait]
