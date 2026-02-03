@@ -9,6 +9,8 @@ use once_cell::sync::Lazy;
 pub static TEXT_OUTPUT_TX: Lazy<broadcast::Sender<apchat_mspc::output::TextOutput>> =
     Lazy::new(|| broadcast::channel(100).0);
 
+pub mod router;
+
 pub use apchat_mspc::{
     MspcChannel,
     MspcMessage,
@@ -18,6 +20,8 @@ pub use apchat_mspc::{
     OutputMessage,
     broadcast_to_all,
 };
+
+pub use router::OutputRouter;
 
 // Re-export output module and TextOutput type
 pub use apchat_mspc::output;
