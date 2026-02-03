@@ -213,6 +213,12 @@ pub fn print_heart_to_file(text: &str, newline: bool) -> Result<(), std::io::Err
 fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io::Write) {
     let lines: Vec<&str> = text.split('\n').collect();
 
+    // Issue 138: Send to TEXT_OUTPUT_TX if available (for OutputRouter integration)
+    if let Some(ref tx) = get_text_output_tx() {
+        let _ = tx.send(apchat_mspc::output::TextOutput::new(emoji, text, newline));
+        return;
+    } 
+
     for (i, line) in lines.iter().enumerate() {
         if i < lines.len() - 1 {
             let _ = writeln!(writer, "{} {}", emoji, line);
@@ -233,8 +239,4 @@ fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io:
     // Flush to ensure output is written immediately
     let _ = writer.flush();
 
-    // Issue 138: Send to TEXT_OUTPUT_TX if available (for OutputRouter integration)
-    if let Some(ref tx) = get_text_output_tx() {
-        let _ = tx.send(apchat_mspc::output::TextOutput::new(emoji, text, newline));
-    }
 }
