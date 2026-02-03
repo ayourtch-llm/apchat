@@ -19,6 +19,7 @@ pub fn get_embedded_skills() -> HashMap<&'static str, &'static str> {
     skills.insert("executing-plans", include_str!("../../../skills/executing-plans/SKILL.md"));
     skills.insert("finishing-a-development-branch", include_str!("../../../skills/finishing-a-development-branch/SKILL.md"));
     skills.insert("receiving-code-review", include_str!("../../../skills/receiving-code-review/SKILL.md"));
+    skills.insert("refactoring-for-clarity", include_str!("../../../skills/refactoring-for-clarity/SKILL.md"));
     skills.insert("requesting-code-review", include_str!("../../../skills/requesting-code-review/SKILL.md"));
     skills.insert("root-cause-tracing", include_str!("../../../skills/root-cause-tracing/SKILL.md"));
     skills.insert("sharing-skills", include_str!("../../../skills/sharing-skills/SKILL.md"));
