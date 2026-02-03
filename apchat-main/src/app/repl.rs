@@ -175,86 +175,121 @@ pub async fn run_repl_mode(
 
     // Spawn the LLM task
     let mut llm_channels = spawn_llm_task();
+    let mut queued_messages: Vec<String> = vec![];
+
+    let mut llm_running = false;
+    // Tool loop configuration
+    let mut tool_call_iterations = 0;
+    let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
+    let mut total_tokens_start = chat.total_tokens_used;
 
     // ── Main REPL loop ─────────────────────────────────────────────────────
     'outer: loop {
-        // Wait for next message from the input router
-        let message = match mspc_channel.recv().await {
-            Some(msg) => msg,
-            None => {
-                // Channel closed — normal exit path
-                print_heart_red(&format!("\n{}", "Goodbye!".bright_cyan()), true);
-                if let Err(save_err) = apchat_vty::ReadlineInstance::save_history() {
-                    if chat.debug_level > 0 {
-                        print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err), true);
-                    }
-                }
-                break;
-            }
-        };
-
-        let line = match process_repl_command(&mut chat, message, interrupt_sender_for_main.clone(), &mspc_channel, current_model_for_main.clone()).await {
-            ApchatCommandResult::Continue => {
-                continue;
-            }
-            ApchatCommandResult::Break => {
-                break;
-            }
-            ApchatCommandResult::DoInference(line) => {
-                line
-            }
-        };
-
         // ── Inference with interrupt support ───────────────────────────────
-        let cancel_token = tokio_util::sync::CancellationToken::new();
-        {
-            let mut guard = current_token.lock().unwrap();
-            *guard = Some(cancel_token.clone());
-        }
-
-        // Use the tool loop (calls existing API functions directly)
-        let outcome = run_tool_loop(
-            &mut chat,
-            &mut llm_channels,
-            &line,
-            &cancel_token,
-        ).await;
-        
-
-        // Always clear the cancellation token, regardless of outcome
-        {
-            let mut guard = current_token.lock().unwrap();
-            *guard = None;
-        }
-
-        match outcome {
-            InferenceOutcome::Response(response) => {
-                // Log assistant response
-                if let Some(logger) = &mut chat.logger {
-                    logger.log("assistant", &response, None, false).await;
+        if !llm_running {
+            if let Some(input) = queued_messages.pop() {
+                print_heart_yellow(&format!("Got new pending input: {:?}", &input), true);
+                let cancel_token = tokio_util::sync::CancellationToken::new();
+                {
+                    let mut guard = current_token.lock().unwrap();
+                    *guard = Some(cancel_token.clone());
                 }
+                add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
+                total_tokens_start = chat.total_tokens_used;
+                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
+                    llm_running = true;
+                } else {
+                    print_heart_yellow(&format!("Error running inference on: {:?}", &input), true);
+                }
+                
+            }
+        }
 
-                // Broadcast to Webex if enabled
-                if let Some(ref webex) = webex_sink {
-                    if let Err(e) = webex.send_response(&response).await {
-                        print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
+        print_heart_yellow(&format!("Select start"), true);
+        tokio::select! {
+            llm_response_res = llm_channels.response_rx.recv() => {
+                llm_running = false;
+                // Always clear the cancellation token, regardless of outcome
+                {
+                    let mut guard = current_token.lock().unwrap();
+                    *guard = None;
+                }
+                let llm_response = match llm_response_res {
+                    Some(response) => response,
+                    None => {
+                        print_heart_yellow(&format!("{} {}", "❌".bright_red(), "LLM task channel closed unexpectedly"), true);
+                        continue 'outer;
+                        // return InferenceOutcome::Error;
+                    }
+                };
+                let outcome = process_llm_response(&mut chat, &mut llm_channels, llm_response, &mut recent_tool_calls, &mut tool_call_iterations, total_tokens_start).await;
+                match outcome {
+                    InferenceOutcome::Response(response) => {
+                        // Log assistant response
+                        if let Some(logger) = &mut chat.logger {
+                            logger.log("assistant", &response, None, false).await;
+                        }
+
+                        // Broadcast to Webex if enabled
+                        if let Some(ref webex) = webex_sink {
+                            if let Err(e) = webex.send_response(&response).await {
+                                print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
+                            }
+                        }
+                    }
+
+                    InferenceOutcome::Interrupted | InferenceOutcome::Error => {
+                        // Error/interrupted messages were already pushed by run_tool_loop
+                        continue 'outer;
+                    }
+                    InferenceOutcome::ToolsContinue => {
+                        // Should push the request again
+                        let cancel_token = tokio_util::sync::CancellationToken::new();
+                        {
+                            let mut guard = current_token.lock().unwrap();
+                            *guard = Some(cancel_token.clone());
+                        }
+                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
+                            print_heart_yellow(&format!("Started repeat inference"), true);
+                            llm_running = true;
+                        } else {
+                            print_heart_yellow(&format!("Error running repeat inference"), true);
+                        }
                     }
                 }
-
-                // Response display is now handled by run_tool_loop
-                // Just add a separator after streaming output
-                if chat.stream_responses {
-                    print_heart_red(&format!(""), true);
-                }
             }
+            mspc_message = mspc_channel.recv() => {
+                // Wait for next message from the input router
+                let message = match mspc_message {
+                    Some(msg) => msg,
+                    None => {
+                        // Channel closed — normal exit path
+                        print_heart_red(&format!("\n{}", "Goodbye!".bright_cyan()), true);
+                        if let Err(save_err) = apchat_vty::ReadlineInstance::save_history() {
+                            if chat.debug_level > 0 {
+                                print_heart_yellow(&format!("{} Failed to save readline history: {}", "⚠️".yellow(), save_err), true);
+                            }
+                        }
+                        break;
+                    }
+                };
 
-            InferenceOutcome::Interrupted | InferenceOutcome::Error => {
-                // Error/interrupted messages were already pushed by run_tool_loop
-                continue 'outer;
-            }
-            // This should not be reached here.
-            InferenceOutcome::ToolsContinue => todo!()
+                let line = match process_repl_command(&mut chat, message, interrupt_sender_for_main.clone(), &mspc_channel, current_model_for_main.clone()).await {
+                    ApchatCommandResult::Continue => {
+                        continue;
+                    }
+                    ApchatCommandResult::Break => {
+                        break;
+                    }
+                    ApchatCommandResult::DoInference(line) => {
+                        line
+                    }
+                };
+                queued_messages.push(line.to_string());
+            },
         }
+
+        print_heart_yellow(&format!("Select end"), true);
     }
 
     // ── Cleanup ────────────────────────────────────────────────────────────
@@ -391,7 +426,6 @@ async fn add_msg_to_history(
 async fn prep_and_send_request(
     chat: &mut APChat,
     llm_channels: &mut LLMTaskChannels,
-    input: &str,
     cancel_token: &tokio_util::sync::CancellationToken,
 ) -> bool {
     use apchat_vty::print_heart_yellow;
@@ -620,64 +654,6 @@ async fn process_llm_response(
                 return InferenceOutcome::Error;
             }
         }
-}
-
-/// Run the tool-calling loop using the LLM task channels.
-///
-/// This implementation spawns an LLM task and uses it for all API calls,
-/// enabling proper cancellation handling and channel-based communication.
-pub(crate) async fn run_tool_loop(
-    chat: &mut APChat,
-    llm_channels: &mut LLMTaskChannels,
-    input: &str,
-    cancel_token: &tokio_util::sync::CancellationToken,
-) -> InferenceOutcome {
-    use apchat_vty::print_heart_yellow;
-    use apchat_models::Message;
-    use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
-
-    // Tool loop configuration
-    let mut tool_call_iterations = 0;
-    let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
-
-    // Track total tokens for the session
-    let total_tokens_start = chat.total_tokens_used;
-
-    add_msg_to_history(chat, llm_channels, input, cancel_token).await;
-
-    loop {
-        // Check for cancellation
-        if cancel_token.is_cancelled() {
-            print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "Interrupted by user"), true);
-            chat.messages.push(Message {
-                role: "assistant".to_string(),
-                content: "[Interrupted by user]".to_string(),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
-            });
-            return InferenceOutcome::Interrupted;
-        }
-        if !prep_and_send_request(chat, llm_channels, input, cancel_token).await {
-            return InferenceOutcome::Error;
-        }
-
-        // Wait for response from LLM task
-        let llm_response = match llm_channels.response_rx.recv().await {
-            Some(response) => response,
-            None => {
-                print_heart_yellow(&format!("{} {}", "❌".bright_red(), "LLM task channel closed unexpectedly"), true);
-                return InferenceOutcome::Error;
-            }
-        };
-        let outcome = process_llm_response(chat, llm_channels, llm_response, &mut recent_tool_calls, &mut tool_call_iterations, total_tokens_start).await;
-        if outcome == InferenceOutcome::ToolsContinue {
-              continue;
-        }
-        return outcome;
-
-    }
 }
 
 #[cfg(test)]
