@@ -586,6 +586,7 @@ async fn process_llm_response(
 
                     // Execute each tool call
                     for tool_call in &calls {
+                        print_heart_red(&format!("TOOL: {} {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         let tool_result = match chat.execute_tool(
                             &tool_call.function.name,
                             &tool_call.function.arguments,
@@ -597,6 +598,7 @@ async fn process_llm_response(
                                 error_msg
                             }
                         };
+                        print_heart_red(&format!("TOOL-RESULT: {}", &tool_result), true);
 
                         let tool_response_message = Message {
                             role: "tool".to_string(),
