@@ -15,6 +15,7 @@ use apchat_models::ModelColor;
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
+use crate::api::OutputChunk;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::mspc::{MspcChannel, MspcMessage};

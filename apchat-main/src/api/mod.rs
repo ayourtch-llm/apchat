@@ -3,7 +3,7 @@ use apchat_models::{ModelColor, Message, Tool};
 use crate::config::ClientConfig;
 
 /// Parameters needed for a stateless API call
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ApiCallParams {
     pub messages: Vec<Message>,
     pub current_model: ModelColor,
