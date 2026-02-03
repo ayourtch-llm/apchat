@@ -11,15 +11,25 @@ use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
 use apchat_logging::safe_truncate;
 use apchat_toolcore::parse_xml_tool_calls;
+use super::ApiCallParams;
 
-/// Non-streaming API call for Groq-style APIs
+/// Non-streaming API call for Groq-style APIs (convenience wrapper for backward compatibility)
 pub(crate) async fn call_api(
     chat: &APChat,
     orig_messages: &[Message],
 ) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
-    let current_model = chat.current_model.clone();
+    let mut params = ApiCallParams::from_apchat(chat);
+    params.messages = orig_messages.to_vec();
+    call_api_stateless(&params).await
+}
+
+/// Non-streaming API call for Groq-style APIs (stateless version)
+pub(crate) async fn call_api_stateless(
+    params: &ApiCallParams,
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
+    let current_model = params.current_model.clone();
     // Clone messages and strip reasoning field (only supported by some models like Groq)
-    let messages: Vec<Message> = orig_messages.iter().map(|m| {
+    let messages: Vec<Message> = params.messages.iter().map(|m| {
         let mut msg = m.clone();
         msg.reasoning = None; // Strip reasoning field to avoid compatibility issues
         msg
@@ -27,21 +37,21 @@ pub(crate) async fn call_api(
 
     // Check if we need to use the new LlmClient system for Anthropic-compatible APIs
     let should_use_anthropic =
-        (chat.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-        (chat.client_config.get_api_url(ModelColor::GrnModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-        (chat.client_config.get_api_url(ModelColor::RedModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+        (params.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+        (params.client_config.get_api_url(ModelColor::GrnModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+        (params.client_config.get_api_url(ModelColor::RedModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
 
-    if chat.should_show_debug(1) {
+    if params.should_show_debug(1) {
         print_heart_red(&format!("🔧 DEBUG: current_model = {:?}", current_model), true);
         print_heart_red(&format!("🔧 DEBUG: should_use_anthropic = {}", should_use_anthropic), true);
     }
     if should_use_anthropic {
-        if chat.should_show_debug(1) {
+        if params.should_show_debug(1) {
             print_heart_red("🔧 DEBUG: Using call_api_with_llm_client for Anthropic", true);
         }
-        return call_api_with_llm_client(chat, &messages, &current_model).await;
+        return call_api_with_llm_client_stateless(params, &messages, &current_model).await;
     } else {
-        if chat.should_show_debug(1) {
+        if params.should_show_debug(1) {
             print_heart_red("🔧 DEBUG: Using regular OpenAI-style call_api", true);
         }
     }
@@ -82,18 +92,18 @@ pub(crate) async fn call_api(
 
         let request = ChatRequest {
             model: current_model.as_str(
-                chat.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
-                chat.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
-                chat.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
+                params.client_config.get_model_override(ModelColor::BluModel).as_deref().map(|x| x.as_str()),
+                params.client_config.get_model_override(ModelColor::GrnModel).as_deref().map(|x| x.as_str()),
+                params.client_config.get_model_override(ModelColor::RedModel).as_deref().map(|x| x.as_str())
             ).to_string(),
             messages: converted_messages,
-            tools: chat.get_tools(),
+            tools: params.tools.clone(),
             tool_choice: "auto".to_string(),
             stream: None,
         };
 
         // Get the appropriate API URL based on the current model
-        let api_url = crate::config::get_api_url(&chat.client_config, &current_model);
+        let api_url = crate::config::get_api_url(&params.client_config, &current_model);
 
         // Capture request timestamp for response logging correlation
         let request_timestamp = std::time::SystemTime::now()
@@ -102,14 +112,13 @@ pub(crate) async fn call_api(
             .as_secs();
 
         // Log request details in verbose mode
-        log_request(&api_url, &request, &chat.api_key, chat.verbose);
+        log_request(&api_url, &request, &params.api_key, params.verbose);
 
         // Log request to file for persistent debugging
-        let _ = log_request_to_file(&api_url, &request, &current_model, &chat.api_key);
+        let _ = log_request_to_file(&api_url, &request, &current_model, &params.api_key);
 
-        let api_key = crate::config::get_api_key(&chat.client_config, &chat.api_key, &current_model);
-        let response = chat
-            .client
+        let api_key = crate::config::get_api_key(&params.client_config, &params.api_key, &current_model);
+        let response = params.http_client
             .post(&api_url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -144,7 +153,7 @@ pub(crate) async fn call_api(
             let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
 
             // Log error response in verbose mode
-            log_response(&status, &headers, &error_body, chat.verbose);
+            log_response(&status, &headers, &error_body, params.verbose);
             let _ = log_response_to_file(&status, &headers, &error_body, request_timestamp, &current_model);
             let _ = log_raw_response_to_file(&error_body, request_timestamp, &current_model);
 
@@ -174,7 +183,7 @@ pub(crate) async fn call_api(
         let response_text = response.text().await?;
 
         // Log successful response in verbose mode
-        log_response(&status, &headers, &response_text, chat.verbose);
+        log_response(&status, &headers, &response_text, params.verbose);
         let _ = log_response_to_file(&status, &headers, &response_text, request_timestamp, &current_model);
         let _ = log_raw_response_to_file(&response_text, request_timestamp, &current_model);
 
@@ -202,19 +211,29 @@ pub(crate) async fn call_api(
     }
 }
 
-/// Call API using the new LlmClient system (for Anthropic and llama.cpp backends)
+/// Call API using the new LlmClient system (for Anthropic and llama.cpp backends) - convenience wrapper
 pub(crate) async fn call_api_with_llm_client(
     chat: &APChat,
     messages: &[Message],
     model: &ModelColor,
 ) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
-    if chat.should_show_debug(1) {
+    let params = ApiCallParams::from_apchat(chat);
+    call_api_with_llm_client_stateless(&params, messages, model).await
+}
+
+/// Call API using the new LlmClient system (for Anthropic and llama.cpp backends) - stateless version
+pub(crate) async fn call_api_with_llm_client_stateless(
+    params: &ApiCallParams,
+    messages: &[Message],
+    model: &ModelColor,
+) -> Result<(Message, Option<Usage>, ModelColor, Option<String>)> {
+    if params.should_show_debug(1) {
         print_heart_red(&format!("🔧 DEBUG: call_api_with_llm_client called with model: {:?}", model), true);
     }
-    if chat.should_show_debug(2) {
-        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(BluModel): {:?}", chat.client_config.get_api_url(ModelColor::BluModel)), true);
-        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(GrnModel): {:?}", chat.client_config.get_api_url(ModelColor::GrnModel)), true);
-        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(RedModel): {:?}", chat.client_config.get_api_url(ModelColor::RedModel)), true);
+    if params.should_show_debug(2) {
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(BluModel): {:?}", params.client_config.get_api_url(ModelColor::BluModel)), true);
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(GrnModel): {:?}", params.client_config.get_api_url(ModelColor::GrnModel)), true);
+        print_heart_red(&format!("🔧 DEBUG: client_config.get_api_url(RedModel): {:?}", params.client_config.get_api_url(ModelColor::RedModel)), true);
     }
 
     // Convert old Message format to new ChatMessage format
@@ -238,7 +257,7 @@ pub(crate) async fn call_api_with_llm_client(
     }).collect();
 
     // Convert tools to the new format
-    let tools: Vec<ToolDefinition> = chat.get_tools().into_iter().map(|tool| {
+    let tools: Vec<ToolDefinition> = params.tools.clone().into_iter().map(|tool| {
         ToolDefinition {
             name: tool.function.name,
             description: tool.function.description,
@@ -249,8 +268,8 @@ pub(crate) async fn call_api_with_llm_client(
     // Create the appropriate LlmClient using the centralized helper
     let llm_client = crate::config::create_client_for_model_color(
         model,
-        &chat.client_config,
-        &chat.api_key,
+        &params.client_config,
+        &params.api_key,
     );
 
     // Make the API call
