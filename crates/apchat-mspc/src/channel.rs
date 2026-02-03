@@ -24,6 +24,11 @@ pub enum MspcMessage {
     Command(String, Option<String>),         // Content, Sender
     ToolResult(String, Option<String>),      // Content, Sender
     Error(String, Option<String>),           // Content, Sender
+    EmojiText {
+        emoji: String,
+        content: String,
+        newline: bool,
+    },
 }
 
 /// Pair of user and agent messages for history
