@@ -14,6 +14,7 @@ use chrono::prelude::*;
 use apchat_mspc::MspcMessage;
 use apchat_mspc::output::TextOutput;
 use crate::scroll_insert_up;
+use crate::request_counter;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -1650,7 +1651,7 @@ impl Readline {
 	    self.cursor_offset_from_bottom += 1;
 	    stdout.queue(MoveToColumn(0)).ok();
             let local_time = &Local::now().time().to_string()[0..8];
-            let mut title = format!("User entry lines: {}, time: {}", self.lines.len(), &local_time);
+            let mut title = format!("User entry lines: {}, time: {} req: {}", self.lines.len(), &local_time, request_counter::get_count());
             while title.len() < screen_width {
                title.push(' ');
             }

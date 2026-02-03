@@ -49,13 +49,11 @@ pub mod request_counter {
     /// Increment the request counter
     fn increment() {
         ACTIVE_REQUESTS.fetch_add(1, Ordering::Relaxed);
-println!("REQ: {:?}", ACTIVE_REQUESTS);
     }
 
     /// Decrement the request counter
     fn decrement() {
         ACTIVE_REQUESTS.fetch_sub(1, Ordering::Relaxed);
-println!("DEQ: {:?}", ACTIVE_REQUESTS);
     }
 
     /// RAII guard that automatically increments the counter on creation

@@ -26,6 +26,7 @@ use crate::app::repl::llm_task::spawn_llm_task;
 
 use commands::CommandResult;
 use inference::InferenceOutcome;
+use apchat_vty::request_counter::RequestGuard;
 
 /// Get the display name for a model color from client config.
 ///
@@ -178,6 +179,7 @@ pub async fn run_repl_mode(
     let mut queued_messages: Vec<String> = vec![];
 
     let mut llm_running = false;
+    let mut request_guard = None;
     // Tool loop configuration
     let mut tool_call_iterations = 0;
     let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
@@ -198,6 +200,7 @@ pub async fn run_repl_mode(
                 total_tokens_start = chat.total_tokens_used;
                 if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
                     llm_running = true;
+                    request_guard = Some(RequestGuard::new());
                 } else {
                     print_heart_yellow(&format!("Error running inference on: {:?}", &input), true);
                 }
@@ -209,6 +212,7 @@ pub async fn run_repl_mode(
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
                 llm_running = false;
+                request_guard = None;
                 // Always clear the cancellation token, regardless of outcome
                 {
                     let mut guard = current_token.lock().unwrap();
@@ -252,6 +256,7 @@ pub async fn run_repl_mode(
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
                             print_heart_yellow(&format!("Started repeat inference"), true);
                             llm_running = true;
+                            request_guard = Some(RequestGuard::new());
                         } else {
                             print_heart_yellow(&format!("Error running repeat inference"), true);
                         }
