@@ -174,7 +174,7 @@ mod tests {
         chat.messages.push(create_test_tool_message(
             "assistant", 
             "I'll help you with that", 
-            "read_file", 
+            "peek_file_top_10_lines", 
             "{\"file_path\":\"src/main.rs\"}"
         ));
         chat.messages.push(create_test_message(

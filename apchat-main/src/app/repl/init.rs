@@ -236,7 +236,7 @@ fn parse_idle_config(cli: &Cli) -> Result<Option<IdleConfig>> {
 }
 
 async fn load_project_context(chat: &mut APChat) {
-    let kimi_context = if let Ok(kimi_content) = chat.read_file("apchat.md") {
+    let kimi_context = if let Ok(kimi_content) = chat.peek_file_top_10_lines("apchat.md") {
         print_heart_red(&format!("{} {}", "📖".bright_cyan(), "Reading project context from apchat.md...".bright_black()), true);
         kimi_content
     } else {

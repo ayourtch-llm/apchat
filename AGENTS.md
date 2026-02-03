@@ -220,21 +220,21 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
 ### 2. File Manager Agent (`file_manager.json`)
 - **Role**: File operations specialist
 - **Model**: blu_model
-- **Tools**: read_file, write_file, edit_file, open_file, list_files, read_pdf, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
+- **Tools**: peek_file_top_10_lines, write_file, edit_file, open_file, list_files, read_pdf, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
 - **Purpose**: Reading, writing, and organizing files efficiently
 - **Skills**: Must use test-driven-development for code changes
 
 ### 3. Code Analyzer Agent (`code_analyzer.json`)
 - **Role**: Code analysis and architecture review
 - **Model**: grn_model
-- **Tools**: read_file, open_file, list_files, search_files, request_more_iterations, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
+- **Tools**: peek_file_top_10_lines, open_file, list_files, search_files, request_more_iterations, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
 - **Permissions**: Read-only file access, no command execution
 - **Purpose**: Understanding code structure, patterns, and architecture
 
 ### 4. Code Reviewer Agent (`code_reviewer.json`)
 - **Role**: Senior code reviewer
 - **Model**: blu_model
-- **Tools**: read_file, open_file, list_files, search_files, run_command, request_more_iterations, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
+- **Tools**: peek_file_top_10_lines, open_file, list_files, search_files, run_command, request_more_iterations, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
 - **Permissions**: Read-only file access, limited command execution (git, cargo, npm, pytest, go)
 - **Skills**: MANDATORY: requesting-code-review, receiving-code-review
 - **Purpose**: Review completed work against plans and ensure quality standards
@@ -255,7 +255,7 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
 ### 7. Terminal Specialist Agent (`terminal_specialist.json`)
 - **Role**: PTY session management specialist
 - **Model**: blu_model
-- **Tools**: 11 PTY tools (pty_launch, pty_send_keys, pty_get_screen, pty_list, pty_kill, pty_get_cursor, pty_resize, pty_set_scrollback, pty_start_capture, pty_stop_capture, pty_request_user_input), read_file, open_file, list_files, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
+- **Tools**: 11 PTY tools (pty_launch, pty_send_keys, pty_get_screen, pty_list, pty_kill, pty_get_cursor, pty_resize, pty_set_scrollback, pty_start_capture, pty_stop_capture, pty_request_user_input), peek_file_top_10_lines, open_file, list_files, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
 - **Permissions**: Read-only file access, all command execution
 - **Purpose**: Managing interactive terminal sessions and executing commands that require persistent shell environments
 

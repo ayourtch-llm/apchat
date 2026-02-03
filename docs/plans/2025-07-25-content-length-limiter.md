@@ -739,7 +739,7 @@ Expected: All existing tests pass
 
 Create a test script that:
 1. Creates a large file (>20,000 characters)
-2. Uses the read_file tool to read it
+2. Uses the peek_file_top_10_lines tool to read it
 3. Verifies the output is truncated with a note
 4. Verifies the full content is saved to `.apchat-large-outputs/`
 5. Verifies the note contains the correct file path

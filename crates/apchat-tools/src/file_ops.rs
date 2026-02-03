@@ -51,11 +51,11 @@ pub struct ReadFileTool;
 #[async_trait]
 impl Tool for ReadFileTool {
     fn name(&self) -> &str {
-        "read_file"
+        "peek_file_top_10_lines"
     }
 
     fn description(&self) -> &str {
-        "Read a preview of a file (first 10 lines) with total line count. For reading specific line ranges or more lines, use open_file instead."
+        "Peek at the top 10 lines of a file with total line count. For reading specific line ranges or more lines, use open_file instead."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
@@ -70,7 +70,7 @@ impl Tool for ReadFileTool {
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
-        // Use the same logic as the original read_file method
+        // Use the same logic as the original peek_file_top_10_lines method
         let full_path = context.work_dir.join(&file_path);
         if !full_path.exists() {
             // Check for directory with similar name

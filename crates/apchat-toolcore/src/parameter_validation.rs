@@ -306,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn test_read_file_tool_schema() {
+    fn test_peek_file_top_10_lines_tool_schema() {
         let schema = create_tool_schema(vec![
             ("file_path".to_string(), ParameterDefinition {
                 param_type: "string".to_string(),
@@ -322,7 +322,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "max_line_count": 100}"#);
+        let tool_call = create_tool_call("peek_file_top_10_lines", r#"{"file_path": "test.txt", "max_line_count": 100}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());

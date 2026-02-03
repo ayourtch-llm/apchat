@@ -181,7 +181,7 @@ touch agents/configs/my_specialist.json
   "version": "1.0.0",
   "model": "grn_model",
   "tools": [
-    "read_file",
+    "peek_file_top_10_lines",
     "write_file",
     "search_files",
     "load_skill",
@@ -224,7 +224,7 @@ touch agents/configs/my_specialist.json
 #### Available Tools
 
 **File Operations:**
-- `read_file` - Read file contents
+- `peek_file_top_10_lines` - Read file contents
 - `write_file` - Create or overwrite files
 - `edit_file` - Make targeted edits
 - `open_file` - Read with line ranges
@@ -395,7 +395,7 @@ Total agent configurations available: 7
 {
   "name": "file_manager",
   "tools": [
-    "read_file",
+    "peek_file_top_10_lines",
     "write_file",
     "edit_file",
     "list_files",
@@ -500,7 +500,7 @@ agents/configs/
   "version": "1.0.0",
   "model": "grn_model",
   "tools": [
-    "read_file",
+    "peek_file_top_10_lines",
     "write_file",
     "edit_file",
     "list_files",

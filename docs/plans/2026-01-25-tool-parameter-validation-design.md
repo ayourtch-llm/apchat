@@ -146,7 +146,7 @@ ToolCall → JSON validation (existing) → parameter name validation (new) → 
 
 Use real tool schemas for testing:
 - `open_file` tool (parameters: file_path, start_line, end_line, max_line_count)
-- `read_file` tool (parameters: file_path, max_line_count)
+- `peek_file_top_10_lines` tool (parameters: file_path, max_line_count)
 - `search_files` tool (parameters: pattern, max_results)
 
 ---

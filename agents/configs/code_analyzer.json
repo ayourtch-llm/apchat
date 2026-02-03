@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "model": "grn_model",
   "tools": [
-    "read_file",
+    "peek_file_top_10_lines",
     "open_file",
     "list_files",
     "search_files",

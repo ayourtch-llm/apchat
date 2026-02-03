@@ -99,7 +99,7 @@ let system_content = format!(
     - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
     - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\
     Available tools (use ONLY these exact names):\n\
-    - read_file: Read file contents\n\
+    - peek_file_top_10_lines: Read file contents\n\
     - write_file: Write/create a file\n\
     - edit_file: Edit existing file by replacing content\n\
     - list_files: List files (single-level patterns only, no **)\n\
@@ -124,7 +124,7 @@ if let Some(sys_msg) = messages.first_mut() {
     - kimi (Kimi-K2-Instruct-0905): Good for general tasks, coding, and quick responses\n\
     - gpt-oss (GPT-OSS-120B): Good for complex reasoning, analysis, and advanced problem-solving\n\
     Available tools (use ONLY these exact names):\n\
-    - read_file: Read file contents\n\
+    - peek_file_top_10_lines: Read file contents\n\
     - write_file: Write/create a file\n\
     - edit_file: Edit existing file by replacing content\n\
     - list_files: List files (single-level patterns only, no **)\n\

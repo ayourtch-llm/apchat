@@ -232,7 +232,7 @@ MOBILE VIEW:
 **Tool Call (indented, bordered):**
 ```
 ┌────────────────────────────────────┐
-│ 🔧 Tool: read_file                 │
+│ 🔧 Tool: peek_file_top_10_lines                 │
 │                                    │
 │ Arguments:                         │
 │ {                                  │

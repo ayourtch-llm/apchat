@@ -22,7 +22,7 @@ Successfully created a comprehensive test suite with 20 test cases covering all 
 
 - Created `crates/apchat-toolcore/tests/parameter_validation_tests.rs` test file
 - Implemented 20 comprehensive test cases
-- Tested with real tool schemas (open_file, read_file, search_files, write_file)
+- Tested with real tool schemas (open_file, peek_file_top_10_lines, search_files, write_file)
 - Covered all validation scenarios and edge cases
 
 ## Key Changes Made
@@ -67,7 +67,7 @@ All 20 tests passed successfully:
 - ✅ test_valid_tool_call_with_all_required_params
 - ✅ test_valid_tool_call_with_optional_params
 - ✅ test_valid_tool_call_with_only_optional_params
-- ✅ test_read_file_valid_call
+- ✅ test_peek_file_top_10_lines_valid_call
 - ✅ test_search_files_valid_call
 - ✅ test_write_file_valid_call
 - ✅ test_missing_required_parameter_single

@@ -119,7 +119,7 @@
 
 #### Lines 1191-1199: Read File
 - **Destination**: `src/tools_execution/executor.rs`
-- **Content**: `read_file()` - 8 lines
+- **Content**: `peek_file_top_10_lines()` - 8 lines
 
 #### Lines 1201-1234: Switch Model
 - **Destination**: `src/chat/session.rs`

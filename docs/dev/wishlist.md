@@ -2,7 +2,7 @@
 
 The current assistant has the following built‑in tools:
 
-- `read_file`
+- `peek_file_top_10_lines`
 - `write_file`
 - `edit_file`
 - `list_files`

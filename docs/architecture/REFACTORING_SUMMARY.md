@@ -183,7 +183,7 @@ The `src/main.rs` file now contains (420 lines):
   - `set_debug_level()`, `get_debug_level()`, `should_show_debug()` - Debug helpers
   - `get_tools()` - Tool registry access
   - `process_with_agents()` - Agent system orchestration
-  - `read_file()` - File reading
+  - `peek_file_top_10_lines()` - File reading
   - `switch_model()` - Model switching
   - `save_state()`, `load_state()` - State persistence (delegates to `chat::state`)
   - `execute_tool()` - Tool execution

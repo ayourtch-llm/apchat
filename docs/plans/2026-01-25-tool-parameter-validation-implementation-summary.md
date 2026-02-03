@@ -28,7 +28,7 @@ Successfully implemented tool parameter validation according to the design docum
 2. **`crates/apchat-toolcore/tests/parameter_validation_tests.rs`**
    - Comprehensive test suite with 20 test cases
    - Covers all validation scenarios and edge cases
-   - Tests with real tool schemas (open_file, read_file, search_files, write_file)
+   - Tests with real tool schemas (open_file, peek_file_top_10_lines, search_files, write_file)
 
 3. **Issue Files**
    - `docs/issues/open/107-tool-parameter-validation-module.md`

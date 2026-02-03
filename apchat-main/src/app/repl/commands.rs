@@ -152,7 +152,8 @@ fn cmd_history(chat: &APChat) -> CommandResult {
 
         // Truncate content to 80 chars to leave room for tool indicator
         let content_preview = if msg.content.len() > 80 {
-            format!("{}...", &msg.content[..77])
+            let content: String = msg.content.chars().take(77).collect();
+            format!("{}...", &content)
         } else {
             msg.content.clone()
         };

@@ -15,7 +15,7 @@
     "pty_start_capture",
     "pty_stop_capture",
     "pty_request_user_input",
-    "read_file",
+    "peek_file_top_10_lines",
     "open_file",
     "list_files",
     "load_skill",

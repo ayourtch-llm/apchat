@@ -100,7 +100,7 @@ This document provides concrete examples of the WebSocket protocol messages and 
   "type": "ToolCallRequest",
   "data": {
     "tool_call_id": "call_abc123",
-    "name": "read_file",
+    "name": "peek_file_top_10_lines",
     "arguments": {
       "file_path": "README.md"
     },
@@ -330,7 +330,7 @@ This document provides concrete examples of the WebSocket protocol messages and 
     "recoverable": true,
     "context": {
       "tool_call_id": "call_xyz789",
-      "tool_name": "read_file"
+      "tool_name": "peek_file_top_10_lines"
     }
   }
 }

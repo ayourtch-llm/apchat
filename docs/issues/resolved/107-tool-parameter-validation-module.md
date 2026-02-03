@@ -62,7 +62,7 @@ Format: `"Tool '{tool_name}' has invalid parameter '{invalid_param}'. Available:
 - Extra/invalid parameters
 - Valid optional parameters
 - Mixed case errors
-- Real tool schemas (open_file, read_file, search_files)
+- Real tool schemas (open_file, peek_file_top_10_lines, search_files)
 - Edge cases (empty arguments, null values)
 
 ## Test Results
@@ -73,7 +73,7 @@ All 10 tests passed successfully:
 - ✅ test_extra_invalid_parameter
 - ✅ test_valid_optional_parameters
 - ✅ test_mixed_case_invalid_and_missing
-- ✅ test_read_file_tool_schema
+- ✅ test_peek_file_top_10_lines_tool_schema
 - ✅ test_search_files_tool_schema
 - ✅ test_empty_arguments
 - ✅ test_arguments_with_null_values

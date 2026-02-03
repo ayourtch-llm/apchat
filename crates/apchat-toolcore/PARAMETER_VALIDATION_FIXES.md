@@ -58,7 +58,7 @@ Added comprehensive test coverage including:
 - Invalid/extra parameters
 - Mixed invalid and missing parameters
 - Optional parameters with null values
-- Specific tool scenarios (read_file, search_files, write_file)
+- Specific tool scenarios (peek_file_top_10_lines, search_files, write_file)
 - Edge cases (empty arguments, null values, empty strings, numbers, booleans, arrays, nested objects)
 - Default values handling
 

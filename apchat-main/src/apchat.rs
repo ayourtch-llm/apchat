@@ -252,7 +252,7 @@ impl APChat {
         }).collect()
     }
 
-    pub fn read_file(&self, file_path: &str) -> Result<String> {
+    pub fn peek_file_top_10_lines(&self, file_path: &str) -> Result<String> {
         let full_path = self.work_dir.join(file_path);
         let content = fs::read_to_string(&full_path)
             .with_context(|| format!("Failed to read file: {}", full_path.display()))?;
