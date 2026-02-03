@@ -69,6 +69,70 @@ pub use request_counter::{RequestGuard, get_count};
 
 use std::io::{self, Write};
 
+/// Scrolls content upward by inserting a blank line at the specified position.
+///
+/// This function saves the current cursor position, moves up the specified number
+/// of lines, inserts a blank line (pushing existing content down), prints the
+/// provided text on that new line, and then restores the original cursor position.
+///
+/// # ANSI Escape Sequences Used
+/// - `\x1b[s` - Save cursor position
+/// - `\x1b[nA` - Move cursor up N lines
+/// - `\x1b[L` - Insert lines (push content down)
+/// - `\x1b[u` - Restore cursor position
+///
+/// # Arguments
+/// * `lines_up` - How many lines up from the current cursor position to insert the new line
+/// * `text` - The text to print on the newly inserted line
+///
+/// # Platform
+/// This function is only available on Unix-like systems (Linux, macOS, BSD).
+///
+/// # Example
+/// ```ignore,no_run
+/// use apchat_vty::scroll_insert_up;
+///
+/// // This will move up 5 lines from current position, insert a blank line,
+/// // print "New content 1" there, and restore cursor position
+/// scroll_insert_up(5, "New content 1");
+///
+/// // You can use this in a loop for a scrolling effect:
+/// for i in 1..=25 {
+///     scroll_insert_up(5, &format!("I: {}", i));
+///     std::thread::sleep(std::time::Duration::from_millis(500));
+/// }
+/// ```
+#[cfg(unix)]
+pub fn scroll_insert_up(lines_up: u16, text: &str) {
+    // Save cursor position
+    print!("\x1b[s");
+
+    // Move to the bottom of the screen (scroll if needed)
+    print!("\x1b[999;1H");
+    println!("");
+
+    // Restore cursor position
+    print!("\x1b[u");
+
+    // Save cursor position again
+    print!("\x1b[s");
+
+    // Move up the specified number of lines
+    print!("\x1b[{}A", lines_up);
+
+    // Insert a line (push content down)
+    print!("\x1b[L");
+
+    // Print the text on the newly inserted line
+    println!("{}", text);
+
+    // Flush output to ensure immediate display
+    let _ = io::stdout().flush();
+
+    // Restore original cursor position
+    print!("\x1b[u");
+}
+
 /// Prints text with a red heart emoji (❤️) prepended to each line.
 ///
 /// # Arguments
