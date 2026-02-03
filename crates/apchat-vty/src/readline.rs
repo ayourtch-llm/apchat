@@ -13,6 +13,7 @@ use chrono::prelude::*;
 
 use apchat_mspc::MspcMessage;
 use apchat_mspc::output::TextOutput;
+use crate::scroll_insert_up;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -1643,7 +1644,7 @@ impl Readline {
             stdout.queue(MoveUp(1)).ok();
             self.cursor_offset_from_bottom += 1;
         }
-        let draw_title_bar = false;
+        let draw_title_bar = true;
         if draw_title_bar {
 	    stdout.queue(MoveUp(1)).ok();
 	    self.cursor_offset_from_bottom += 1;
@@ -2171,6 +2172,10 @@ impl Readline {
         // Display the initial prompt
         self.redraw(prompt);
 
+        let mut curr_output_data = format!("");
+        let COUNTDOWN = 10;
+        let mut counter = COUNTDOWN;
+
         // Main event loop
         loop {
             // Poll for events with 100ms timeout
@@ -2189,12 +2194,14 @@ impl Readline {
                             }
                             KeyResult::Return(result) => {
                                 // Redraw to clear the line before returning
+                                /*
                                 let mut stdout = std::io::stdout();
                                 stdout.queue(MoveToColumn(0)).ok();
                                 stdout
                                     .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
                                     .ok();
                                 stdout.flush().ok();
+                                */
                                 return Ok(result);
                             }
                         }
@@ -2209,6 +2216,11 @@ impl Readline {
                         // Ignore other events (mouse, resize, focus, etc.)
                     }
                 }
+            }
+            counter -= 1;
+            if counter == 0 {
+                self.redraw(prompt);
+                counter = COUNTDOWN;
             }
 
             // Timeout occurred - check MPSC signals if receiver provided
@@ -2233,23 +2245,12 @@ impl Readline {
                             let mut stdout = std::io::stdout();
                             // Save cursor position
                             let _ = self.cursor();
+                            panic!("Emoji text not handled here");
+                            /*
                             // Clear the current line
                             stdout.queue(MoveToColumn(0)).ok();
                             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-                            // Print emoji text
-                            if !emoji.is_empty() && !content.is_empty() {
-                                if *newline {
-                                    writeln!(stdout, "{} {}", emoji, content).ok();
-                                } else {
-                                    write!(stdout, "{} {}", emoji, content).ok();
-                                }
-                            } else if !content.is_empty() {
-                                if *newline {
-                                    writeln!(stdout, "{}", content).ok();
-                                } else {
-                                    write!(stdout, "{}", content).ok();
-                                }
-                            }
+                            */
                             stdout.flush().ok();
                             // Restore cursor position and redraw prompt
                             self.redraw(prompt);
@@ -2281,20 +2282,23 @@ impl Readline {
                     // Save cursor position
                     let _ = self.cursor();
                     // Clear the current line
-                    stdout.queue(MoveToColumn(0)).ok();
-                    stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-                    // Print emoji text
-                    if !emoji.is_empty() && !content.is_empty() {
-                        if newline {
-                            writeln!(stdout, "{} {}", emoji, content).ok();
-                        } else {
-                            write!(stdout, "{} {}", emoji, content).ok();
-                        }
-                    } else if !content.is_empty() {
-                        if newline {
-                            writeln!(stdout, "{}", content).ok();
-                        } else {
-                            write!(stdout, "{}", content).ok();
+                    //stdout.queue(MoveToColumn(0)).ok();
+                    //stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
+
+                    /* Split the output into lines, and scroll up as needed */
+                    let lines: Vec<String> = content.split('\n').map(String::from).collect();
+                    if lines.len() > 0 {
+                        for (i, ref line) in lines.iter().enumerate() {
+                            curr_output_data.push_str(&line);
+                            if i < lines.len() - 1 {
+                              scroll_insert_up(2, &curr_output_data, true);
+                              curr_output_data =  format!("");
+                            } else {
+                                scroll_insert_up(2, &curr_output_data, newline);
+                                if newline {
+                                    curr_output_data = format!("");
+                                }
+                            }
                         }
                     }
                     stdout.flush().ok();

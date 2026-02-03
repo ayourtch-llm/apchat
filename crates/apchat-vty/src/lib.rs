@@ -117,37 +117,53 @@ use std::io::{self, Write};
 /// }
 /// ```
 #[cfg(unix)]
-pub fn scroll_insert_up(lines_up: u16, text: &str) {
+pub fn scroll_insert_up(lines_up: u16, text: &str, scroll_up: bool) {
     use crossterm::{cursor, QueueableCommand, execute};
 
     // Save cursor position
-    let _ = execute!(io::stdout(), cursor::SavePosition);
+    // let _ = execute!(io::stdout(), cursor::SavePosition);
+    print!("\x1b[s");
 
-    // Move to the bottom of the screen (scroll if needed)
-    let _ = execute!(io::stdout(), cursor::MoveTo(999, 1));
-    println!("");
+    print!("\x1b[{}A", lines_up);
+    let _ = io::stdout().flush();
+    println!("\r{}", text);
 
-    // Restore cursor position
-    let _ = execute!(io::stdout(), cursor::RestorePosition);
+    if scroll_up {
+      // Move to the bottom of the screen (scroll if needed)
+      // let _ = execute!(io::stdout(), cursor::MoveTo(999, 1));
+      print!("\x1b[999;1H");
+      println!("");
 
-    // Save cursor position again
-    let _ = execute!(io::stdout(), cursor::SavePosition);
+      // Restore cursor position
+      // let _ = execute!(io::stdout(), cursor::RestorePosition);
+
+      // Save cursor position again
+      // let _ = execute!(io::stdout(), cursor::SavePosition);
+      print!("\x1b[u");
+      print!("\x1b[s");
+    }
 
     // Move up the specified number of lines
-    let _ = execute!(io::stdout(), cursor::MoveUp(lines_up));
+    // let _ = execute!(io::stdout(), cursor::MoveUp(lines_up));
+    print!("\x1b[{}A", lines_up);
+    let _ = io::stdout().flush();
 
     // Insert a line (push content down) - using direct ANSI escape since
     // crossterm doesn't provide an InsertLines command
-    print!("\x1b[L");
+    if scroll_up {
+      print!("\x1b[L");
+    }
+    let _ = io::stdout().flush();
 
     // Print the text on the newly inserted line
-    println!("{}", text);
+    // println!("{}", text);
 
     // Flush output to ensure immediate display
     let _ = io::stdout().flush();
 
     // Restore original cursor position
-    let _ = execute!(io::stdout(), cursor::RestorePosition);
+    // let _ = execute!(io::stdout(), cursor::RestorePosition);
+    print!("\x1b[u");
 }
 
 /// Prints text with a red heart emoji (❤️) prepended to each line.
