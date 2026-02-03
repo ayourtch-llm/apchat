@@ -202,6 +202,8 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                             }
                         } else {
                             print_heart_yellow(&format!("{} Malformed JSON for tool {}: {}", "⚠️".red(), tool_call.function.name, e), true);
+                            tool_call.function.arguments = "{}".to_string();
+                            fixed_any = true;
                         }
                     }
                 }
