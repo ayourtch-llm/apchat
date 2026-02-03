@@ -62,7 +62,7 @@ The tool handles the following error scenarios:
 The `llm_oneshot` tool can be combined with file operations tools:
 
 ```xml
-<tool_call name="open_file">
+<tool_call name="read_file">
   <parameter name="file_path">src/lib.rs</parameter>
 </tool_call>
 

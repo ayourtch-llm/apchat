@@ -4,7 +4,7 @@ This directory contains best practice guides for using the available tools effic
 
 ## Available Guides
 
-- **[open_file_usage.md](open_file_usage.md)** - Critical guide for reading files efficiently
+- **[read_file_usage.md](read_file_usage.md)** - Critical guide for reading files efficiently
   - **Must read!** Explains why you should use 20-line chunks
   - Shows how to avoid tool call overhead and truncation issues
 
@@ -27,7 +27,7 @@ Reading files efficiently is crucial because:
 ## Recommended Reading Order
 
 1. Start with **file_reading_quick_reference.md** for immediate guidance
-2. Read **open_file_usage.md** for detailed best practices
+2. Read **read_file_usage.md** for detailed best practices
 3. Review **curly_glance_usage.md** for advanced exploration techniques
 
 ## Need More Help?

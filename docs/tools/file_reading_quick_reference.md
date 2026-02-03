@@ -5,7 +5,7 @@
 ### For Large Files (>50 lines):
 ```bash
 # Always use chunked reading
-open_file {
+read_file {
   "file_path": "src/main.rs",
   "max_line_count": 20,
   "start_line": 100  # Optional: start from specific line
@@ -15,7 +15,7 @@ open_file {
 ### For Small Files (<50 lines):
 ```bash
 # Full read is fine
-open_file {
+read_file {
   "file_path": "src/config.toml"
 }
 ```
@@ -24,7 +24,7 @@ open_file {
 ```bash
 file_curly_glance {"file_path": "src/main.rs"}  # Get structure
 file_curly_glance {"file_path": "src/main.rs", "starting_line": 42}  # Drill down
-open_file {"file_path": "src/main.rs", "start_line": 42, "max_line_count": 25}  # Read chunk
+read_file {"file_path": "src/main.rs", "start_line": 42, "max_line_count": 25}  # Read chunk
 ```
 
 ## ⚠️ Why This Matters
@@ -37,5 +37,5 @@ open_file {"file_path": "src/main.rs", "start_line": 42, "max_line_count": 25}  
 ## 💡 Pro Tip
 
 Create aliases in your mind for common patterns:
-- `read_chunk(path, start=0, count=20)` → use `open_file` with params
+- `read_chunk(path, start=0, count=20)` → use `read_file` with params
 - `search_section(path, keyword)` → use `search_files`, then `read_chunk`

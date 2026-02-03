@@ -6,7 +6,7 @@
   "tools": [
     "run_command",
     "peek_file_top_10_lines",
-    "open_file",
+    "read_file",
     "edit_file",
     "plan_edits",
     "apply_edit_plan",

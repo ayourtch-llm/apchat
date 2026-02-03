@@ -5,7 +5,7 @@
   "model": "blu_model",
   "tools": [
     "peek_file_top_10_lines",
-    "open_file",
+    "read_file",
     "list_files",
     "search_files",
     "run_command",

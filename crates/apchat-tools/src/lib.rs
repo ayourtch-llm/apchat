@@ -15,7 +15,7 @@ pub mod helpers;
 pub mod skill_tools;
 pub mod todo_tools;
 pub mod terminal_tools;
-pub mod open_file;
+pub mod read_file;
 pub mod subagent_tools;
 pub mod web;
 

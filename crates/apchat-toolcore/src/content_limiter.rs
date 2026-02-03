@@ -69,7 +69,7 @@ impl ContentLimiter {
 
         // Create truncated content with note
         let truncated_content = format!("🚨 LARGE OUTPUT TRUNCATED 🚨
-Output from '{}' exceeds maximum display length ({} chars). IMPORTANT: If a tool allows to limit the size of reply, like using max_read_lines parameter in open_file tool - do it.
+Output from '{}' exceeds maximum display length ({} chars). IMPORTANT: If a tool allows to limit the size of reply, like using max_read_lines parameter in read_file tool - do it.
 Full output saved to: {}",
                                        tool_name,
                                        self.config.max_content_length,
@@ -77,7 +77,7 @@ Full output saved to: {}",
         
         // Add note about how to inspect the output
         let note = Some(format!("\n💡 TO INSPECT FULL OUTPUT:
-Use the `open_file` tool with the file path shown above, or manually open:
+Use the `read_file` tool with the file path shown above, or manually open:
   {}",
                                file_path.display()));
 

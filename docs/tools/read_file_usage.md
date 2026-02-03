@@ -5,29 +5,29 @@
 Built-in content limiter will redirect the output to the file if it exceeds 20000 characters.
 Be strategic about what you request.
 
-## open_file Tool
+## read_file Tool
 
 ### IMPORTANT: Use 40-line chunks for large files!
 
-**Do NOT read entire large files at once.** The `open_file` tool 
+**Do NOT read entire large files at once.** The `read_file` tool 
 WILL refuse to give you the output if it exceeds 20000 bytes. Same thing for all the other tools.
 
 ### Recommended Usage Pattern
 
 ```rust
 // ❌ BAD - Reads entire file (potential issues above)
-open_file {
+read_file {
   "file_path": "src/main.rs"
 }
 
 // ✅ GOOD - Read in 40-line chunks
-open_file {
+read_file {
   "file_path": "src/main.rs",
   "max_line_count": 40
 }
 
 // ✅ GOOD - Read specific range
-open_file {
+read_file {
   "file_path": "src/main.rs",
   "start_line": 101,
   "max_line_count": 20
@@ -43,7 +43,7 @@ Only read entire files if:
 
 ### Pro Tip: Combine with curly_glance
 
-For large code files, use `file_curly_glance` to find sections of interest, then use `open_file` with line ranges to read specific parts:
+For large code files, use `file_curly_glance` to find sections of interest, then use `read_file` with line ranges to read specific parts:
 
 ```rust
 // Step 1: Get overview
@@ -58,7 +58,7 @@ file_curly_glance {
 }
 
 // Step 3: Read detailed content in chunks
-open_file {
+read_file {
   "file_path": "src/main.rs",
   "start_line": 42,
   "max_line_count": 25

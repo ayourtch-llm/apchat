@@ -25,7 +25,7 @@ const MAX_FILE_SIZE: usize = 1024 * 1024; // 1 MiB
 /// * `file_path` – Path relative to the workspace.
 /// * `start_line` – Optional inclusive 1‑based start line. If `None`, assume line 1.
 /// * `max_line_count` - Optional line count.
-pub async fn open_file(
+pub async fn read_file(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
     start_line: Option<usize>,

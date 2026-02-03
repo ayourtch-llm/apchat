@@ -18,7 +18,7 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 ### 🛠️ Comprehensive Tool System (20+ Tools)
 
 #### File Operations
-- **open_file** - Display file contents with optional line ranges
+- **read_file** - Display file contents with optional line ranges
 - **peek_file_top_10_lines** - Quick file preview (first 10 lines)
 - **write_file** - Create and write files to workspace
 - **edit_file** - Edit files with old/new content replacement

@@ -62,7 +62,7 @@ Format: `"Tool '{tool_name}' has invalid parameter '{invalid_param}'. Available:
 - Extra/invalid parameters
 - Valid optional parameters
 - Mixed case errors
-- Real tool schemas (open_file, peek_file_top_10_lines, search_files)
+- Real tool schemas (read_file, peek_file_top_10_lines, search_files)
 - Edge cases (empty arguments, null values)
 
 ## Test Results

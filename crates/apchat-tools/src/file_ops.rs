@@ -1,6 +1,6 @@
 use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefinition};
 use apchat_toolcore::tool_context::ToolContext;
-use crate::open_file;
+use crate::read_file;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
@@ -14,7 +14,7 @@ pub struct OpenFileTool;
 #[async_trait]
 impl Tool for OpenFileTool {
     fn name(&self) -> &str {
-        "open_file"
+        "read_file"
     }
 
     fn description(&self) -> &str {
@@ -38,7 +38,7 @@ impl Tool for OpenFileTool {
         let start_line = params.get_optional::<usize>("start_line").unwrap_or(None);
         let max_line_count = params.get_optional::<usize>("max_line_count").unwrap_or(None);
 
-        match open_file::open_file(&context.work_dir, &file_path, start_line, max_line_count).await {
+        match read_file::read_file(&context.work_dir, &file_path, start_line, max_line_count).await {
             Ok(content) => ToolResult::success(content),
             Err(e) => ToolResult::error(format!("Failed to open file: {}", e)),
         }
@@ -55,7 +55,7 @@ impl Tool for ReadFileTool {
     }
 
     fn description(&self) -> &str {
-        "Peek at the top 10 lines of a file with total line count. For reading specific line ranges or more lines, use open_file instead."
+        "Peek at the top 10 lines of a file with total line count. For reading specific line ranges or more lines, use read_file instead."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {

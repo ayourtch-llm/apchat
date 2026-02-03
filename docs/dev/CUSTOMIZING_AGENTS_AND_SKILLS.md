@@ -227,7 +227,7 @@ touch agents/configs/my_specialist.json
 - `peek_file_top_10_lines` - Read file contents
 - `write_file` - Create or overwrite files
 - `edit_file` - Make targeted edits
-- `open_file` - Read with line ranges
+- `read_file` - Read with line ranges
 - `list_files` - List directory contents
 - `search_files` - Search for files by pattern
 

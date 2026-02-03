@@ -94,7 +94,7 @@ No critical errors
 ```
 [LARGE OUTPUT TRUNCATED - Full output saved to: /path/to/.apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt]
 
-⚠️  Note: Output exceeds 20000 characters. Use `open_file` tool to inspect the full output at: /path/to/.apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt
+⚠️  Note: Output exceeds 20000 characters. Use `read_file` tool to inspect the full output at: /path/to/.apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt
 ```
 
 ## Integration Points

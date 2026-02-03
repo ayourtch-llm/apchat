@@ -68,7 +68,7 @@ $ cargo build --release
 1. **Zero Breaking Changes**: All existing tools work without modification
 2. **Automatic Application**: ToolRegistry handles everything automatically
 3. **Context-Aware**: Respects both registry and context content limiters
-4. **User-Friendly**: Clear messages with file paths and open_file instructions
+4. **User-Friendly**: Clear messages with file paths and read_file instructions
 
 ## Usage Example
 
@@ -77,7 +77,7 @@ When a tool generates output exceeding 20,000 characters:
 ```
 [LARGE OUTPUT TRUNCATED - Full output saved to: .apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt]
 
-⚠️  Note: Output exceeds 20000 characters. Use `open_file` tool to inspect the full output at: .apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt
+⚠️  Note: Output exceeds 20000 characters. Use `read_file` tool to inspect the full output at: .apchat-large-outputs/search-20250725-143022-123e4567-89ab-cdef-0123-456789abcdef.txt
 ```
 
 ## Verification Process

@@ -134,7 +134,7 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
                         let mut needs_fix = false;
 
                         match tool_call.function.name.as_str() {
-                            "open_file" | "peek_file_top_10_lines" => {
+                            "read_file" | "peek_file_top_10_lines" => {
                                 // Check if start_line or end_line are strings instead of integers
                                 if let Some(obj) = json_args.as_object_mut() {
                                     // Check start_line

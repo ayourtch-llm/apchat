@@ -87,7 +87,7 @@ mod content_limiter_tests {
         // Verify the file was created
         let note_text = note.unwrap();
         assert!(note_text.contains("💡 TO INSPECT FULL OUTPUT:"));
-        assert!(note_text.contains("open_file"));
+        assert!(note_text.contains("read_file"));
         
         // Parse the file path from the note
         let file_path = note_text.split("  ").last().unwrap().trim();
@@ -115,7 +115,7 @@ mod content_limiter_tests {
         
         let note_text = note.unwrap();
         assert!(note_text.contains("💡 TO INSPECT FULL OUTPUT:"));
-        assert!(note_text.contains("open_file"));
+        assert!(note_text.contains("read_file"));
     }
 
     #[test]

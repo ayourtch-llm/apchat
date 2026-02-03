@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test_valid_tool_call_with_all_required_params() {
-        // Test with open_file tool schema - minimal required parameters only
+        // Test with read_file tool schema - minimal required parameters only
         let schema = create_tool_schema(vec![
             ("file_path".to_string(), ParameterDefinition {
                 param_type: "string".to_string(),
@@ -55,7 +55,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn test_valid_tool_call_with_optional_params() {
-        // Test with open_file tool schema - all parameters
+        // Test with read_file tool schema - all parameters
         let schema = create_tool_schema(vec![
             ("file_path".to_string(), ParameterDefinition {
                 param_type: "string".to_string(),
@@ -92,7 +92,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "start_line": 10, "end_line": 20}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 10, "end_line": 20}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -122,7 +122,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -156,7 +156,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "start_line": 5, "end_line": 15}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 5, "end_line": 15}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -189,7 +189,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -213,7 +213,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{}"#);
+        let tool_call = create_tool_call("read_file", r#"{}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -240,7 +240,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -265,7 +265,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "invalid_param": "value"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "invalid_param": "value"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -289,7 +289,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "invalid1": "value1", "invalid2": "value2"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "invalid1": "value1", "invalid2": "value2"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -311,7 +311,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "extra_param": "value"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "extra_param": "value"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -333,7 +333,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": 12345}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": 12345}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -351,7 +351,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": "not_a_number"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": "not_a_number"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -369,7 +369,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"append": "not_boolean"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"append": "not_boolean"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -391,7 +391,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", invalid_json: "value"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", invalid_json: "value"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -409,7 +409,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{}"#);
+        let tool_call = create_tool_call("read_file", r#"{}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -431,7 +431,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "  extra  ": "value"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "  extra  ": "value"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -449,7 +449,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": null}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": null}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -659,7 +659,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": ""}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": ""}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -677,7 +677,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 0}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 0}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -695,7 +695,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": -10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": -10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -713,7 +713,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 999999999}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 999999999}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -735,7 +735,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"files": ["file1.txt", "file2.txt"]}"#);
+        let tool_call = create_tool_call("read_file", r#"{"files": ["file1.txt", "file2.txt"]}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -753,7 +753,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"items": [{"name": "item1"}, {"name": "item2"}]}"#);
+        let tool_call = create_tool_call("read_file", r#"{"items": [{"name": "item1"}, {"name": "item2"}]}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -775,7 +775,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"options": {"key1": "value1", "key2": "value2"}}"#);
+        let tool_call = create_tool_call("read_file", r#"{"options": {"key1": "value1", "key2": "value2"}}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -793,7 +793,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"items": [{"name": "item1", "details": {"key": "value"}}, {"name": "item2"}]}"#);
+        let tool_call = create_tool_call("read_file", r#"{"items": [{"name": "item1", "details": {"key": "value"}}, {"name": "item2"}]}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -811,7 +811,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"files": []}"#);
+        let tool_call = create_tool_call("read_file", r#"{"files": []}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -829,7 +829,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"options": {}}"#);
+        let tool_call = create_tool_call("read_file", r#"{"options": {}}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);

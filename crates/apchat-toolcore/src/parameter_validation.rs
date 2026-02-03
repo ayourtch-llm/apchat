@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_valid_tool_call() {
-        // Test with open_file tool schema
+        // Test with read_file tool schema
         let schema = create_tool_schema(vec![
             ("file_path".to_string(), ParameterDefinition {
                 param_type: "string".to_string(),
@@ -181,7 +181,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt"}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());
@@ -207,7 +207,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());
@@ -234,7 +234,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "invalid_param": "value"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "invalid_param": "value"}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());
@@ -262,12 +262,12 @@ mod tests {
         ]);
 
         // Test with no optional parameters
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt"}"#);
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());
 
         // Test with optional parameters
-        let tool_call = create_tool_call("open_file", r#"{"file_path": "test.txt", "start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 10}"#);
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());
     }
@@ -369,7 +369,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{}"#);
+        let tool_call = create_tool_call("read_file", r#"{}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());
@@ -387,7 +387,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("open_file", r#"{"file_path": null}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": null}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());

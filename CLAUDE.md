@@ -152,7 +152,7 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
   "name": "file_manager",
   "description": "Handles file operations",
   "model": "GrnModel",
-  "tools": ["open_file", "write_file", "edit_file", "list_files"],
+  "tools": ["read_file", "write_file", "edit_file", "list_files"],
   "system_prompt": "You are a file management specialist..."
 }
 ```

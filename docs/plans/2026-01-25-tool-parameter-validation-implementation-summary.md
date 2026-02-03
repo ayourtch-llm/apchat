@@ -28,7 +28,7 @@ Successfully implemented tool parameter validation according to the design docum
 2. **`crates/apchat-toolcore/tests/parameter_validation_tests.rs`**
    - Comprehensive test suite with 20 test cases
    - Covers all validation scenarios and edge cases
-   - Tests with real tool schemas (open_file, peek_file_top_10_lines, search_files, write_file)
+   - Tests with real tool schemas (read_file, peek_file_top_10_lines, search_files, write_file)
 
 3. **Issue Files**
    - `docs/issues/open/107-tool-parameter-validation-module.md`
@@ -69,7 +69,7 @@ Format: `"Tool '{tool_name}' has invalid parameter '{invalid_param}'. Available:
 
 Example:
 ```
-"Tool 'open_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, max_line_count. Missing required parameter: file_path"
+"Tool 'read_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, max_line_count. Missing required parameter: file_path"
 ```
 
 ### Test Coverage

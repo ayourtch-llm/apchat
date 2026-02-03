@@ -101,7 +101,7 @@ impl ContentLimiter {
                                        file_path.display());
         
         // Add note about how to inspect the output
-        let note = Some(format!("\n⚠️  Note: Output exceeds {} characters. Use `open_file` tool to inspect the full output at: {}",
+        let note = Some(format!("\n⚠️  Note: Output exceeds {} characters. Use `read_file` tool to inspect the full output at: {}",
                                self.config.max_content_length,
                                file_path.display()));
 
@@ -584,7 +584,7 @@ impl FileOperationsTool {
     fn description(&self) -> &str {
         "Perform file operations: read, write, edit, delete, search, and batch edits.
 
-IMPORTANT: Large file contents (>20,000 characters) will be automatically truncated and saved to the .apchat-large-outputs directory. Use the open_file tool to inspect the full content if needed."
+IMPORTANT: Large file contents (>20,000 characters) will be automatically truncated and saved to the .apchat-large-outputs directory. Use the read_file tool to inspect the full content if needed."
     }
     // ... rest of implementation ...
 }
@@ -597,7 +597,7 @@ impl SearchTool {
     fn description(&self) -> &str {
         "Search for text across files using glob patterns.
 
-IMPORTANT: Large search results (>20,000 characters) will be automatically truncated and saved to the .apchat-large-outputs directory. Use the open_file tool to inspect the full results if needed."
+IMPORTANT: Large search results (>20,000 characters) will be automatically truncated and saved to the .apchat-large-outputs directory. Use the read_file tool to inspect the full results if needed."
     }
     // ... rest of implementation ...
 }
@@ -679,11 +679,11 @@ fn test_content_truncated_when_above_limit() {
     
     // Verify file was created
     let note_text = note.unwrap();
-    assert!(note_text.contains("open_file"));
+    assert!(note_text.contains("read_file"));
     assert!(note_text.contains(".apchat-large-outputs"));
     
     // Verify content was saved to file
-    let full_path_match = note_text.split("open_file tool to inspect the full output at: ").collect::<Vec<_>>();
+    let full_path_match = note_text.split("read_file tool to inspect the full output at: ").collect::<Vec<_>>();
     if full_path_match.len() > 1 {
         let file_path = full_path_match[1].trim();
         assert!(PathBuf::from(file_path).exists());
@@ -798,7 +798,7 @@ Tool Execution → Check Content Length →
 ```
 [LARGE OUTPUT TRUNCATED - Full output saved to: /path/to/.apchat-large-outputs/tool-name-20250101-120000-unique-id.txt]
 
-⚠️  Note: Output exceeds 20000 characters. Use `open_file` tool to inspect the full output at: /path/to/.apchat-large-outputs/tool-name-20250101-120000-unique-id.txt
+⚠️  Note: Output exceeds 20000 characters. Use `read_file` tool to inspect the full output at: /path/to/.apchat-large-outputs/tool-name-20250101-120000-unique-id.txt
 ```
 
 ## Usage
@@ -807,8 +807,8 @@ Tool Execution → Check Content Length →
 
 When you see a truncated output:
 1. Note the file path in the message
-2. Use the `open_file` tool to read the full content
-3. Example: `open_file --file_path ".apchat-large-outputs/tool-name-20250101-120000-unique-id.txt"`
+2. Use the `read_file` tool to read the full content
+3. Example: `read_file --file_path ".apchat-large-outputs/tool-name-20250101-120000-unique-id.txt"`
 
 ### For Developers
 

@@ -8,7 +8,7 @@
     "read_pdf",
     "write_file",
     "edit_file",
-    "open_file",
+    "read_file",
     "list_files",
     "load_skill",
     "list_skills",
