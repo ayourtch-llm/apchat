@@ -115,7 +115,7 @@ impl OutputDestination for MockOutputDestination {
 mod tests {
     use super::*;
 
-    #[tokio_test::tokio::test]
+    #[tokio::test]
     async fn test_output_message_variants() {
         // Test all OutputMessage variants can be created
         let user_msg = OutputMessage::UserMessage {
@@ -146,7 +146,7 @@ mod tests {
         assert!(matches!(text_output, OutputMessage::TextOutput(_)));
     }
 
-    #[tokio_test::tokio::test]
+    #[tokio::test]
     async fn test_output_message_clone() {
         let original = OutputMessage::ToolCall {
             name: "test".to_string(),
@@ -166,7 +166,7 @@ mod tests {
         );
     }
 
-    #[tokio_test::tokio::test]
+    #[tokio::test]
     async fn test_text_output_fields() {
         let text_output = TextOutput::new("✓", "Task completed", true);
         assert_eq!(text_output.emoji, "✓");
@@ -179,7 +179,7 @@ mod tests {
         assert_eq!(text_output_no_newline.newline, false);
     }
 
-    #[tokio_test::tokio::test]
+    #[tokio::test]
     async fn test_text_output_message_variant() {
         let output_message = OutputMessage::TextOutput(TextOutput::new("📋", "Clipboard content", true));
         

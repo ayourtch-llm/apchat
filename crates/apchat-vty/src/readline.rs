@@ -2143,7 +2143,7 @@ impl Readline {
     /// # Example
     ///
     /// ```no_run
-    /// use apchat_vty::Readline;
+    /// use apchat_vty::{Readline, ReadlineResult};
     ///
     /// let mut readline = Readline::new().unwrap();
     ///
