@@ -13,6 +13,22 @@ pub use instance::ReadlineInstance;
 use std::io::BufWriter;
 use std::fs::OpenOptions;
 
+/// Global broadcast channel for TextOutput messages
+/// Allows non-blocking sends from synchronous code
+/// This is set by apchat-main to connect print_with_emoji to the OutputRouter
+static TEXT_OUTPUT_TX: once_cell::sync::OnceCell<tokio::sync::broadcast::Sender<apchat_mspc::output::TextOutput>> = once_cell::sync::OnceCell::new();
+
+/// Set the global TEXT_OUTPUT_TX channel
+/// This should be called by apchat-main during initialization
+pub fn set_text_output_tx(tx: tokio::sync::broadcast::Sender<apchat_mspc::output::TextOutput>) {
+    TEXT_OUTPUT_TX.set(tx).expect("TEXT_OUTPUT_TX already set");
+}
+
+/// Get the global TEXT_OUTPUT_TX channel
+pub fn get_text_output_tx() -> Option<tokio::sync::broadcast::Sender<apchat_mspc::output::TextOutput>> {
+    TEXT_OUTPUT_TX.get().cloned()
+}
+
 /// Atomic counter for tracking active HTTP requests
 /// This module provides thread-safe tracking of ongoing LLM API requests
 pub mod request_counter {
@@ -186,6 +202,9 @@ pub fn print_heart_to_file(text: &str, newline: bool) -> Result<(), std::io::Err
 
 /// Internal helper that prints with an emoji prepended to each line.
 ///
+/// # Issue 138: Sends TextOutput messages to TEXT_OUTPUT_TX for routing
+/// while maintaining backward compatibility with direct writes.
+///
 /// # Arguments
 /// * `emoji` - The emoji to prepend (e.g., "❤️" or "💛")
 /// * `text` - The text to print (can contain embedded newlines)
@@ -213,4 +232,9 @@ fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io:
 
     // Flush to ensure output is written immediately
     let _ = writer.flush();
+
+    // Issue 138: Send to TEXT_OUTPUT_TX if available (for OutputRouter integration)
+    if let Some(ref tx) = get_text_output_tx() {
+        let _ = tx.send(apchat_mspc::output::TextOutput::new(emoji, text, newline));
+    }
 }

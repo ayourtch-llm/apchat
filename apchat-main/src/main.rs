@@ -58,6 +58,10 @@ async fn main() -> Result<()> {
 
     // Set up application configuration from CLI
     let app_config = setup_from_cli(&cli)?;
+    
+    // Initialize OutputRouter for emoji-prefixed text routing
+    // This connects print_with_emoji to the router via vty's TEXT_OUTPUT_TX
+    let _router = apchat::mspc::initialize_output_router().await;
 
     // Handle task mode if requested
     if let Some(task_text) = cli.task.clone() {
