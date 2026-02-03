@@ -8,6 +8,7 @@
 //! contains the outcome type definition.
 
 /// Outcome of a single inference cycle.
+#[derive(PartialEq)]
 pub enum InferenceOutcome {
     /// Inference completed successfully with this response text.
     Response(String),
@@ -17,4 +18,6 @@ pub enum InferenceOutcome {
     /// Inference failed with an error.
     /// An "[Error: ...]" assistant message has already been pushed.
     Error,
+    /// Inference had toolcalls, needs to continue
+    ToolsContinue,
 }

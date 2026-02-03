@@ -1,3 +1,4 @@
+#![deny(unused_must_use)]
 mod init;
 mod commands;
 mod input_router;
@@ -218,6 +219,7 @@ pub async fn run_repl_mode(
             &line,
             &cancel_token,
         ).await;
+        
 
         // Always clear the cancellation token, regardless of outcome
         {
@@ -250,6 +252,8 @@ pub async fn run_repl_mode(
                 // Error/interrupted messages were already pushed by run_tool_loop
                 continue 'outer;
             }
+            // This should not be reached here.
+            InferenceOutcome::ToolsContinue => todo!()
         }
     }
 
@@ -359,20 +363,16 @@ async fn save_input_and_log(chat: &mut APChat, line: &str) {
     }
 }
 
-/// Run the tool-calling loop using the LLM task channels.
-///
-/// This implementation spawns an LLM task and uses it for all API calls,
-/// enabling proper cancellation handling and channel-based communication.
-pub(crate) async fn run_tool_loop(
+
+async fn add_msg_to_history(
     chat: &mut APChat,
     llm_channels: &mut LLMTaskChannels,
     input: &str,
     cancel_token: &tokio_util::sync::CancellationToken,
-) -> InferenceOutcome {
+) {
     use apchat_vty::print_heart_yellow;
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
-
 
     // Prepare for LLM call (add user message, summarize history)
     chat.messages.push(Message {
@@ -384,31 +384,19 @@ pub(crate) async fn run_tool_loop(
         reasoning: None,
     });
 
-    crate::chat::history::summarize_and_trim_history(chat).await;
+    let _ = crate::chat::history::summarize_and_trim_history(chat).await;
 
-    // Tool loop configuration
-    let mut tool_call_iterations = 0;
-    let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
-    const MAX_TOOL_ITERATIONS: usize = 250;
-    const LOOP_DETECTION_WINDOW: usize = 8;
+}
 
-    // Track total tokens for the session
-    let total_tokens_start = chat.total_tokens_used;
-
-    loop {
-        // Check for cancellation
-        if cancel_token.is_cancelled() {
-            print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "Interrupted by user"), true);
-            chat.messages.push(Message {
-                role: "assistant".to_string(),
-                content: "[Interrupted by user]".to_string(),
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-                reasoning: None,
-            });
-            return InferenceOutcome::Interrupted;
-        }
+async fn prep_and_send_request(
+    chat: &mut APChat,
+    llm_channels: &mut LLMTaskChannels,
+    input: &str,
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> bool {
+    use apchat_vty::print_heart_yellow;
+    use apchat_models::Message;
+    use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
         // Validate and fix tool calls in the conversation history
         if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
@@ -452,17 +440,26 @@ pub(crate) async fn run_tool_loop(
 
         if let Err(_) = llm_channels.request_tx.send(request).await {
             print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
-            return InferenceOutcome::Error;
+            return false;
         }
+        true
 
-        // Wait for response from LLM task
-        let llm_response = match llm_channels.response_rx.recv().await {
-            Some(response) => response,
-            None => {
-                print_heart_yellow(&format!("{} {}", "❌".bright_red(), "LLM task channel closed unexpectedly"), true);
-                return InferenceOutcome::Error;
-            }
-        };
+
+}
+
+async fn process_llm_response(
+    chat: &mut APChat,
+    llm_channels: &mut LLMTaskChannels,
+    llm_response: crate::app::repl::llm_task::LLMResponse,
+    recent_tool_calls: &mut Vec<(String, String)>,
+    tool_call_iterations: &mut usize,
+    total_tokens_start: usize,
+) -> InferenceOutcome {
+    use apchat_vty::print_heart_yellow;
+    use apchat_models::Message;
+    use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
+    const MAX_TOOL_ITERATIONS: usize = 250;
+    const LOOP_DETECTION_WINDOW: usize = 8;
 
         // Process the LLM response
         match llm_response {
@@ -490,9 +487,9 @@ pub(crate) async fn run_tool_loop(
 
                 // Handle tool calls
                 if let Some(calls) = tool_calls {
-                    tool_call_iterations += 1;
+                    *tool_call_iterations += 1;
 
-                    if tool_call_iterations > MAX_TOOL_ITERATIONS {
+                    if *tool_call_iterations > MAX_TOOL_ITERATIONS {
                         print_heart_yellow(&format!("{} {} tool calls - stopping to avoid infinite loop.",
                             "⚠️".yellow(), tool_call_iterations), true);
                         chat.messages.push(Message {
@@ -582,6 +579,7 @@ pub(crate) async fn run_tool_loop(
                     print_heart_red("", true); // New line after tool outputs
 
                     // Continue the loop to get the next response
+                    return InferenceOutcome::ToolsContinue;
                 } else {
                     // No tool calls - this is the final response
                     let final_message = Message {
@@ -622,6 +620,63 @@ pub(crate) async fn run_tool_loop(
                 return InferenceOutcome::Error;
             }
         }
+}
+
+/// Run the tool-calling loop using the LLM task channels.
+///
+/// This implementation spawns an LLM task and uses it for all API calls,
+/// enabling proper cancellation handling and channel-based communication.
+pub(crate) async fn run_tool_loop(
+    chat: &mut APChat,
+    llm_channels: &mut LLMTaskChannels,
+    input: &str,
+    cancel_token: &tokio_util::sync::CancellationToken,
+) -> InferenceOutcome {
+    use apchat_vty::print_heart_yellow;
+    use apchat_models::Message;
+    use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
+
+    // Tool loop configuration
+    let mut tool_call_iterations = 0;
+    let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
+
+    // Track total tokens for the session
+    let total_tokens_start = chat.total_tokens_used;
+
+    add_msg_to_history(chat, llm_channels, input, cancel_token).await;
+
+    loop {
+        // Check for cancellation
+        if cancel_token.is_cancelled() {
+            print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "Interrupted by user"), true);
+            chat.messages.push(Message {
+                role: "assistant".to_string(),
+                content: "[Interrupted by user]".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                reasoning: None,
+            });
+            return InferenceOutcome::Interrupted;
+        }
+        if !prep_and_send_request(chat, llm_channels, input, cancel_token).await {
+            return InferenceOutcome::Error;
+        }
+
+        // Wait for response from LLM task
+        let llm_response = match llm_channels.response_rx.recv().await {
+            Some(response) => response,
+            None => {
+                print_heart_yellow(&format!("{} {}", "❌".bright_red(), "LLM task channel closed unexpectedly"), true);
+                return InferenceOutcome::Error;
+            }
+        };
+        let outcome = process_llm_response(chat, llm_channels, llm_response, &mut recent_tool_calls, &mut tool_call_iterations, total_tokens_start).await;
+        if outcome == InferenceOutcome::ToolsContinue {
+              continue;
+        }
+        return outcome;
+
     }
 }
 
