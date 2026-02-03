@@ -107,7 +107,7 @@ pub fn log_request_to_file(url: &str, request: &ChatRequest, model: &ModelColor,
         .with_context(|| format!("Failed to write request log to {}", file_path.display()))?;
 
     // Print the filename to console
-    eprintln!("{}", format!("📝 Request logged to: {}", filename).bright_blue());
+    // print_heart_yellow(&format!("{}", format!("📝 Request logged to: {}", filename).bright_blue()), true);
 
     Ok(())
 }
@@ -182,7 +182,7 @@ pub fn log_response_to_file(
         .with_context(|| format!("Failed to write response log to {}", file_path.display()))?;
 
     // Print the filename to console
-    eprintln!("{}", format!("📄 Response logged to: {}", filename).bright_blue());
+    // print_heart_yellow(&format!("{}", format!("📄 Response logged to: {}", filename).bright_blue()), true);
 
     Ok(())
 }
@@ -206,7 +206,7 @@ pub fn log_raw_response_to_file(
         .with_context(|| format!("Failed to write raw response log to {}", file_path.display()))?;
 
     // Print the filename to console
-    eprintln!("{}", format!("📄 Raw response logged to: {}", filename).bright_blue());
+    // print_heart_yellow(&format!("{}", format!("📄 Raw response logged to: {}", filename).bright_blue()), true);
 
     Ok(())
 }
