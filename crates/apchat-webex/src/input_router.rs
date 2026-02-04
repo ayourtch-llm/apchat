@@ -94,7 +94,7 @@ impl WebexInputRouter {
     /// This will continuously poll for messages from the authorized user
     /// and route them to the MSPC channel
     pub async fn run(&self) -> Result<()> {
-        println!("🌐 Webex bot starting - monitoring messages from {}", self.authorized_user_email);
+        print_heart_yellow(&format!("🌐 Webex bot starting - monitoring messages from {}", self.authorized_user_email), true);
         print_heart_yellow(&format!("🔍 Room ID: {}", self.room_id), true);
         print_heart_yellow(&format!("🔍 Bot email: {}", self.bot_email), true);
 
@@ -136,10 +136,7 @@ impl WebexInputRouter {
                             && msg.person_email != self.bot_email
                         {
                             if let Some(text) = msg.text {
-                                println!(
-                                    "📨 Received Webex message from {}: {}",
-                                    msg.person_email, text
-                                );
+                                print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email, text), true);
 
                                 // Track this message ID for threading replies
                                 {
@@ -155,7 +152,7 @@ impl WebexInputRouter {
 
                                 // Send to MSPC channel
                                 if let Err(e) = self.mspc_channel.send(message).await {
-                                    eprintln!("⚠️ Failed to send Webex message to MSPC channel: {}", e);
+                                    print_heart_yellow(&format!("⚠️ Failed to send Webex message to MSPC channel: {}", e), true);
                                 } else {
                                     print_heart_yellow("🔍 Successfully sent message to MSPC channel", true);
                                 }
@@ -166,7 +163,7 @@ impl WebexInputRouter {
                     }
                 }
                 Err(e) => {
-                    eprintln!("⚠️ Failed to poll Webex messages: {}", e);
+                    print_heart_yellow(&format!("⚠️ Failed to poll Webex messages: {}", e), true);
                 }
             }
 

@@ -165,7 +165,7 @@ impl WebexWebSocketRouter {
             // Filter: only messages from authorized user, not from bot
             if msg.person_email == self.authorized_user_email && msg.person_email != self.bot_email {
                 if let Some(text) = msg.text {
-                    println!("📨 Received Webex message from {}: {}", msg.person_email, text);
+                    print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email, text), true);
 
                     // Track this message ID for threading replies
                     {
@@ -180,7 +180,7 @@ impl WebexWebSocketRouter {
                     );
 
                     if let Err(e) = self.mspc_channel.send(message).await {
-                        eprintln!("⚠️ Failed to send message to MSPC channel: {}", e);
+                        print_heart_yellow(&format!("⚠️ Failed to send message to MSPC channel: {}", e), true);
                     }
 
                     processed_count += 1;
@@ -233,7 +233,7 @@ impl WebexWebSocketRouter {
         // Process in reverse order (oldest first)
         for msg in new_messages.into_iter().rev() {
             if let Some(text) = msg.text {
-                println!("📨 Recovered missed message from {}: {}", msg.person_email, text);
+                print_heart_yellow(&format!("📨 Recovered missed message from {}: {}", msg.person_email, text), true);
 
                 let message = MspcMessage::UserInput(
                     text,
@@ -241,7 +241,7 @@ impl WebexWebSocketRouter {
                 );
 
                 if let Err(e) = self.mspc_channel.send(message).await {
-                    eprintln!("⚠️ Failed to send recovered message to MSPC: {}", e);
+                    print_heart_yellow(&format!("⚠️ Failed to send recovered message to MSPC: {}", e), true);
                 }
 
                 new_count += 1;
@@ -259,7 +259,7 @@ impl WebexWebSocketRouter {
 
     /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
-        println!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email);
+        print_heart_yellow(&format!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email), true);
         print_heart_yellow(&format!("🔍 Device ID: {}", self.device_id), true);
 
         let mut reconnect_delay = 0u64; // 0 = immediate first connect
@@ -272,7 +272,7 @@ impl WebexWebSocketRouter {
 
                 // Recover any messages missed during disconnect
                 if let Err(e) = self.recover_message_gap().await {
-                    eprintln!("⚠️ Failed to recover message gap: {}", e);
+                    print_heart_yellow(&format!("⚠️ Failed to recover message gap: {}", e), true);
                 }
             }
 
@@ -283,7 +283,7 @@ impl WebexWebSocketRouter {
                     reconnect_delay = 1; // Start backoff on clean close
                 }
                 Err(e) => {
-                    eprintln!("⚠️ WebSocket error: {}", e);
+                    print_heart_yellow(&format!("⚠️ WebSocket error: {}", e), true);
                     // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
                     reconnect_delay = if reconnect_delay == 0 {
                         1
@@ -307,11 +307,11 @@ impl WebexWebSocketRouter {
             Ok(event) => {
                 print_heart_yellow(&format!("🔍 Parsed event type: {}", event.data.event_type), true);
                 if let Err(e) = self.process_event(event).await {
-                    eprintln!("⚠️ Error processing event: {}", e);
+                    print_heart_yellow(&format!("⚠️ Error processing event: {}", e), true);
                 }
             }
             Err(e) => {
-                eprintln!("⚠️ Failed to parse Mercury event: {}", e);
+                print_heart_yellow(&format!("⚠️ Failed to parse Mercury event: {}", e), true);
                 print_heart_yellow(&format!("🔍 Raw message: {}", text), true);
             }
         }
@@ -357,7 +357,7 @@ impl WebexWebSocketRouter {
                             self.handle_mercury_message(&text).await;
                         }
                         Err(e) => {
-                            eprintln!("⚠️ Failed to decode binary message as UTF-8: {}", e);
+                            print_heart_yellow(&format!("⚠️ Failed to decode binary message as UTF-8: {}", e), true);
                         }
                     }
                 }
