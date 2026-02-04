@@ -2303,11 +2303,12 @@ impl Readline {
                     if lines.len() > 0 {
                         for (i, ref line) in lines.iter().enumerate() {
                             curr_output_data.push_str(&line);
+                            let lines_up = self.editor_height.saturating_sub(self.cursor_offset_from_bottom) as u16 + 2;
                             if i < lines.len() - 1 {
-                              scroll_insert_up(self.editor_height as u16, &curr_output_data, true);
+                              scroll_insert_up(lines_up, &curr_output_data, true);
                               curr_output_data =  format!("");
                             } else {
-                                scroll_insert_up(self.editor_height as u16, &curr_output_data, newline);
+                                scroll_insert_up(lines_up, &curr_output_data, newline);
                                 if newline {
                                     curr_output_data = format!("");
                                 }
