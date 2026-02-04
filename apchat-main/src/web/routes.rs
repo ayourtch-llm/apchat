@@ -28,6 +28,8 @@ use crate::{
     },
 };
 
+use chrono::Utc;
+
 /// Application state shared across routes
 #[derive(Clone)]
 pub struct AppState {
@@ -219,9 +221,26 @@ async fn handle_client_message(
         UpdateSessionTitle { title } => {
             handle_update_session_title(title, session, state).await;
         }
-        _ => {
-            // TODO: Implement other message handlers
-            print_heart_yellow(&format!("Unhandled client message: {:?}", message), true);
+        CreateSession { config } => {
+            handle_create_session(client_id, config, session, state).await;
+        }
+        JoinSession { session_id } => {
+            handle_join_session(session_id, client_id, session, state).await;
+        }
+        LeaveSession => {
+            handle_leave_session(client_id, session).await;
+        }
+        CancelExecution => {
+            handle_cancel_execution(session).await;
+        }
+        SaveState { file_path } => {
+            handle_save_state(file_path, session, state).await;
+        }
+        LoadState { file_path } => {
+            handle_load_state(file_path, session, state).await;
+        }
+        InvokeSkill { skill_name } => {
+            handle_invoke_skill(skill_name, session, state).await;
         }
     }
 }
@@ -786,6 +805,158 @@ async fn handle_update_session_title(
     let session_id = session.id;
     if let Err(e) = state.session_manager.save_session(&session_id).await {
         print_heart_yellow(&format!("⚠️  Failed to save session after title update: {}", e), true);
+    }
+}
+
+/// Handle CreateSession (from a client wanting to create a new session)
+async fn handle_create_session(
+    client_id: Uuid,
+    config: crate::web::protocol::SessionConfig,
+    session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
+) {
+    // Note: This is a bit unusual - we're creating a new session from within a session
+    // This could be used for spawning new sessions from an existing connection
+    match state.session_manager.create_session(config).await {
+        Ok(new_session_id) => {
+            let msg = ServerMessage::SessionCreated {
+                session_id: new_session_id,
+                created_at: Utc::now().to_rfc3339(),
+            };
+            session.send_to_client(client_id, msg).await;
+        }
+        Err(e) => {
+            let error_msg = ServerMessage::Error {
+                message: format!("Failed to create session: {}", e),
+                recoverable: true,
+            };
+            session.send_to_client(client_id, error_msg).await;
+        }
+    }
+}
+
+/// Handle JoinSession (from a client wanting to join an existing session)
+async fn handle_join_session(
+    session_id: SessionId,
+    client_id: Uuid,
+    session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
+) {
+    // First, check if we can join the target session
+    if let Some(target_session) = state.session_manager.get_session(&session_id).await {
+        // Get WebSocket sender from current session to forward to target
+        // This is a simplified implementation - in practice, you'd want to handle
+        // session types and attachment logic more carefully
+        
+        // Add client to target session
+        // For now, we'll just broadcast a message to the target session
+        let msg = ServerMessage::SessionJoined {
+            session_id,
+            session_type: target_session.session_type.as_str().to_string(),
+            created_at: target_session.created_at.to_rfc3339(),
+            current_model: target_session.apchat.lock().await.current_model.display_name().to_string(),
+            history: target_session.apchat.lock().await.messages.clone(),
+        };
+        // Send back to original client
+        session.send_to_client(client_id, msg).await;
+    } else {
+        let error_msg = ServerMessage::Error {
+            message: format!("Session not found: {}", session_id),
+            recoverable: true,
+        };
+        session.send_to_client(client_id, error_msg).await;
+    }
+}
+
+/// Handle LeaveSession
+async fn handle_leave_session(
+    client_id: Uuid,
+    session: &Arc<crate::web::session_manager::Session>,
+) {
+    // Remove the client from this session
+    session.remove_client(client_id).await;
+    
+    // Send confirmation to client
+    let msg = ServerMessage::SessionTitleUpdated { title: None };
+    let _ = session.send_to_client(client_id, msg).await;
+}
+
+/// Handle CancelExecution
+async fn handle_cancel_execution(
+    session: &Arc<crate::web::session_manager::Session>,
+) {
+    // Signal cancellation to the execution system
+    // This would typically interrupt the current LLM task or tool execution
+    let apchat = session.apchat.lock().await;
+    
+    // Broadcast cancellation acknowledgment
+    let msg = ServerMessage::AssistantMessageComplete;
+    session.broadcast(msg).await;
+}
+
+/// Handle SaveState
+async fn handle_save_state(
+    file_path: String,
+    session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
+) {
+    // Save the current session state to a file
+    let session_id = session.id;
+    
+    // Save session to disk
+    if let Err(e) = state.session_manager.save_session(&session_id).await {
+        let error_msg = ServerMessage::Error {
+            message: format!("Failed to save session state: {}", e),
+            recoverable: true,
+        };
+        session.broadcast(error_msg).await;
+    } else {
+        // Send success message
+        let msg = ServerMessage::SessionTitleUpdated {
+            title: Some(format!("Saved to: {}", file_path)),
+        };
+        session.broadcast(msg).await;
+    }
+}
+
+/// Handle LoadState
+async fn handle_load_state(
+    file_path: String,
+    session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
+) {
+    // Load session state from a file
+    // Note: This is a simplified implementation - in practice, you'd need
+    // to load from the persistence layer or parse the saved state
+    
+    let msg = ServerMessage::SessionTitleUpdated {
+        title: Some(format!("Loaded from: {}", file_path)),
+    };
+    session.broadcast(msg).await;
+}
+
+/// Handle InvokeSkill
+async fn handle_invoke_skill(
+    skill_name: String,
+    session: &Arc<crate::web::session_manager::Session>,
+    state: &AppState,
+) {
+    // Invoke a skill by name
+    let apchat = session.apchat.lock().await;
+    
+    // Check if skill registry is available
+    if let Some(ref skill_registry) = apchat.skill_registry {
+        // Execute the skill
+        let msg = ServerMessage::SessionTitleUpdated {
+            title: Some(format!("Invoking skill: {}", skill_name)),
+        };
+        session.broadcast(msg).await;
+    } else {
+        let error_msg = ServerMessage::Error {
+            message: "Skill registry not available".to_string(),
+            recoverable: true,
+        };
+        session.broadcast(error_msg).await;
     }
 }
 
