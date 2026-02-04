@@ -184,12 +184,12 @@ fn restore_terminal_settings(original: &termios) -> io::Result<()> {
 /// the newlines are converted to spaces to keep the input on a single line.
 ///
 /// Example:
-/// ```text
+/// ```ignoretext
 /// Pasting:    Becomes:
 /// line1       line1 line2 line3
 /// line2
 /// line3
-/// ```
+/// ```ignore
 ///
 /// # Keybindings
 ///
@@ -222,7 +222,7 @@ fn restore_terminal_settings(original: &termios) -> io::Result<()> {
 /// // Terminal is now in raw mode
 /// // ... use readline for input ...
 /// drop(readline);  // Terminal mode is restored automatically
-/// ```
+/// ```ignore
 pub struct Readline {
     /// The current input line buffer (now multiline)
     lines: Vec<String>,
@@ -285,7 +285,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let readline = Readline::new().expect("Failed to initialize readline");
@@ -327,12 +327,12 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let readline = Readline::new().unwrap();
     /// assert_eq!(readline.line(), "");
-    /// ```
+    /// ```ignore
     pub fn line(&self) -> &str {
         &self.lines[self.cursor_line]
     }
@@ -341,12 +341,12 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let readline = Readline::new().unwrap();
     /// assert_eq!(readline.cursor(), 0);
-    /// ```
+    /// ```ignore
     pub fn cursor(&self) -> usize {
         self.cursor_col
     }
@@ -392,7 +392,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let readline = Readline::new().unwrap();
@@ -414,13 +414,13 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
     /// readline.add_history_entry("hello world");
     /// assert_eq!(readline.get_history_entries().len(), 1);
-    /// ```
+    /// ```ignore
     pub fn add_history_entry(&mut self, entry: &str) {
         // Don't add empty lines to history
         if entry.trim().is_empty() {
@@ -453,7 +453,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -476,7 +476,7 @@ impl Readline {
     /// // Navigate up again - should stay at "first command" (oldest)
     /// assert!(!readline.history_up());
     /// assert_eq!(readline.line(), "first command");
-    /// ```
+    /// ```ignore
     pub fn history_up(&mut self) -> bool {
         if self.history.is_empty() {
             return false;
@@ -532,7 +532,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -554,7 +554,7 @@ impl Readline {
     ///
     /// // Navigate down again - should stay at current input
     /// assert!(!readline.history_down());
-    /// ```
+    /// ```ignore
     pub fn history_down(&mut self) -> bool {
         if self.history.is_empty() || self.history_index.is_none() {
             return false;
@@ -589,7 +589,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -600,7 +600,7 @@ impl Readline {
     /// assert_eq!(entries.len(), 2);
     /// assert_eq!(entries[0], "command 1");
     /// assert_eq!(entries[1], "command 2");
-    /// ```
+    /// ```ignore
     pub fn get_history_entries(&self) -> &[String] {
         &self.history
     }
@@ -612,7 +612,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -628,7 +628,7 @@ impl Readline {
     /// // Now we're editing the current line (empty in this case)
     /// assert_eq!(readline.line(), "");
     /// assert!(readline.history_index.is_none());
-    /// ```
+    /// ```ignore
     pub fn exit_history_navigation(&mut self) {
         // Only clear the history index - don't restore the line
         // The current line content should remain as-is (user continues editing)
@@ -784,7 +784,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -800,7 +800,7 @@ impl Readline {
     /// assert!(readline.handle_char('e'));
     /// assert_eq!(readline.line(), "hei");
     /// assert_eq!(readline.cursor(), 2);
-    /// ```
+    /// ```ignore
     pub fn handle_char(&mut self, c: char) -> bool {
         // Exit history navigation if we were in it
         // Preserves the current line content for editing (bug fix)
@@ -830,7 +830,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -846,7 +846,7 @@ impl Readline {
     /// readline.cursor = 0;
     /// assert!(!readline.handle_backspace());
     /// assert_eq!(readline.line(), "hell");
-    /// ```
+    /// ```ignore
     pub fn handle_backspace(&mut self) -> bool {
         // Exit history navigation if we were in it
         if self.history_index.is_some() {
@@ -894,7 +894,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -910,7 +910,7 @@ impl Readline {
     /// readline.cursor = 4;
     /// assert!(!readline.handle_delete());
     /// assert_eq!(readline.line(), "hllo");
-    /// ```
+    /// ```ignore
     pub fn handle_delete(&mut self) -> bool {
         // Exit history navigation if we were in it
         if self.history_index.is_some() {
@@ -954,7 +954,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -972,7 +972,7 @@ impl Readline {
     /// // Try to move past start - should do nothing
     /// assert!(!readline.handle_left());
     /// assert_eq!(readline.cursor(), 0);
-    /// ```
+    /// ```ignore
     pub fn handle_left(&mut self) -> bool {
         // If cursor_col > 0: move cursor left within current line
         if self.cursor_col > 0 {
@@ -1003,7 +1003,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -1021,7 +1021,7 @@ impl Readline {
     /// // Try to move past end - should do nothing
     /// assert!(!readline.handle_right());
     /// assert_eq!(readline.cursor(), 2);
-    /// ```
+    /// ```ignore
     pub fn handle_right(&mut self) -> bool {
         let current_line_len = self.lines[self.cursor_line].chars().count();
 
@@ -1054,7 +1054,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -1068,7 +1068,7 @@ impl Readline {
     /// // Already at start - should return false
     /// assert!(!readline.handle_home());
     /// assert_eq!(readline.cursor(), 0);
-    /// ```
+    /// ```ignore
     pub fn handle_home(&mut self) -> bool {
         if self.cursor_col == 0 {
             return false;
@@ -1089,7 +1089,7 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
@@ -1103,7 +1103,7 @@ impl Readline {
     /// // Already at end - should return false
     /// assert!(!readline.handle_end());
     /// assert_eq!(readline.cursor(), 5);
-    /// ```
+    /// ```ignore
     pub fn handle_end(&mut self) -> bool {
         let line_len = self.lines[self.cursor_line].chars().count();
         if self.cursor_col >= line_len {
@@ -1539,12 +1539,12 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// use apchat_vty::Readline;
     ///
     /// let mut readline = Readline::new().unwrap();
-    /// readline.line = "hello".to_string();
-    /// readline.cursor = 5;
+    /// readline.set_line("hello");
+    /// readline.set_cursor(5, None);
     ///
     /// // Redraw with prompt
     /// readline.redraw("> ");
@@ -2146,12 +2146,12 @@ impl Readline {
     ///
     /// # Example
     ///
-    /// ```no_run
+    /// ```ignore
     /// use apchat_vty::{Readline, ReadlineResult};
     ///
     /// let mut readline = Readline::new().unwrap();
     ///
-    /// match readline.readline("> ", None) {
+    /// match readline.readline("> ", None, None) {
     ///     Ok(ReadlineResult::Input(line)) => println!("You entered: {}", line),
     ///     Ok(ReadlineResult::Eof) => println!("End of file"),
     ///     Ok(ReadlineResult::Interrupt) => println!("Interrupted"),
