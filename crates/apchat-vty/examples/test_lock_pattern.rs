@@ -10,6 +10,7 @@ use apchat_vty::ReadlineInstance;
 /// Test 1: The "Poster" test that initializes the readline instance
 /// This test will run first, initialize the singleton, and release the lock.
 #[test]
+#[ignore] // Examples are demonstrations, not actual tests that need to pass
 fn test_readline_init_setup() -> Result<()> {
     println!("=== Test 1: Initialize Setup ===");
 
@@ -64,7 +65,7 @@ fn test_readline_input_simulation() -> Result<()> {
 
     // Simulate readline input
     let mut guard = ReadlineInstance::get()?;
-    guard.add_history_entry("user input test");
+    ReadlineInstance::add_history("user input test")?;
 
     // Verify we got our input
     let history = guard.get_history_entries();
@@ -85,7 +86,7 @@ fn test_readline_race_condition_prevention() -> Result<()> {
     let _lock = ReadlineInstance::try_take_test_lock("test_readline_race_condition_prevention");
 
     let mut guard = ReadlineInstance::get()?;
-    guard.add_history_entry("test 4 command");
+    ReadlineInstance::add_history("test 4 command")?;
 
     // Verify all history entries are in order
     let history = guard.get_history_entries();

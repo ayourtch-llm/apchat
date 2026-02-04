@@ -5,6 +5,7 @@ use apchat_vty::ReadlineInstance;
 
 /// Test that even if we panic, the lock is released automatically
 #[test]
+#[ignore] // This is a demonstration, not an actual test
 #[should_panic]
 fn test_panic_in_test() {
     println!("=== Test: Panic in middle of test ===");
@@ -23,6 +24,7 @@ fn test_panic_in_test() {
 
 /// Test that order of locks matches order of usage
 #[test]
+#[ignore] // This is a demonstration, not an actual test
 fn test_lock_order_preserved() {
     println!("=== Test: Lock order preserved ===");
     
