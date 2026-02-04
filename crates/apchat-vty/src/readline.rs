@@ -2175,14 +2175,14 @@ impl Readline {
         self.redraw(prompt);
 
         let mut curr_output_data = format!("");
-        let COUNTDOWN = 10;
+        let COUNTDOWN = 20;
         let mut counter = COUNTDOWN;
 
         // Main event loop
         loop {
-            // Poll for events with 100ms timeout
-            // This allows for MPSC signal checking
-            if poll(Duration::from_millis(100))? {
+            // Poll for events with 50ms timeout
+            // This allows for MPSC signal checking with lower latency
+            if poll(Duration::from_millis(50))? {
                 // Read the event
                 let event = read()?;
 
@@ -2227,8 +2227,8 @@ impl Readline {
 
             // Timeout occurred - check MPSC signals if receiver provided
             if let Some(ref mut receiver) = mspc_receiver {
-                // Try to receive a message without blocking
-                if let Ok(msg) = receiver.try_recv() {
+                // Drain all queued messages without blocking
+                while let Ok(msg) = receiver.try_recv() {
                     match &msg {
                         MspcMessage::ConfirmationRequest(prompt, _) => {
                             // Enter confirmation mode and continue the loop
@@ -2285,8 +2285,8 @@ impl Readline {
 
             // Timeout occurred - check ReadlineDestination messages if receiver provided
             if let Some(ref mut receiver) = readline_receiver {
-                // Try to receive a message without blocking
-                if let Ok(text_output) = receiver.try_recv() {
+                // Drain all queued messages without blocking
+                while let Ok(text_output) = receiver.try_recv() {
                     // Print emoji text directly to stdout
                     let emoji = &text_output.emoji;
                     let content = &text_output.content;
