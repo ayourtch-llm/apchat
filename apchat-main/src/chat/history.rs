@@ -1,11 +1,13 @@
 use anyhow::Result;
 use colored::Colorize;
 use std::collections::HashSet;
+use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::APChat;
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
-use apchat_logging::{log_request_to_file, safe_truncate};
+use apchat_logging::{log_request_to_file, safe_truncate, get_okaychat_dir};
 use apchat_todo::{Task, TaskStatus};
 
 /// Calculate the current conversation size in bytes by serializing to JSON
@@ -302,6 +304,47 @@ fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
     None
 }
 
+/// Save conversation history to ~/.okaychat/histories/ before compaction
+fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Result<()> {
+    // Get history directory
+    let okaychat_dir = get_okaychat_dir()?;
+    let histories_dir = okaychat_dir.join("histories");
+    
+    // Create histories directory if it doesn't exist
+    if !histories_dir.exists() {
+        fs::create_dir_all(&histories_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create histories directory: {}", e))?;
+    }
+    
+    // Generate filename with PID and timestamp
+    let pid = std::process::id();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| anyhow::anyhow!("Failed to get timestamp: {}", e))?
+        .as_secs();
+    
+    let filename = format!("history-{}-{}.json", pid, timestamp);
+    let filepath = histories_dir.join(&filename);
+    
+    // Serialize messages to JSON
+    let json = serde_json::to_string_pretty(&chat.messages)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize conversation history: {}", e))?;
+    
+    // Write to file
+    fs::write(&filepath, json)
+        .map_err(|e| anyhow::anyhow!("Failed to write history to {}: {}", filepath.display(), e))?;
+    
+    print_heart_red(&format!(
+        "{} {} history saved to: {} ({:.1} KB)",
+        "💾".bright_green(),
+        compaction_type,
+        filepath.display(),
+        chat.messages.len() as f64 / 1024.0
+    ), true);
+    
+    Ok(())
+}
+
 /// Intelligent compaction that preserves recent tool call context while summarizing older messages
 /// This is designed to work during tool-calling loops without losing recent context
 pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: usize) -> Result<()> {
@@ -320,6 +363,9 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
              "COMPACT".yellow(), 
              conversation_size as f64 / 1024.0, 
              chat.messages.len()), true);
+    
+    // Save history before compaction
+    let _ = save_history_before_compaction(chat, "Intelligent compaction");
     
     // Find recent tool calls to preserve context
     let mut recent_tool_call_indices = Vec::new();
@@ -592,6 +638,9 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         chat.current_model.display_name(),
         summary_model.display_name()
     ), true);
+    
+    // Save history before compaction
+    let _ = save_history_before_compaction(chat, "History trim");
 
     // Keep system message(s) and recent messages
     // Count all leading system messages
