@@ -6,6 +6,7 @@ use crate::APChat;
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
 use apchat_logging::{log_request_to_file, safe_truncate};
+use apchat_todo::{Task, TaskStatus};
 
 /// Calculate the current conversation size in bytes by serializing to JSON
 pub fn calculate_conversation_size(messages: &[Message]) -> usize {
@@ -199,6 +200,108 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
     }
 }
 
+/// Extract the latest todo task state from conversation history
+/// 
+/// This function scans the message history to find any tool calls to todo_write
+/// and extracts the most recent task state from them. This is useful for preserving
+/// the current todo list state during compaction when the actual tool results
+/// might be trimmed.
+fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
+    // Scan backwards through messages to find the most recent todo_write tool call
+    for i in (0..messages.len()).rev() {
+        let message = &messages[i];
+        
+        // Look for assistant messages with tool calls
+        if message.role == "assistant" {
+            if let Some(tool_calls) = &message.tool_calls {
+                for tool_call in tool_calls {
+                    // Check if this is a todo_write call
+                    if tool_call.function.name == "todo_write" {
+                        // Parse the arguments to get the todo list
+                        if let Ok(args) = serde_json::from_str::<serde_json::Value>(&tool_call.function.arguments) {
+                            if let Some(todos_array) = args.get("todos").and_then(|v| v.as_array()) {
+                                let mut tasks = Vec::new();
+                                for todo_val in todos_array {
+                                    if let (Some(content), Some(status_str), Some(active_form)) = (
+                                        todo_val.get("content").and_then(|v| v.as_str()),
+                                        todo_val.get("status").and_then(|v| v.as_str()),
+                                        todo_val.get("activeForm").and_then(|v| v.as_str()),
+                                    ) {
+                                        let status = match status_str {
+                                            "pending" => TaskStatus::Pending,
+                                            "in_progress" => TaskStatus::InProgress,
+                                            "completed" => TaskStatus::Completed,
+                                            _ => continue,
+                                        };
+                                        tasks.push(Task::new(content.to_string(), active_form.to_string()));
+                                        // Update the status (newer value overwrites)
+                                        if let Some(task) = tasks.last_mut() {
+                                            task.status = status;
+                                        }
+                                    }
+                                }
+                                if !tasks.is_empty() {
+                                    return Some(tasks);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Also check tool results for todo_write (the result contains the updated task list info)
+        if message.role == "tool" && message.name.as_deref() == Some("todo_write") {
+            // The tool result contains information about the updated todo list
+            // Try to parse it to extract task information
+            let result = message.content.to_string();
+            
+            // Try to parse the JSON from the result
+            if let Ok(result_value) = serde_json::from_str::<serde_json::Value>(&result) {
+                if let Some(todos_array) = result_value.get("todos").and_then(|v| v.as_array()) {
+                    let mut tasks = Vec::new();
+                    for todo_val in todos_array {
+                        if let (Some(content), Some(status_str), Some(active_form)) = (
+                            todo_val.get("content").and_then(|v| v.as_str()),
+                            todo_val.get("status").and_then(|v| v.as_str()),
+                            todo_val.get("activeForm").and_then(|v| v.as_str()),
+                        ) {
+                            let status = match status_str {
+                                "pending" => TaskStatus::Pending,
+                                "in_progress" => TaskStatus::InProgress,
+                                "completed" => TaskStatus::Completed,
+                                _ => continue,
+                            };
+                            tasks.push(Task::new(content.to_string(), active_form.to_string()));
+                        }
+                    }
+                    if !tasks.is_empty() {
+                        return Some(tasks);
+                    }
+                }
+            }
+            
+            // Fallback: try to extract task info from plain text
+            // Look for patterns like "1. [STATUS] description" or similar
+            let mut tasks = Vec::new();
+            for line in result.lines() {
+                // Try to extract task information from common result formats
+                // This is a heuristic approach for text-based results
+                if line.contains("pending") || line.contains("in progress") || line.contains("completed") {
+                    // This might be a task line - try to parse it
+                    // This is simplified - actual parsing would depend on result format
+                }
+            }
+            
+            if !tasks.is_empty() {
+                return Some(tasks);
+            }
+        }
+    }
+    
+    None
+}
+
 /// Intelligent compaction that preserves recent tool call context while summarizing older messages
 /// This is designed to work during tool-calling loops without losing recent context
 pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: usize) -> Result<()> {
@@ -261,8 +364,17 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         return Ok(());
     }
     
-    // Keep system message and very recent messages
-    let system_message = chat.messages.first().cloned();
+    // Keep system message(s) and very recent messages
+    // Count all leading system messages
+    let system_message_count = chat.messages.iter()
+        .take_while(|m| m.role == "system")
+        .count();
+    
+    let mut system_messages: Vec<Message> = chat.messages
+        .iter()
+        .take(system_message_count)
+        .cloned()
+        .collect();
 
     // Find the cutoff point that preserves tool call/result pairs
     // Start from the rough cutoff and adjust to avoid breaking tool pairs
@@ -278,8 +390,8 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     // Get messages to summarize (everything between system and recent)
     let to_summarize: Vec<Message> = chat.messages
         .iter()
-        .skip(1) // Skip system
-        .take(final_cutoff.saturating_sub(1))
+        .skip(system_message_count) // Skip ALL system messages
+        .take(final_cutoff.saturating_sub(system_message_count))
         .cloned()
         .collect();
     
@@ -382,7 +494,12 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     if !response.status().is_success() {
         // If summarization fails, do simple trimming
         print_heart_red(&format!("{} Intelligent compaction failed, doing simple trim", "⚠️".yellow()), true);
-        let mut new_history = vec![system_message.unwrap()];
+        let mut new_history = vec![];
+        
+        // Add all original system messages first
+        new_history.extend(system_messages);
+        
+        // Add recent messages
         new_history.extend(recent_messages);
         
         // Ensure proper role alternation after system messages
@@ -398,20 +515,35 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
         let summary = summary_msg.content;
         
-        // Rebuild history WITHOUT adding a new system message in the middle
+        // Rebuild history preserving all system messages
         let mut new_history = vec![];
         
-        if let Some(sys_msg) = system_message {
-            new_history.push(sys_msg);
-        }
+        // Add all original system messages first
+        new_history.extend(system_messages);
         
-        // Add recent messages (including recent tool context) - NO system message added!
+        // Add a summary message to preserve context about what was compressed
+        new_history.push(Message {
+            role: "user".to_string(),
+            content: format!("CONVERSATION SUMMARY (previous context compressed at iteration {}):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", current_tool_iteration, summary),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
+        
+        // Add recent messages (including recent tool context)
         new_history.extend(recent_messages);
         
         // Ensure proper role alternation after system messages
         ensure_proper_role_alternation(&mut new_history);
         
         chat.messages = new_history;
+        
+        // Preserve latest todo state
+        if let Some(todo_tasks) = extract_latest_todo_state(&chat.messages) {
+            chat.todo_manager.set_tasks(todo_tasks);
+            print_heart_red(&format!("{} Todo state preserved during compaction", "📋".bright_cyan()), true);
+        }
         
         // Calculate new size
         let new_size = calculate_conversation_size(&chat.messages);
@@ -461,8 +593,17 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         summary_model.display_name()
     ), true);
 
-    // Keep system message and recent messages
-    let system_message = chat.messages.first().cloned();
+    // Keep system message(s) and recent messages
+    // Count all leading system messages
+    let system_message_count = chat.messages.iter()
+        .take_while(|m| m.role == "system")
+        .count();
+    
+    let mut system_messages: Vec<Message> = chat.messages
+        .iter()
+        .take(system_message_count)
+        .cloned()
+        .collect();
 
     // Find the cutoff point that preserves tool call/result pairs
     let cutoff = find_cutoff_preserving_tool_pairs(&chat.messages, KEEP_RECENT_MESSAGES);
@@ -477,8 +618,8 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     // Get messages to summarize (everything except system and recent)
     let to_summarize: Vec<Message> = chat.messages
         .iter()
-        .skip(1) // Skip system
-        .take(cutoff.saturating_sub(1))
+        .skip(system_message_count) // Skip ALL system messages
+        .take(cutoff.saturating_sub(system_message_count))
         .cloned()
         .collect();
 
@@ -557,7 +698,12 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     if !response.status().is_success() {
         // If summarization fails, just trim without summarizing
         print_heart_red(&format!("{} Summarization failed, doing simple trim", "⚠️".yellow()), true);
-        let mut new_history = vec![system_message.unwrap()];
+        let mut new_history = vec![];
+        
+        // Add all original system messages first
+        new_history.extend(system_messages);
+        
+        // Add recent messages
         new_history.extend(recent_messages);
         
         // Ensure proper role alternation after system messages
@@ -584,12 +730,21 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             (full_response, None)
         };
 
-        // Rebuild history WITHOUT adding a new system message in the middle
+        // Rebuild history preserving all system messages
         let mut new_history = vec![];
 
-        if let Some(sys_msg) = system_message {
-            new_history.push(sys_msg);
-        }
+        // Add all original system messages first
+        new_history.extend(system_messages);
+        
+        // Add a summary message to preserve context about what was compressed
+        new_history.push(Message {
+            role: "user".to_string(),
+            content: format!("CONVERSATION SUMMARY (previous context compressed):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", summary),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
 
         // Add recent messages - NO summary system message added!
         new_history.extend(recent_messages);
@@ -598,7 +753,13 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         ensure_proper_role_alternation(&mut new_history);
 
         chat.messages = new_history;
-
+        
+        // Preserve latest todo state
+        if let Some(todo_tasks) = extract_latest_todo_state(&chat.messages) {
+            chat.todo_manager.set_tasks(todo_tasks);
+            print_heart_red(&format!("{} Todo state preserved during compaction", "📋".bright_cyan()), true);
+        }
+        
         // Calculate new size
         let new_size = serde_json::to_string(&chat.messages)
             .map(|json| json.len())
