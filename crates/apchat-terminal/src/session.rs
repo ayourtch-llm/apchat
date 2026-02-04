@@ -271,6 +271,11 @@ impl TerminalSession {
         Ok(())
     }
 
+    /// Get a reference to the screen buffer for advanced operations
+    pub fn screen_buffer(&self) -> &ScreenBuffer {
+        &self.screen_buffer
+    }
+
     /// Check if session is finished
     pub fn is_finished(&self) -> bool {
         matches!(self.metadata.status, SessionStatus::Exited(_) | SessionStatus::Stopped)

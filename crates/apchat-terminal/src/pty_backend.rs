@@ -147,12 +147,19 @@ impl TerminalBackend for PtyBackend {
         session.resize(cols, rows)
     }
 
-    async fn get_scrollback(&self, session_id: &str, _lines: usize) -> Result<Option<String>> {
-        // For now, scrollback is included in screen contents
-        // TODO: Implement separate scrollback retrieval if needed
+    async fn get_scrollback(&self, session_id: &str, lines: usize) -> Result<Option<String>> {
+        // Retrieve scrollback lines separately from current screen contents
         let session = self.get_session(session_id)?;
         let session = session.lock().unwrap();
-        Ok(Some(session.get_screen(false, false)?))
+        
+        // Get the screen buffer
+        let scrollback = session.screen_buffer().get_scrollback(lines);
+        
+        if scrollback.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(scrollback.join("\n")))
+        }
     }
 
     async fn set_scrollback(&mut self, session_id: &str, lines: usize) -> Result<()> {
