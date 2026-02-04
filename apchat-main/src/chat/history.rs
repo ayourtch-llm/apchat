@@ -401,8 +401,13 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     
     let conversation_size = calculate_conversation_size(&chat.messages);
     
-    // Don't compact small conversations
+    // Save history before compaction FIRST - before any early returns
+    let _ = save_history_before_compaction(chat, "Intelligent compaction");
+    
+    // Don't compact small conversations (but only after we've saved the history)
     if conversation_size <= MIN_COMPACT_SIZE || chat.messages.len() <= PRESERVE_RECENT_MESSAGES * 2 {
+        // Still save after compaction (no change was made)
+        let _ = save_history_after_compaction(chat, "Intelligent compaction (skipped - too small)", conversation_size);
         return Ok(());
     }
     
@@ -410,9 +415,6 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
              "COMPACT".yellow(), 
              conversation_size as f64 / 1024.0, 
              chat.messages.len()), true);
-    
-    // Save history before compaction
-    let _ = save_history_before_compaction(chat, "Intelligent compaction");
     
     // Find recent tool calls to preserve context
     let mut recent_tool_call_indices = Vec::new();
@@ -454,6 +456,8 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     
     // Don't compact if we don't have enough older messages
     if cutoff <= 1 {
+        // Save after compaction (no change was made)
+        let _ = save_history_after_compaction(chat, "Intelligent compaction (skipped - not enough messages)", conversation_size);
         return Ok(());
     }
     
@@ -489,6 +493,8 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         .collect();
     
     if to_summarize.is_empty() {
+        // Save after compaction (no change was made)
+        let _ = save_history_after_compaction(chat, "Intelligent compaction (skipped - nothing to summarize)", conversation_size);
         return Ok(());
     }
     

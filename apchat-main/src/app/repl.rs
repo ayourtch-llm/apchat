@@ -27,6 +27,7 @@ use crate::app::repl::llm_task::spawn_llm_task;
 use commands::CommandResult;
 use inference::InferenceOutcome;
 use apchat_vty::request_counter::RequestGuard;
+use crate::chat::history::calculate_conversation_size;
 
 /// Get the display name for a model color from client config.
 ///
@@ -291,6 +292,12 @@ pub async fn run_repl_mode(
                     }
                 };
                 queued_messages.push(line.to_string());
+                // Print status line info for debugging
+                let context_size = calculate_conversation_size(&chat.messages);
+                let history_count = chat.messages.len();
+                let queued_count = queued_messages.len();
+                let pid = std::process::id();
+                print_heart_yellow(&format!("Status: queued={}, history={}, context_bytes={}, pid={}", queued_count, history_count, context_size, pid), true);
             },
         }
 
