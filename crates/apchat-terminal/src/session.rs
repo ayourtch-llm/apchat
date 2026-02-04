@@ -146,9 +146,8 @@ impl TerminalSession {
                             session.screen_buffer.process_output(&data);
                             let _ = session.logger.log_output(&data); // Ignore logging errors
 
-                            if session.capture_enabled {
-                                // TODO: Write to capture file
-                            }
+                            // Capture is handled by SessionLogger which writes JSON lines
+                            // to a capture file when capture_enabled is true
                         }
                     }
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -197,11 +196,8 @@ impl TerminalSession {
             self.screen_buffer.process_output(&output);
             self.logger.log_output(&output)?;
 
-            if self.capture_enabled {
-                if let Some(ref capture_file) = self.capture_file {
-                    // TODO: Write to capture file with timestamp
-                }
-            }
+            // Capture is handled by SessionLogger.log_output which writes
+            // JSON lines to capture file when capture_enabled is true
         }
         Ok(())
     }
