@@ -323,7 +323,7 @@ fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Resul
         .map_err(|e| anyhow::anyhow!("Failed to get timestamp: {}", e))?
         .as_secs();
     
-    let filename = format!("history-{}-{}.json", pid, timestamp);
+    let filename = format!("history-{}-{}-before.json", pid, timestamp);
     let filepath = histories_dir.join(&filename);
     
     // Serialize messages to JSON
@@ -340,6 +340,53 @@ fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Resul
         compaction_type,
         filepath.display(),
         chat.messages.len() as f64 / 1024.0
+    ), true);
+    
+    Ok(())
+}
+
+/// Save conversation history to ~/.okaychat/histories/ after compaction
+fn save_history_after_compaction(chat: &APChat, compaction_type: &str, original_size: usize) -> Result<()> {
+    // Get history directory
+    let okaychat_dir = get_okaychat_dir()?;
+    let histories_dir = okaychat_dir.join("histories");
+    
+    // Create histories directory if it doesn't exist
+    if !histories_dir.exists() {
+        fs::create_dir_all(&histories_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create histories directory: {}", e))?;
+    }
+    
+    // Generate filename with PID and timestamp
+    let pid = std::process::id();
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| anyhow::anyhow!("Failed to get timestamp: {}", e))?
+        .as_secs();
+    
+    let filename = format!("history-{}-{}-after.json", pid, timestamp);
+    let filepath = histories_dir.join(&filename);
+    
+    // Serialize messages to JSON
+    let json = serde_json::to_string_pretty(&chat.messages)
+        .map_err(|e| anyhow::anyhow!("Failed to serialize conversation history: {}", e))?;
+    
+    // Write to file
+    fs::write(&filepath, json)
+        .map_err(|e| anyhow::anyhow!("Failed to write history to {}: {}", filepath.display(), e))?;
+    
+    let original_size_kb = original_size as f64 / 1024.0;
+    let new_size_kb = calculate_conversation_size(&chat.messages) as f64 / 1024.0;
+    let saved_messages = chat.messages.len();
+    
+    print_heart_red(&format!(
+        "{} {} history saved to: {} (before: {:.1} KB, after: {:.1} KB, {} messages)",
+        "💾".bright_cyan(),
+        compaction_type,
+        filepath.display(),
+        original_size_kb,
+        new_size_kb,
+        saved_messages
     ), true);
     
     Ok(())
@@ -591,6 +638,9 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
             print_heart_red(&format!("{} Todo state preserved during compaction", "📋".bright_cyan()), true);
         }
         
+        // Save history after compaction
+        let _ = save_history_after_compaction(chat, "Intelligent compaction", conversation_size);
+        
         // Calculate new size
         let new_size = calculate_conversation_size(&chat.messages);
         
@@ -808,6 +858,9 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
             chat.todo_manager.set_tasks(todo_tasks);
             print_heart_red(&format!("{} Todo state preserved during compaction", "📋".bright_cyan()), true);
         }
+        
+        // Save history after compaction
+        let _ = save_history_after_compaction(chat, "History trim", conversation_size);
         
         // Calculate new size
         let new_size = serde_json::to_string(&chat.messages)
