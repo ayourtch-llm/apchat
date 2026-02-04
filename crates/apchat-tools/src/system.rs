@@ -65,7 +65,7 @@ impl Tool for RunCommandTool {
         }
 
         // Check permission using policy system
-        print_heart_red(&format!("{} {} ", "Run command:".yellow(), command.cyan()), false);
+        print_heart_red(&format!("{} {} ", "Run command:".yellow(), command.cyan()), true);
         std::io::stdout().flush().ok();
 
         // In non-interactive mode, skip confirmation (already approved via web UI)
