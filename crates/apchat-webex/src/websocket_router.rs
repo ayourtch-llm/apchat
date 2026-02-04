@@ -7,6 +7,7 @@ use tokio::time::{sleep, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
 use apchat_mspc::{MspcChannel, MspcMessage};
+use apchat_vty::print_heart_yellow;
 use crate::client::WebexClient;
 use crate::types::{MercuryEvent};
 
@@ -69,7 +70,7 @@ impl WebexWebSocketRouter {
             .map(|msg| msg.id)
             .collect();
 
-        eprintln!("🔍 DEBUG: WebSocket router initialized with {} seen messages", seen_ids.len());
+        print_heart_yellow(&format!("🔍 WebSocket router initialized with {} seen messages", seen_ids.len()), true);
 
         Ok(Self {
             client: Arc::new(client),
@@ -113,24 +114,24 @@ impl WebexWebSocketRouter {
             .map(|a| a.id.as_str())
             .unwrap_or("");
 
-        eprintln!("🔍 DEBUG: Mercury notification - new activity from {}", actor_email);
+        print_heart_yellow(&format!("🔍 Mercury notification - new activity from {}", actor_email), true);
 
         // Skip Mercury notifications for bot's own messages
         // This prevents unnecessary API calls and avoids triggering "new messages" indicator
         if actor_email == self.authorized_user_email {
-            eprintln!("🔍 DEBUG: Actor is authorized user, processing...");
+            print_heart_yellow("🔍 Actor is authorized user, processing...", true);
         } else if actor_email == self.bot_email {
-            eprintln!("🔍 DEBUG: Skipping Mercury notification for bot's own message");
+            print_heart_yellow("🔍 Skipping Mercury notification for bot's own message", true);
             return Ok(());
         } else {
-            eprintln!("🔍 DEBUG: Skipping Mercury notification from {}", actor_email);
+            print_heart_yellow(&format!("🔍 Skipping Mercury notification from {}", actor_email), true);
             return Ok(());
         }
 
         // Mercury sends encrypted content - we need to fetch the actual messages via REST API
         // Note: Mercury activity.id != REST API message.id (different ID formats)
         // So we just fetch recent messages and process any unseen ones from authorized user
-        eprintln!("🔍 DEBUG: Fetching recent messages from REST API...");
+        print_heart_yellow("🔍 Fetching recent messages from REST API...", true);
         let messages = self.client
             .get_messages(&self.room_id)
             .await
@@ -154,12 +155,12 @@ impl WebexWebSocketRouter {
                 continue;
             }
 
-            eprintln!("🔍 DEBUG: New message [{}] from {} @ {}: {}",
+            print_heart_yellow(&format!("🔍 New message [{}] from {} @ {}: {}",
                 msg.id.chars().take(8).collect::<String>(),
                 msg.person_email,
                 msg.created,
                 msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())
-            );
+            ), true);
 
             // Filter: only messages from authorized user, not from bot
             if msg.person_email == self.authorized_user_email && msg.person_email != self.bot_email {
@@ -185,23 +186,23 @@ impl WebexWebSocketRouter {
                     processed_count += 1;
                 }
             } else if msg.person_email == self.bot_email {
-                eprintln!("🔍 DEBUG: Skipping bot's own message: {}",
-                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string()));
+                print_heart_yellow(&format!("🔍 Skipping bot's own message: {}",
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
             } else {
-                eprintln!("🔍 DEBUG: Skipping message from {}: {}",
+                print_heart_yellow(&format!("🔍 Skipping message from {}: {}",
                     msg.person_email,
-                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string()));
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
             }
         }
 
-        eprintln!("🔍 DEBUG: Processed {} new messages from authorized user", processed_count);
+        print_heart_yellow(&format!("🔍 Processed {} new messages from authorized user", processed_count), true);
 
         Ok(())
     }
 
     /// Poll for missed messages after reconnection
     async fn recover_message_gap(&self) -> Result<()> {
-        eprintln!("🔍 DEBUG: Checking for missed messages during disconnect...");
+        print_heart_yellow("🔍 Checking for missed messages during disconnect...", true);
 
         let messages = self.client
             .get_messages(&self.room_id)
@@ -248,9 +249,9 @@ impl WebexWebSocketRouter {
         }
 
         if new_count > 0 {
-            eprintln!("🔍 DEBUG: Recovered {} missed messages", new_count);
+            print_heart_yellow(&format!("🔍 Recovered {} missed messages", new_count), true);
         } else {
-            eprintln!("🔍 DEBUG: No missed messages during disconnect");
+            print_heart_yellow("🔍 No missed messages during disconnect", true);
         }
 
         Ok(())
@@ -259,14 +260,14 @@ impl WebexWebSocketRouter {
     /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email);
-        eprintln!("🔍 DEBUG: Device ID: {}", self.device_id);
+        print_heart_yellow(&format!("🔍 Device ID: {}", self.device_id), true);
 
         let mut reconnect_delay = 0u64; // 0 = immediate first connect
 
         loop {
             // Reconnection backoff delay
             if reconnect_delay > 0 {
-                eprintln!("🔍 DEBUG: Reconnecting in {}s...", reconnect_delay);
+                print_heart_yellow(&format!("🔍 Reconnecting in {}s...", reconnect_delay), true);
                 sleep(Duration::from_secs(reconnect_delay)).await;
 
                 // Recover any messages missed during disconnect
@@ -278,7 +279,7 @@ impl WebexWebSocketRouter {
             // Try to connect
             match self.run_connection().await {
                 Ok(_) => {
-                    eprintln!("🔍 DEBUG: WebSocket connection ended cleanly");
+                    print_heart_yellow("🔍 WebSocket connection ended cleanly", true);
                     reconnect_delay = 1; // Start backoff on clean close
                 }
                 Err(e) => {
@@ -292,26 +293,26 @@ impl WebexWebSocketRouter {
                 }
             }
 
-            eprintln!("🔍 DEBUG: Attempting reconnection...");
+            print_heart_yellow("🔍 Attempting reconnection...", true);
         }
     }
 
     /// Handle a decoded Mercury message (text or binary converted to text)
     async fn handle_mercury_message(&self, text: &str) {
-        eprintln!("🔍 DEBUG: Processing message ({} bytes)", text.len());
-        eprintln!("🔍 DEBUG: Message preview: {}", text.chars().take(200).collect::<String>());
+        print_heart_yellow(&format!("🔍 Processing message ({} bytes)", text.len()), true);
+        print_heart_yellow(&format!("🔍 Message preview: {}", text.chars().take(200).collect::<String>()), true);
 
         // Parse Mercury event
         match serde_json::from_str::<MercuryEvent>(text) {
             Ok(event) => {
-                eprintln!("🔍 DEBUG: Parsed event type: {}", event.data.event_type);
+                print_heart_yellow(&format!("🔍 Parsed event type: {}", event.data.event_type), true);
                 if let Err(e) = self.process_event(event).await {
                     eprintln!("⚠️ Error processing event: {}", e);
                 }
             }
             Err(e) => {
                 eprintln!("⚠️ Failed to parse Mercury event: {}", e);
-                eprintln!("🔍 DEBUG: Raw message: {}", text);
+                print_heart_yellow(&format!("🔍 Raw message: {}", text), true);
             }
         }
     }
@@ -323,7 +324,7 @@ impl WebexWebSocketRouter {
             .await
             .context("Failed to connect to Mercury WebSocket")?;
 
-        eprintln!("🔍 DEBUG: WebSocket connected");
+        print_heart_yellow("🔍 WebSocket connected", true);
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -337,7 +338,7 @@ impl WebexWebSocketRouter {
         });
 
         let auth_text = serde_json::to_string(&auth_message)?;
-        eprintln!("🔍 DEBUG: Sending authorization to Mercury");
+        print_heart_yellow("🔍 Sending authorization to Mercury", true);
         write.send(Message::Text(auth_text)).await
             .context("Failed to send authorization message")?;
 
@@ -345,11 +346,11 @@ impl WebexWebSocketRouter {
         while let Some(msg_result) = read.next().await {
             match msg_result {
                 Ok(Message::Text(text)) => {
-                    eprintln!("🔍 DEBUG: Received WebSocket text message ({} bytes)", text.len());
+                    print_heart_yellow(&format!("🔍 Received WebSocket text message ({} bytes)", text.len()), true);
                     self.handle_mercury_message(&text).await;
                 }
                 Ok(Message::Binary(data)) => {
-                    eprintln!("🔍 DEBUG: Received binary message ({} bytes)", data.len());
+                    print_heart_yellow(&format!("🔍 Received binary message ({} bytes)", data.len()), true);
                     // Mercury sends messages as UTF-8 encoded binary
                     match String::from_utf8(data) {
                         Ok(text) => {
@@ -361,17 +362,17 @@ impl WebexWebSocketRouter {
                     }
                 }
                 Ok(Message::Close(_)) => {
-                    eprintln!("🔍 DEBUG: WebSocket closed by server");
+                    print_heart_yellow("🔍 WebSocket closed by server", true);
                     break;
                 }
                 Ok(Message::Ping(data)) => {
-                    eprintln!("🔍 DEBUG: Received ping ({} bytes)", data.len());
+                    print_heart_yellow(&format!("🔍 Received ping ({} bytes)", data.len()), true);
                 }
                 Ok(Message::Pong(data)) => {
-                    eprintln!("🔍 DEBUG: Received pong ({} bytes)", data.len());
+                    print_heart_yellow(&format!("🔍 Received pong ({} bytes)", data.len()), true);
                 }
                 Ok(msg) => {
-                    eprintln!("🔍 DEBUG: Received other message type: {:?}", msg);
+                    print_heart_yellow(&format!("🔍 Received other message type: {:?}", msg), true);
                 }
                 Err(e) => {
                     return Err(anyhow::anyhow!("WebSocket error: {}", e));

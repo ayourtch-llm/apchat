@@ -20,3 +20,4 @@ tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 # Internal dependencies
 apchat-mspc = { path = "../apchat-mspc" }
 apchat-logging = { path = "../apchat-logging" }
+apchat-vty = { path = "../apchat-vty" }

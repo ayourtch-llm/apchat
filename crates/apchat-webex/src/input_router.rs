@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use apchat_mspc::{MspcChannel, MspcMessage};
+use apchat_vty::print_heart_yellow;
 use crate::client::WebexClient;
 
 pub struct WebexInputRouter {
@@ -55,7 +56,7 @@ impl WebexInputRouter {
         // Extract the room ID from the message response
         let room_id = message.room_id.clone();
 
-        eprintln!("🔍 DEBUG: Fetching existing messages to mark as seen...");
+        print_heart_yellow("🔍 Fetching existing messages to mark as seen...", true);
 
         // Fetch existing messages and build the "seen" set
         // This prevents processing old messages from before bot startup
@@ -70,7 +71,7 @@ impl WebexInputRouter {
             .map(|msg| msg.id)
             .collect();
 
-        eprintln!("🔍 DEBUG: Marked {} existing messages as seen", seen_message_ids.len());
+        print_heart_yellow(&format!("🔍 Marked {} existing messages as seen", seen_message_ids.len()), true);
 
         Ok(Self {
             client: Arc::new(client),
@@ -94,37 +95,37 @@ impl WebexInputRouter {
     /// and route them to the MSPC channel
     pub async fn run(&self) -> Result<()> {
         println!("🌐 Webex bot starting - monitoring messages from {}", self.authorized_user_email);
-        eprintln!("🔍 DEBUG: Room ID: {}", self.room_id);
-        eprintln!("🔍 DEBUG: Bot email: {}", self.bot_email);
+        print_heart_yellow(&format!("🔍 Room ID: {}", self.room_id), true);
+        print_heart_yellow(&format!("🔍 Bot email: {}", self.bot_email), true);
 
         // Start with all messages that existed at startup already marked as seen
         let mut seen_message_ids = self.initial_seen_ids.clone();
-        eprintln!("🔍 DEBUG: Starting with {} messages already marked as seen", seen_message_ids.len());
+        print_heart_yellow(&format!("🔍 Starting with {} messages already marked as seen", seen_message_ids.len()), true);
 
         let mut poll_count = 0;
 
         loop {
             poll_count += 1;
-            eprintln!("🔍 DEBUG: Poll #{} - Checking for messages...", poll_count);
+            print_heart_yellow(&format!("🔍 Poll #{} - Checking for messages...", poll_count), true);
 
             // Poll for messages (API returns newest first)
             match self.client.get_messages(&self.room_id).await {
                 Ok(messages) => {
-                    eprintln!("🔍 DEBUG: Poll #{} - Got {} messages", poll_count, messages.len());
+                    print_heart_yellow(&format!("🔍 Poll #{} - Got {} messages", poll_count, messages.len()), true);
 
                     for msg in messages {
-                        eprintln!("🔍 DEBUG: Message ID: {}, from: {}, already seen: {}",
-                            msg.id, msg.person_email, seen_message_ids.contains(&msg.id));
+                        print_heart_yellow(&format!("🔍 Message ID: {}, from: {}, already seen: {}",
+                            msg.id, msg.person_email, seen_message_ids.contains(&msg.id)), true);
 
                         // If we've already processed this message, we've caught up
                         // Since messages are newest-first, we can stop here
                         if seen_message_ids.contains(&msg.id) {
-                            eprintln!("🔍 DEBUG: Hit already-seen message, stopping iteration");
+                            print_heart_yellow("🔍 Hit already-seen message, stopping iteration", true);
                             break;
                         }
 
-                        eprintln!("🔍 DEBUG: Message from {} (authorized: {}, bot: {})",
-                            msg.person_email, self.authorized_user_email, self.bot_email);
+                        print_heart_yellow(&format!("🔍 Message from {} (authorized: {}, bot: {})",
+                            msg.person_email, self.authorized_user_email, self.bot_email), true);
 
                         // Mark as seen immediately (before filtering) so we don't reprocess it
                         let msg_id = msg.id.clone();
@@ -156,11 +157,11 @@ impl WebexInputRouter {
                                 if let Err(e) = self.mspc_channel.send(message).await {
                                     eprintln!("⚠️ Failed to send Webex message to MSPC channel: {}", e);
                                 } else {
-                                    eprintln!("🔍 DEBUG: Successfully sent message to MSPC channel");
+                                    print_heart_yellow("🔍 Successfully sent message to MSPC channel", true);
                                 }
                             }
                         } else {
-                            eprintln!("🔍 DEBUG: Message filtered out (wrong sender or from bot)");
+                            print_heart_yellow("🔍 Message filtered out (wrong sender or from bot)", true);
                         }
                     }
                 }
