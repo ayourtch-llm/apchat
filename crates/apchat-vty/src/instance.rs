@@ -39,6 +39,11 @@ pub struct TestLock {
 }
 
 impl TestLock {
+    /// Returns the caller identifier
+    pub fn caller(&self) -> &str {
+        &self.caller
+    }
+
     /// Acquire the test lock
     ///
     /// This is called internally by TryTakeTestLockResult, users should
@@ -104,9 +109,11 @@ impl ReadlineInstance {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore
+    /// use apchat_vty::ReadlineInstance;
+    ///
     /// let mut guard = ReadlineInstance::get()?;
-    /// let line = guard.readline("Prompt: ")?;
+    /// // Note: readline() would block waiting for user input in tests
     /// // guard is dropped here, releasing the lock
     /// ```
     pub fn get() -> Result<MutexGuard<'static, Readline>> {
@@ -114,6 +121,22 @@ impl ReadlineInstance {
             .try_lock()
             .map_err(|e| anyhow::anyhow!("Failed to acquire readline lock: {}", e))?;
         Ok(guard)
+    }
+
+    /// Acquire the test lock for the calling test
+    ///
+    /// This returns a RAII guard that automatically releases the lock when dropped.
+    /// Use this pattern to ensure lock release even if the test panics.
+    ///
+    /// # Arguments
+    ///
+    /// * `caller_id` - A string identifier for the test/caller for logging purposes
+    ///
+    /// # Returns
+    ///
+    /// * `TestLock` - RAII guard that releases lock on drop
+    pub fn try_take_test_lock(caller_id: &str) -> TestLock {
+        TestLock::acquire(caller_id)
     }
 
     /// Read a line using the singleton readline instance

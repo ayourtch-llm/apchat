@@ -63,7 +63,7 @@ fn test_readline_input_simulation() -> Result<()> {
     let _lock = ReadlineInstance::try_take_test_lock("test_readline_input_simulation");
 
     // Simulate readline input
-    let guard = ReadlineInstance::get()?;
+    let mut guard = ReadlineInstance::get()?;
     guard.add_history_entry("user input test");
 
     // Verify we got our input
@@ -84,8 +84,8 @@ fn test_readline_race_condition_prevention() -> Result<()> {
     // This test waits their turn in the sequence
     let _lock = ReadlineInstance::try_take_test_lock("test_readline_race_condition_prevention");
 
-    let guard = ReadlineInstance::get()?;
-    guard.add_history("test 4 command");
+    let mut guard = ReadlineInstance::get()?;
+    guard.add_history_entry("test 4 command");
 
     // Verify all history entries are in order
     let history = guard.get_history_entries();

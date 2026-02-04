@@ -8,7 +8,8 @@ fn test_concurrent_test_lock_entry() {
     use std::sync::atomic::Ordering;
 
     // Simulate the lock
-    let lock = AtomicBool::new(true);
+    let lock = std::sync::Arc::new(AtomicBool::new(true));
+    let lock_clone = lock.clone();
 
     // Simulate multiple threads all trying to acquire it simultaneously
     // at the moment it's true (about to be released)
@@ -20,7 +21,7 @@ fn test_concurrent_test_lock_entry() {
     let handle = std::thread::spawn(move || {
         // This simulates what happens when we have inefficient locking:
         // Multiple threads read "false" and all enter the wait loop
-        while lock.load(Ordering::Acquire) == false {
+        while lock_clone.load(Ordering::Acquire) == false {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         true
