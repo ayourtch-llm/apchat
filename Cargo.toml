@@ -21,6 +21,11 @@ resolver = "2"
 [workspace.lints.rust]
 unused_must_use = "deny"
 
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
 [workspace.dependencies]
 # Testing dependencies shared across workspace
 tokio-test = "0.4"
