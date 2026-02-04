@@ -59,8 +59,9 @@ pub async fn initialize_output_router() -> Arc<OutputRouter> {
     // This connects print_with_emoji to the router
     let _ = apchat_vty::set_text_output_tx(TEXT_OUTPUT_TX.clone());
     
-    // Mark readline as active to suppress terminal duplicates
-    router.set_readline_active(true);
+    // Mark readline as NOT active initially (for subagent mode support)
+    // This allows terminal output to work when readline is not needed
+    router.set_readline_active(false);
     
     router
 }
