@@ -35,6 +35,19 @@ Dependencies:
 - May need to add `once_cell` if not present
 
 ## Resolution
+
+This issue has been implemented as part of the OutputRouter integration:
+
+- OutputDestination trait implemented in `apchat-main/src/mspc/output.rs`
+- Destination types (ReadlineDestination, TerminalDestination, FileDestination) implemented in `apchat-main/src/mspc/destinations.rs`
+- EmojiText handling added to readline poll loop in `crates/apchat-vty/src/readline.rs`
+- print_with_emoji updated to send to TEXT_OUTPUT_TX in `crates/apchat-vty/src/lib.rs`
+- OutputRouter initialized in `apchat-main/src/mspc/mod.rs` with `initialize_output_router()` function
+- All println/eprintln replaced with print_heart_red/print_heart_yellow in terminal manager, repl, input router, and router
+- All println in apchat-todo replaced with print_heart_red
+- Unit tests added and passing for all destination types
+
+Changes committed in commit fea2393.
 Added the `TEXT_OUTPUT_TX` global broadcast channel in `apchat-main/src/mspc/mod.rs`. The channel:
 - Is a `Lazy<broadcast::Sender<apchat_mspc::output::TextOutput>>` static
 - Has a buffer size of 100
