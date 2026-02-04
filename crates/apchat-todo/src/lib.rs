@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use colored::Colorize;
+use apchat_vty::print_heart_red;
 
 /// Task status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,14 +108,14 @@ impl TodoManager {
         let in_progress = tasks.iter().filter(|t| t.status == TaskStatus::InProgress).count();
         let completed = tasks.iter().filter(|t| t.status == TaskStatus::Completed).count();
 
-        println!("\n{}", "═══════════════════════════════════════════════════════════".bright_black());
-        println!("{} Tasks: {} pending, {} in progress, {} completed",
+        print_heart_red(&format!("\n{}", "═══════════════════════════════════════════════════════════".bright_black()), true);
+        print_heart_red(&format!("{} Tasks: {} pending, {} in progress, {} completed",
             "📋".bright_cyan(),
             pending.to_string().yellow(),
             in_progress.to_string().blue(),
             completed.to_string().green()
-        );
-        println!("{}", "═══════════════════════════════════════════════════════════".bright_black());
+        ), true);
+        print_heart_red(&format!("{}", "═══════════════════════════════════════════════════════════".bright_black()), true);
 
         for (idx, task) in tasks.iter().enumerate() {
             let task_num = format!("{}.", idx + 1).bright_black();
@@ -130,10 +131,10 @@ impl TodoManager {
                 TaskStatus::Completed => content.green(),
             };
 
-            println!("  {} {} {}", task_num, task.icon(), content_colored);
+            print_heart_red(&format!("  {} {} {}", task_num, task.icon(), content_colored), true);
         }
 
-        println!("{}", "═══════════════════════════════════════════════════════════".bright_black());
+        print_heart_red(&format!("{}", "═══════════════════════════════════════════════════════════".bright_black()), true);
     }
 
     /// Display a compact summary (one line)
@@ -151,18 +152,18 @@ impl TodoManager {
 
         // Show current in-progress task if any
         if let Some(current) = tasks.iter().find(|t| t.status == TaskStatus::InProgress) {
-            println!("{} {} ({}/{} tasks complete)",
+            print_heart_red(&format!("{} {} ({}/{} tasks complete)",
                 "▶️".bright_blue(),
                 current.active_form.bright_blue().bold(),
                 completed,
                 total
-            );
+            ), true);
         } else if completed == total {
-            println!("{} All tasks completed! ({}/{})",
+            print_heart_red(&format!("{} All tasks completed! ({}/{})",
                 "🎉".bright_green(),
                 completed,
                 total
-            );
+            ), true);
         }
     }
 

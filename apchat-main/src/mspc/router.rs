@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use apchat_vty::print_heart_yellow;
 use super::TEXT_OUTPUT_TX;
 use crate::mspc::{OutputDestination, OutputMessage, TextOutput};
 
@@ -54,7 +55,7 @@ impl OutputRouter {
                     if dest.is_active() {
                         let message = OutputMessage::TextOutput(text_output.clone());
                         if let Err(e) = dest.send_output(&message).await {
-                            eprintln!("OutputRouter: Failed to send to {}: {}", dest_id, e);
+                            print_heart_yellow(&format!("OutputRouter: Failed to send to {}: {}", dest_id, e), true);
                         }
                     }
                 }

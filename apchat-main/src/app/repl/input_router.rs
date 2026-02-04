@@ -2,7 +2,7 @@ use std::sync::Arc;
 use colored::Colorize;
 use tokio::task::JoinHandle;
 
-use apchat_vty::{print_heart_yellow, request_counter};
+use apchat_vty::{print_heart_red, print_heart_yellow, request_counter};
 use apchat_models::ModelColor;
 use apchat_toolcore::confirmation::ConfirmationRegistry;
 
@@ -47,7 +47,7 @@ pub fn spawn_input_router(config: RouterConfig) -> JoinHandle<()> {
         let signal_receiver_mutex = Arc::new(tokio::sync::Mutex::new(
             terminal_router.take_signal_receiver().expect("Signal receiver should be set")
         ));
-        println!("");
+        print_heart_red("", true);
 
         loop {
             // Get current model state for prompt

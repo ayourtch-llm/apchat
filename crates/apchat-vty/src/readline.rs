@@ -2247,12 +2247,23 @@ impl Readline {
                             let mut stdout = std::io::stdout();
                             // Save cursor position
                             let _ = self.cursor();
-                            panic!("Emoji text not handled here");
-                            /*
                             // Clear the current line
                             stdout.queue(MoveToColumn(0)).ok();
                             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-                            */
+                            // Print emoji text
+                            if !emoji.is_empty() && !content.is_empty() {
+                                if *newline {
+                                    writeln!(stdout, "{} {}", emoji, content).ok();
+                                } else {
+                                    write!(stdout, "{} {}", emoji, content).ok();
+                                }
+                            } else if !content.is_empty() {
+                                if *newline {
+                                    writeln!(stdout, "{}", content).ok();
+                                } else {
+                                    write!(stdout, "{}", content).ok();
+                                }
+                            }
                             stdout.flush().ok();
                             // Restore cursor position and redraw prompt
                             self.redraw(prompt);

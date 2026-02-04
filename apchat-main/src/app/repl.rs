@@ -385,7 +385,7 @@ async fn save_input_and_log(chat: &mut APChat, line: &str) {
         logger.log("user", line, None, false).await;
     }
 
-    println!("");
+    print_heart_red("", true);
 
     // Auto-save chat history
     match chat.auto_save_history() {

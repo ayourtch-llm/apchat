@@ -5,6 +5,7 @@ use super::backend::{TerminalBackend, TerminalBackendType, SessionInfo};
 use super::pty_backend::PtyBackend;
 use super::tmux_backend::TmuxBackend;
 use super::MAX_CONCURRENT_SESSIONS;
+use apchat_vty::print_heart_yellow;
 
 /// Manages all terminal sessions globally using pluggable backends
 pub struct TerminalManager {
@@ -41,15 +42,15 @@ impl TerminalManager {
                 match TmuxBackend::new(log_dir.clone(), max_sessions) {
                     Ok(backend) => Box::new(backend),
                     Err(e) => {
-                        eprintln!("⚠️  Failed to initialize tmux backend: {}", e);
-                        eprintln!("⚠️  Falling back to PTY backend");
+                        print_heart_yellow(&format!("⚠️  Failed to initialize tmux backend: {}", e), true);
+                        print_heart_yellow("⚠️  Falling back to PTY backend", true);
                         Box::new(PtyBackend::new(log_dir.clone(), max_sessions))
                     }
                 }
             }
         };
 
-        eprintln!("Terminal backend: {}", backend.backend_name());
+        print_heart_yellow(&format!("Terminal backend: {}", backend.backend_name()), true);
 
         Self {
             backend,
