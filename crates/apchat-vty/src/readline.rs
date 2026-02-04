@@ -16,6 +16,7 @@ use apchat_mspc::output::TextOutput;
 use crate::scroll_insert_up;
 use crate::request_counter;
 use crate::token_counter;
+use crate::status_info;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -1652,7 +1653,17 @@ impl Readline {
 	    self.cursor_offset_from_bottom += 1;
 	    stdout.queue(MoveToColumn(0)).ok();
             let local_time = &Local::now().time().to_string()[0..8];
-            let mut title = format!("User entry lines: {}, time: {} req: {} tok: {}", self.lines.len(), &local_time, request_counter::get_count(), token_counter::get_count());
+            let mut title = format!(
+                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} pid: {}",
+                self.lines.len(),
+                &local_time,
+                request_counter::get_count(),
+                token_counter::get_count(),
+                status_info::get_queued(),
+                status_info::get_history(),
+                status_info::get_context_bytes(),
+                status_info::get_pid()
+            );
             while title.len() < screen_width {
                title.push(' ');
             }

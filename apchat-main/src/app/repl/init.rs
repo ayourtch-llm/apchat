@@ -2,7 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 use std::path::PathBuf;
 
-use apchat_vty::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red, status_info};
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
 use apchat_policy::PolicyManager;
@@ -44,6 +44,9 @@ pub async fn initialize_repl(
         backend_type,
         cli.early_superpowers,
     );
+
+    // Set process ID for status info
+    status_info::set_pid(std::process::id().try_into().unwrap());
 
     print_model_config(&chat);
 

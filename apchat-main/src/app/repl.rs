@@ -11,7 +11,7 @@ use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use apchat_vty::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red, status_info};
 use apchat_models::ModelColor;
 use apchat_policy::PolicyManager;
 
@@ -292,12 +292,13 @@ pub async fn run_repl_mode(
                     }
                 };
                 queued_messages.push(line.to_string());
-                // Print status line info for debugging
+                // Update status info for title bar display
                 let context_size = calculate_conversation_size(&chat.messages);
                 let history_count = chat.messages.len();
                 let queued_count = queued_messages.len();
-                let pid = std::process::id();
-                print_heart_yellow(&format!("Status: queued={}, history={}, context_bytes={}, pid={}", queued_count, history_count, context_size, pid), true);
+                status_info::set_queued(queued_count);
+                status_info::set_history(history_count);
+                status_info::set_context_bytes(context_size);
             },
         }
 

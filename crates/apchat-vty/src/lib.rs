@@ -101,6 +101,65 @@ pub mod token_counter {
 
 pub use request_counter::{RequestGuard, get_count};
 
+/// Status information module
+/// Provides atomic singletons for status-related values that appear in the title bar
+pub mod status_info {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Global atomic counter for queued items
+    static QUEUED: AtomicUsize = AtomicUsize::new(0);
+
+    /// Global atomic counter for history items
+    static HISTORY: AtomicUsize = AtomicUsize::new(0);
+
+    /// Global atomic counter for context bytes
+    static CONTEXT_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+    /// Process ID (set once at initialization)
+    static PID: AtomicUsize = AtomicUsize::new(0);
+
+    /// Set the queued count
+    pub fn set_queued(count: usize) {
+        QUEUED.store(count, Ordering::Relaxed);
+    }
+
+    /// Get the queued count
+    pub fn get_queued() -> usize {
+        QUEUED.load(Ordering::Relaxed)
+    }
+
+    /// Set the history count
+    pub fn set_history(count: usize) {
+        HISTORY.store(count, Ordering::Relaxed);
+    }
+
+    /// Get the history count
+    pub fn get_history() -> usize {
+        HISTORY.load(Ordering::Relaxed)
+    }
+
+    /// Set the context bytes count
+    pub fn set_context_bytes(count: usize) {
+        CONTEXT_BYTES.store(count, Ordering::Relaxed);
+    }
+
+    /// Get the context bytes count
+    pub fn get_context_bytes() -> usize {
+        CONTEXT_BYTES.load(Ordering::Relaxed)
+    }
+
+    /// Set the process ID (should only be called once)
+    pub fn set_pid(pid: usize) {
+        PID.store(pid, Ordering::Relaxed);
+    }
+
+    /// Get the process ID
+    pub fn get_pid() -> usize {
+        PID.load(Ordering::Relaxed)
+    }
+}
+
+pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_pid, get_pid};
 
 use std::io::{self, Write};
 
