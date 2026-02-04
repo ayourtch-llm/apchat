@@ -13,7 +13,27 @@ apchat-vty= { path = "../apchat-vty" }
 [features]
 default = []
 embeddings = ["fastembed"]
+candle = ["embeddings", "candle-core", "candle-transformers", "tokenizers"]
 
 [target."cfg(unix)".dependencies.fastembed]
 optional = true
 version = "5"
+
+[dependencies.candle-core]
+version = "0.7"
+optional = true
+features = ["metal"]
+
+[dependencies.candle-transformers]
+version = "0.7"
+optional = true
+
+[dependencies.tokenizers]
+version = "0.19"
+optional = true
+default-features = false
+
+[dependencies.reqwest]
+version = "0.12"
+optional = true
+features = ["blocking", "json"]
