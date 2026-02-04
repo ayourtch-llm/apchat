@@ -65,9 +65,9 @@ async fn process_repl_command(chat: &mut APChat, message: MspcMessage, interrupt
             MspcMessage::InterruptSignal(content, sender) => {
                 // Forward to tools, then inform user there's nothing to cancel
                 let _ = interrupt_sender_for_main
-                    .send(MspcMessage::InterruptSignal(content, sender)).await;
+                    .send(MspcMessage::InterruptSignal(content.clone(), sender)).await;
                 print_heart_red(&format!("\n{}", "No operation in progress to interrupt".bright_yellow()), true);
-                return ApchatCommandResult::Continue;
+                format!("!{}", content)
             }
 
             MspcMessage::ConfirmationRequest(content, _sender) => {
@@ -105,6 +105,16 @@ async fn process_repl_command(chat: &mut APChat, message: MspcMessage, interrupt
         // Persist input, log it, and auto-save chat state
         save_input_and_log(chat, line).await;
         ApchatCommandResult::DoInference(line.to_string())
+}
+
+fn get_urgent_input(urgent_messages: &mut Vec<String>) -> String {
+    let mut urgent_input = format!("START URGENT:\n");
+    while let Some(urgent_msg) = urgent_messages.pop() {
+      print_heart_yellow(&format!("Injecting urgent message: {:?}", &urgent_msg), true);
+      urgent_input.push_str(&format!("    {}\n", urgent_msg));
+    }
+    urgent_input.push_str("END URGENT\n");
+    urgent_input
 }
 
 /// Run interactive REPL mode.
@@ -178,6 +188,7 @@ pub async fn run_repl_mode(
     // Spawn the LLM task
     let mut llm_channels = spawn_llm_task();
     let mut queued_messages: Vec<String> = vec![];
+    let mut urgent_messages: Vec<String> = vec![];
 
     let mut llm_running = false;
     let mut request_guard = None;
@@ -190,7 +201,24 @@ pub async fn run_repl_mode(
     'outer: loop {
         // ── Inference with interrupt support ───────────────────────────────
         if !llm_running {
-            if let Some(input) = queued_messages.pop() {
+            // First, inject urgent messages in FIFO order before regular queued messages
+            if !urgent_messages.is_empty() {
+                let mut urgent_input = get_urgent_input(&mut urgent_messages);
+
+                let cancel_token = tokio_util::sync::CancellationToken::new();
+                {
+                    let mut guard = current_token.lock().unwrap();
+                    *guard = Some(cancel_token.clone());
+                }
+                add_msg_to_history(&mut chat, &mut llm_channels, &urgent_input, &cancel_token).await;
+                total_tokens_start = chat.total_tokens_used;
+                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
+                    llm_running = true;
+                    request_guard = Some(RequestGuard::new());
+                } else {
+                    print_heart_yellow(&format!("Error running inference on urgent message: {:?}", &urgent_input), true);
+                }
+            } else if let Some(input) = queued_messages.pop() {
                 print_heart_yellow(&format!("Got new pending input: {:?}", &input), true);
                 let cancel_token = tokio_util::sync::CancellationToken::new();
                 {
@@ -199,7 +227,7 @@ pub async fn run_repl_mode(
                 }
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;
-                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
+                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
                     llm_running = true;
                     request_guard = Some(RequestGuard::new());
                 } else {
@@ -209,13 +237,7 @@ pub async fn run_repl_mode(
             }
         }
 
-        // Update status info for title bar display
-        let context_size = calculate_conversation_size(&chat.messages);
-        let history_count = chat.messages.len();
-        let queued_count = queued_messages.len();
-        status_info::set_queued(queued_count);
-        status_info::set_history(history_count);
-        status_info::set_context_bytes(context_size);
+        update_status_info(&chat, &queued_messages);
 
         print_heart_yellow(&format!("Select start"), true);
         tokio::select! {
@@ -262,7 +284,13 @@ pub async fn run_repl_mode(
                             let mut guard = current_token.lock().unwrap();
                             *guard = Some(cancel_token.clone());
                         }
-                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token).await {
+                        let maybe_urgent_input = if urgent_messages.is_empty() {
+                            None
+                        } else {
+                            Some(get_urgent_input(&mut urgent_messages))
+                        };
+
+                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
                             print_heart_yellow(&format!("Started repeat inference"), true);
                             llm_running = true;
                             request_guard = Some(RequestGuard::new());
@@ -299,17 +327,15 @@ pub async fn run_repl_mode(
                         line
                     }
                 };
-                queued_messages.push(line.to_string());
+                if line.starts_with("!") {
+                    urgent_messages.push(line[1..].to_string());
+                } else {
+                    queued_messages.push(line.to_string());
+                }
             },
         }
 
-        // Update status info for title bar display (at Select end)
-        let context_size = calculate_conversation_size(&chat.messages);
-        let history_count = chat.messages.len();
-        let queued_count = queued_messages.len();
-        status_info::set_queued(queued_count);
-        status_info::set_history(history_count);
-        status_info::set_context_bytes(context_size);
+        update_status_info(&chat, &queued_messages);
 
         print_heart_yellow(&format!("Select end"), true);
     }
@@ -373,6 +399,17 @@ async fn handle_confirmation_request(content: &str, mspc_channel: &Arc<MspcChann
     let _ = mspc_channel.send(
         MspcMessage::ConfirmationResponse(approved, rejection_reason)
     ).await;
+}
+
+/// Update status info for title bar display based on current state
+fn update_status_info(chat: &APChat, queued_messages: &[String]) {
+    let context_size = calculate_conversation_size(&chat.messages);
+    let history_count = chat.messages.len();
+    let queued_count = queued_messages.len();
+    status_info::set_queued(queued_count);
+    status_info::set_history(history_count);
+    status_info::set_context_bytes(context_size);
+    status_info::set_urgent(0); // Reset urgent count - will be set by MSPC router if needed
 }
 
 /// Save user input to persistent readline history, log it to the session
@@ -449,6 +486,7 @@ async fn prep_and_send_request(
     chat: &mut APChat,
     llm_channels: &mut LLMTaskChannels,
     cancel_token: &tokio_util::sync::CancellationToken,
+    maybe_urgent_input: Option<String>,
 ) -> bool {
     use apchat_vty::print_heart_yellow;
     use apchat_models::Message;
@@ -459,6 +497,24 @@ async fn prep_and_send_request(
             if fixed {
                 print_heart_yellow(&format!("{} {}", "✅".green(), "Tool calls were automatically fixed in conversation history"), true);
             }
+        }
+        if let Some(urgent_input) = maybe_urgent_input {
+            chat.messages.push(Message {
+                    role: "assistant".to_string(),
+                    content: "I notice there is some urgent messages from the user ?".to_string(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+            });
+            chat.messages.push(Message {
+                    role: "user".to_string(),
+                    content: urgent_input,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+            });
         }
 
         // Create API call parameters

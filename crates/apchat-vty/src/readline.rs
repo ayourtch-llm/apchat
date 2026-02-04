@@ -1654,7 +1654,7 @@ impl Readline {
 	    stdout.queue(MoveToColumn(0)).ok();
             let local_time = &Local::now().time().to_string()[0..8];
             let mut title = format!(
-                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} pid: {}",
+                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {}",
                 self.lines.len(),
                 &local_time,
                 request_counter::get_count(),
@@ -1662,6 +1662,7 @@ impl Readline {
                 status_info::get_queued(),
                 status_info::get_history(),
                 status_info::get_context_bytes(),
+                status_info::get_urgent(),
                 status_info::get_pid()
             );
             while title.len() < screen_width {

@@ -115,6 +115,9 @@ pub mod status_info {
     /// Global atomic counter for context bytes
     static CONTEXT_BYTES: AtomicUsize = AtomicUsize::new(0);
 
+    /// Global atomic counter for urgent messages
+    static URGENT: AtomicUsize = AtomicUsize::new(0);
+
     /// Process ID (set once at initialization)
     static PID: AtomicUsize = AtomicUsize::new(0);
 
@@ -148,6 +151,16 @@ pub mod status_info {
         CONTEXT_BYTES.load(Ordering::Relaxed)
     }
 
+    /// Set the urgent message count
+    pub fn set_urgent(count: usize) {
+        URGENT.store(count, Ordering::Relaxed);
+    }
+
+    /// Get the urgent message count
+    pub fn get_urgent() -> usize {
+        URGENT.load(Ordering::Relaxed)
+    }
+
     /// Set the process ID (should only be called once)
     pub fn set_pid(pid: usize) {
         PID.store(pid, Ordering::Relaxed);
@@ -159,7 +172,7 @@ pub mod status_info {
     }
 }
 
-pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_pid, get_pid};
+pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_urgent, get_urgent, set_pid, get_pid};
 
 use std::io::{self, Write};
 
