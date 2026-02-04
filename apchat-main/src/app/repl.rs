@@ -209,6 +209,14 @@ pub async fn run_repl_mode(
             }
         }
 
+        // Update status info for title bar display
+        let context_size = calculate_conversation_size(&chat.messages);
+        let history_count = chat.messages.len();
+        let queued_count = queued_messages.len();
+        status_info::set_queued(queued_count);
+        status_info::set_history(history_count);
+        status_info::set_context_bytes(context_size);
+
         print_heart_yellow(&format!("Select start"), true);
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
@@ -292,15 +300,16 @@ pub async fn run_repl_mode(
                     }
                 };
                 queued_messages.push(line.to_string());
-                // Update status info for title bar display
-                let context_size = calculate_conversation_size(&chat.messages);
-                let history_count = chat.messages.len();
-                let queued_count = queued_messages.len();
-                status_info::set_queued(queued_count);
-                status_info::set_history(history_count);
-                status_info::set_context_bytes(context_size);
             },
         }
+
+        // Update status info for title bar display (at Select end)
+        let context_size = calculate_conversation_size(&chat.messages);
+        let history_count = chat.messages.len();
+        let queued_count = queued_messages.len();
+        status_info::set_queued(queued_count);
+        status_info::set_history(history_count);
+        status_info::set_context_bytes(context_size);
 
         print_heart_yellow(&format!("Select end"), true);
     }
