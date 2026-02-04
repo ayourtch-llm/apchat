@@ -67,8 +67,10 @@ All tests should either pass or be ignored.
 
 **Files Modified:**
 - `crates/apchat-vty/src/readline.rs` - Fixed doc test markers
+- `crates/apchat-vty/examples/test_lock_pattern.rs` - Fixed doc test markers
+- `crates/apchat-vty/examples/test_raii_lock.rs` - Fixed doc test markers
 
-**Commit:** (to be added)
+**Commit:** b93ab78 - fix: Correct doc test markers in readline.rs
 
 ---
 *Created: 2026-02-04*
