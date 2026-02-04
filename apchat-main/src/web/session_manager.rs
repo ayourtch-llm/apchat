@@ -407,9 +407,35 @@ impl SessionManager {
         Ok(session)
     }
 
-    /// Clean up inactive sessions (future enhancement)
-    pub async fn cleanup_inactive(&self, _timeout_seconds: i64) -> usize {
-        // TODO: Implement session timeout and cleanup
-        0
+    /// Clean up inactive sessions
+    pub async fn cleanup_inactive(&self, timeout_seconds: i64) -> usize {
+        let now = Utc::now().timestamp();
+        let sessions = self.sessions.read().await;
+        let mut to_remove = Vec::new();
+        
+        for (session_id, session) in sessions.iter() {
+            let session_last_activity = *session.last_activity.lock().await;
+            let inactive_for = now - session_last_activity.timestamp();
+            if inactive_for > timeout_seconds {
+                to_remove.push(*session_id);
+            }
+        }
+        
+        drop(sessions); // Release the read lock
+        
+        // Remove sessions outside the read lock
+        let mut sessions_write = self.sessions.write().await;
+        let before_len = sessions_write.len();
+        
+        for session_id in &to_remove {
+            sessions_write.remove(session_id);
+            
+            // Also delete from disk if persistence is enabled
+            if let Some(persistence) = &self.persistence {
+                let _ = persistence.delete_session(session_id);
+            }
+        }
+        
+        before_len - sessions_write.len()
     }
 }
