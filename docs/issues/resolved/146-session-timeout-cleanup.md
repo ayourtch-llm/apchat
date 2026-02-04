@@ -2,7 +2,7 @@
 
 ## Summary
 
-The `cleanup_inactive` method in `apchat-main/src/web/session_manager.rs` is a stub that always returns 0 without actually cleaning up inactive sessions. This is a security and resource management concern.
+The `cleanup_inactive` method in `apchat-main/src/web/session_manager.rs` has been implemented with proper session cleanup logic that removes inactive sessions based on timeout. This addresses security and resource management concerns.
 
 ## Location
 - File: `apchat-main/src/web/session_manager.rs`
@@ -55,8 +55,12 @@ The method should:
 
 ## Resolution
 
-(TO BE ADDED WHEN FIXED)
+✅ **FIXED** - The `cleanup_inactive` method has been fully implemented:
+- Iterates through all sessions and checks last activity timestamp
+- Removes sessions that have been inactive longer than the timeout
+- Returns the count of cleaned-up sessions
+- Deletes sessions from disk if persistence is enabled
 
 ---
 *Created: 2026-02-04*
-*Resolved: (TO BE ADDED)*
+*Resolved: 2026-02-04*
