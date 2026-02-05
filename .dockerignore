@@ -1,0 +1,40 @@
+# Build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation (not needed in container)
+docs/
+*.md
+!CLAUDE.md
+!README.md
+
+# Test files
+**/tests/
+**/*_test.rs
+
+# GitHub
+.github/
+
+# Other
+tmp/
+.apchat-large-outputs/
+web/
+scripts/
+hooks/
+sample.pdf
+wip
+typescript

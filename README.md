@@ -156,6 +156,28 @@ cargo build --release
 source apchat-completion.bash
 ```
 
+### Docker Installation
+
+APChat is also available as a Docker container from GitHub Container Registry:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/ayourtch/apchat:latest
+
+# Run in interactive mode
+docker run -it --rm \
+  -e GROQ_API_KEY=$GROQ_API_KEY \
+  ghcr.io/ayourtch/apchat:latest -i
+
+# Run with a one-shot task
+docker run --rm \
+  -e GROQ_API_KEY=$GROQ_API_KEY \
+  ghcr.io/ayourtch/apchat:latest \
+  --task "Your task here"
+```
+
+For comprehensive Docker usage examples, including volume mounting, web server mode, and Docker Compose configurations, see [DOCKER.md](DOCKER.md).
+
 ## Configuration
 
 ### Environment Variables
