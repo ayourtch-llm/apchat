@@ -28,6 +28,7 @@ use commands::CommandResult;
 use inference::InferenceOutcome;
 use apchat_vty::request_counter::RequestGuard;
 use crate::chat::history::calculate_conversation_size;
+use crate::scheduled_instructions::poller::ScheduledInstructionPoller;
 
 /// Get the display name for a model color from client config.
 ///
@@ -184,6 +185,13 @@ pub async fn run_repl_mode(
     });
 
     let interrupt_sender_for_main = interrupt_sender;
+
+    // ── Scheduled instruction poller ───────────────────────────────────────
+    // Create and start the scheduled instruction poller
+    let db_path = apchat_tools::memory::get_memory_db_path();
+    let mut scheduled_instruction_poller = ScheduledInstructionPoller::new(db_path);
+    scheduled_instruction_poller.set_channel(mspc_channel.clone());
+    let poller_handle = scheduled_instruction_poller.start();
 
     // Spawn the LLM task
     let mut llm_channels = spawn_llm_task();
@@ -342,6 +350,10 @@ pub async fn run_repl_mode(
 
     // ── Cleanup ────────────────────────────────────────────────────────────
     router_handle.abort();
+    
+    // Stop the scheduled instruction poller
+    poller_handle.abort();
+    let _ = poller_handle.await;
 
     if let Some(logger) = &mut chat.logger {
         logger.shutdown().await;

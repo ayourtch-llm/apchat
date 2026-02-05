@@ -10,6 +10,7 @@ pub mod api;
 pub mod app;
 pub mod terminal;
 pub mod web;
+pub mod scheduled_instructions;
 
 mod apchat;
 pub use apchat::{APChat, MAX_CONTEXT_TOKENS, MAX_RETRIES, resolve_terminal_backend};

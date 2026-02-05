@@ -32,3 +32,34 @@ impl Memory {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScheduledInstruction {
+    pub id: String,
+    pub scheduled_time: i64,
+    pub content: String,
+    pub created_at: i64,
+    pub status: String,
+    pub processed_at: Option<i64>,
+}
+
+impl ScheduledInstruction {
+    /// Create a new scheduled instruction (for internal use)
+    pub fn new(
+        id: String,
+        scheduled_time: i64,
+        content: String,
+        created_at: i64,
+        status: String,
+        processed_at: Option<i64>,
+    ) -> Self {
+        Self {
+            id,
+            scheduled_time,
+            content,
+            created_at,
+            status,
+            processed_at,
+        }
+    }
+}

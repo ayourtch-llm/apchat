@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use sqlx::Row;
 
-use crate::memory::{Memory, connect_pool, init_db, get_memory_db_path, search_memories, delete_memory, list_memories};
+use crate::memory::{Memory, connect_pool, init_db, get_memory_db_path, search_memories, delete_memory, list_memories, add_scheduled_instruction, list_scheduled_instructions, delete_scheduled_instruction, mark_scheduled_instruction_as_processed};
 
 /// Tool for storing a new memory
 pub struct StoreMemoryTool;
@@ -239,6 +239,274 @@ impl Tool for QueryMemoryTool {
         }).to_string();
 
         ToolResult::success(response_json)
+    }
+}
+
+/// Tool for adding a scheduled instruction
+pub struct AddScheduledInstructionTool;
+
+#[async_trait]
+impl Tool for AddScheduledInstructionTool {
+    fn name(&self) -> &str {
+        "add_scheduled_instruction"
+    }
+
+    fn description(&self) -> &str {
+        "Schedule an instruction to be injected at a future time. The instruction will be automatically injected as user input when the scheduled time is reached."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("scheduled_time", "integer", "Unix timestamp when the instruction should be injected", required),
+            param!("content", "string", "The instruction content to be injected", required),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Extract parameters
+        let scheduled_time = match params.get_required::<i64>("scheduled_time") {
+            Ok(time) => time,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let content = match params.get_required::<String>("content") {
+            Ok(content) => content,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        // Validate scheduled_time is in the future
+        let now = Utc::now().timestamp();
+        if scheduled_time <= now {
+            return ToolResult::error("scheduled_time must be in the future".to_string());
+        }
+
+        // Validate content
+        if content.trim().is_empty() {
+            return ToolResult::error("content cannot be empty".to_string());
+        }
+
+        // Initialize database connection
+        let db_path = get_memory_db_path();
+        let pool = match connect_pool(&db_path).await {
+            Ok(pool) => pool,
+            Err(e) => return ToolResult::error(format!("Failed to connect to database: {}", e)),
+        };
+
+        // Initialize database (create tables if not exist)
+        if let Err(e) = init_db(&pool).await {
+            return ToolResult::error(format!("Failed to initialize database: {}", e));
+        }
+
+        // Check permission using policy system
+        let (approved, rejection_reason) = match context.check_permission_async(
+            apchat_policy::ActionType::MemoryStore,
+            "scheduled_instruction",
+            "Schedule a new instruction"
+        ).await {
+            Ok((approved, reason)) => (approved, reason),
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        };
+
+        if !approved {
+            let error_msg = if let Some(reason) = rejection_reason {
+                format!("Schedule operation cancelled: {}", reason)
+            } else {
+                "Schedule operation cancelled by policy".to_string()
+            };
+            return ToolResult::error(error_msg);
+        }
+
+        // Add the scheduled instruction
+        let created_at = Utc::now().timestamp();
+        match add_scheduled_instruction(&pool, scheduled_time, &content, created_at).await {
+            Ok(id) => {
+                let response_json = serde_json::json!({
+                    "message": "Scheduled instruction created successfully",
+                    "id": id,
+                    "scheduled_time": scheduled_time,
+                    "content": content,
+                    "created_at": created_at,
+                }).to_string();
+                ToolResult::success(response_json)
+            }
+            Err(e) => ToolResult::error(format!("Failed to add scheduled instruction: {}", e)),
+        }
+    }
+}
+
+/// Tool for listing scheduled instructions
+pub struct ListScheduledInstructionsTool;
+
+#[async_trait]
+impl Tool for ListScheduledInstructionsTool {
+    fn name(&self) -> &str {
+        "list_scheduled_instructions"
+    }
+
+    fn description(&self) -> &str {
+        "List scheduled instructions with optional filtering by status. Returns instructions sorted by scheduled time."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("status", "string", "Filter by status ('pending' or 'processed')", optional, ""),
+            param!("limit", "integer", "Maximum number of instructions to return", optional, "50"),
+            param!("offset", "integer", "Number of instructions to skip for pagination", optional, "0"),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Extract parameters
+        let status = params.get_optional::<String>("status").unwrap_or(None);
+        let limit_str = params.get_optional::<String>("limit").unwrap_or(None);
+        let offset_str = params.get_optional::<String>("offset").unwrap_or(None);
+
+        // Parse limit and offset
+        let limit = limit_str.and_then(|s| s.parse::<usize>().ok());
+        let offset = offset_str.and_then(|s| s.parse::<usize>().ok());
+
+        // Initialize database connection
+        let db_path = get_memory_db_path();
+        let pool = match connect_pool(&db_path).await {
+            Ok(pool) => pool,
+            Err(e) => return ToolResult::error(format!("Failed to connect to database: {}", e)),
+        };
+
+        // Initialize database (create tables if not exist)
+        if let Err(e) = init_db(&pool).await {
+            return ToolResult::error(format!("Failed to initialize database: {}", e));
+        }
+
+        // Check permission using policy system
+        let (approved, rejection_reason) = match context.check_permission_async(
+            apchat_policy::ActionType::MemoryList,
+            "scheduled_instruction",
+            "List scheduled instructions"
+        ).await {
+            Ok((approved, reason)) => (approved, reason),
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        };
+
+        if !approved {
+            let error_msg = if let Some(reason) = rejection_reason {
+                format!("List operation cancelled: {}", reason)
+            } else {
+                "List operation cancelled by policy".to_string()
+            };
+            return ToolResult::error(error_msg);
+        }
+
+        // List scheduled instructions
+        let instructions = match list_scheduled_instructions(
+            &pool,
+            status.as_deref(),
+            limit,
+            offset,
+        )
+        .await {
+            Ok(instructions) => instructions,
+            Err(e) => return ToolResult::error(format!("Failed to list scheduled instructions: {}", e)),
+        };
+
+        // Format the response
+        let mut instructions_json = Vec::new();
+        for instruction in instructions {
+            instructions_json.push(serde_json::json!({
+                "id": instruction.id,
+                "scheduled_time": instruction.scheduled_time,
+                "content": instruction.content,
+                "created_at": instruction.created_at,
+                "status": instruction.status,
+                "processed_at": instruction.processed_at,
+            }));
+        }
+
+        let response_json = serde_json::json!({
+            "total": instructions_json.len(),
+            "instructions": instructions_json,
+        }).to_string();
+
+        ToolResult::success(response_json)
+    }
+}
+
+/// Tool for deleting a scheduled instruction
+pub struct DeleteScheduledInstructionTool;
+
+#[async_trait]
+impl Tool for DeleteScheduledInstructionTool {
+    fn name(&self) -> &str {
+        "delete_scheduled_instruction"
+    }
+
+    fn description(&self) -> &str {
+        "Delete a scheduled instruction by ID. This action cannot be undone."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("id", "string", "ID of the scheduled instruction to delete", required),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolResult {
+        // Extract parameters
+        let id = match params.get_required::<String>("id") {
+            Ok(id) => id,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        // Validate id
+        if id.trim().is_empty() {
+            return ToolResult::error("id cannot be empty".to_string());
+        }
+
+        // Initialize database connection
+        let db_path = get_memory_db_path();
+        let pool = match connect_pool(&db_path).await {
+            Ok(pool) => pool,
+            Err(e) => return ToolResult::error(format!("Failed to connect to database: {}", e)),
+        };
+
+        // Initialize database (create tables if not exist)
+        if let Err(e) = init_db(&pool).await {
+            return ToolResult::error(format!("Failed to initialize database: {}", e));
+        }
+
+        // Check permission using policy system
+        let (approved, rejection_reason) = match context.check_permission_async(
+            apchat_policy::ActionType::MemoryDelete,
+            &id,
+            &format!("Delete scheduled instruction '{}'", id)
+        ).await {
+            Ok((approved, reason)) => (approved, reason),
+            Err(e) => return ToolResult::error(format!("Permission check failed: {}", e)),
+        };
+
+        if !approved {
+            let error_msg = if let Some(reason) = rejection_reason {
+                format!("Delete operation cancelled: {}", reason)
+            } else {
+                "Delete operation cancelled by policy".to_string()
+            };
+            return ToolResult::error(error_msg);
+        }
+
+        // Delete the scheduled instruction
+        match delete_scheduled_instruction(&pool, &id).await {
+            Ok(deleted) => {
+                if deleted {
+                    let response_json = serde_json::json!({
+                        "message": "Scheduled instruction deleted successfully",
+                        "id": id,
+                    }).to_string();
+                    ToolResult::success(response_json)
+                } else {
+                    ToolResult::error(format!("Scheduled instruction with ID '{}' not found", id))
+                }
+            }
+            Err(e) => ToolResult::error(format!("Failed to delete scheduled instruction: {}", e)),
+        }
     }
 }
 
@@ -651,4 +919,5 @@ impl Tool for ListMemoriesTool {
         ToolResult::success(response_json)
     }
 }
+
 
