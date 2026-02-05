@@ -1,11 +1,15 @@
 # Multi-stage build for apchat
 # Stage 1: Build the application
-FROM rust:nightly-slim as builder
+FROM rust:slim AS builder
 
 # Install build dependencies
 RUN apt-get update && \
     apt-get install -y pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# Install nightly toolchain for edition2024 support
+RUN rustup toolchain install nightly && \
+    rustup default nightly
 
 WORKDIR /app
 
