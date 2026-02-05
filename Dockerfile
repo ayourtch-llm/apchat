@@ -1,6 +1,6 @@
 # Multi-stage build for apchat
 # Stage 1: Build the application
-FROM rust:1.83-slim as builder
+FROM rust:nightly-slim as builder
 
 # Install build dependencies
 RUN apt-get update && \
