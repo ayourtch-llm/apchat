@@ -32,7 +32,6 @@ docs/
 # Other
 tmp/
 .apchat-large-outputs/
-web/
 scripts/
 hooks/
 sample.pdf
