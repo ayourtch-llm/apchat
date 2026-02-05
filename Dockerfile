@@ -20,7 +20,8 @@ COPY . .
 RUN cargo build --release
 
 # Stage 2: Create minimal runtime image
-FROM debian:bookworm-slim
+# Use debian:sid-slim for newer glibc to match the builder
+FROM debian:sid-slim
 
 # Install runtime dependencies
 RUN apt-get update && \
