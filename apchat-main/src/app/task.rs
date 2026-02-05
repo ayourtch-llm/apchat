@@ -33,6 +33,7 @@ pub async fn run_task_mode(
         cli.verbose,
         backend_type,
         cli.early_superpowers,
+        false, // delayed_instructions_enabled - task mode doesn't need scheduled instructions
     );
 
     // Initialize logger for task mode

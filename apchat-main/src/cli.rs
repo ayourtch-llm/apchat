@@ -148,6 +148,12 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1", env = "APCHAT_WEB_BIND")]
     pub web_bind: String,
 
+    /// Enable scheduled instructions feature
+    /// When enabled, allows scheduling instructions to be injected at future times
+    /// and starts a background poller to process them
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub delayed_instructions: bool,
+
     /// Allow TUI session to be attached from web
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub web_attachable: bool,

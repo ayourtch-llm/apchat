@@ -43,6 +43,7 @@ pub async fn initialize_repl(
         cli.verbose,
         backend_type,
         cli.early_superpowers,
+        cli.delayed_instructions,
     );
 
     // Set process ID for status info

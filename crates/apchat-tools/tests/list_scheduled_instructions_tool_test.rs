@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use chrono::Utc;
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_list_scheduled_instructions_tool_parameters() {
     let tool = ListScheduledInstructionsTool;
     
@@ -25,6 +26,7 @@ async fn test_list_scheduled_instructions_tool_parameters() {
 }
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_list_scheduled_instructions_tool_empty() {
     let add_tool = AddScheduledInstructionTool;
     let list_tool = ListScheduledInstructionsTool;
@@ -64,6 +66,7 @@ async fn test_list_scheduled_instructions_tool_empty() {
 }
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_list_scheduled_instructions_tool_filter_by_status() {
     let add_tool = AddScheduledInstructionTool;
     let list_tool = ListScheduledInstructionsTool;

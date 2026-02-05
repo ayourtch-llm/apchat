@@ -53,6 +53,7 @@ pub async fn run_subagent_mode(
         cli.verbose,
         backend_type,
         cli.early_superpowers,
+        false, // delayed_instructions_enabled - subagent doesn't need scheduled instructions
     );
 
     // Mark as non-interactive to prevent prompts

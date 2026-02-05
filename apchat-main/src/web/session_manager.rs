@@ -255,6 +255,7 @@ impl SessionManager {
             false, // verbose
             crate::terminal::TerminalBackendType::Pty,
             config.early_superpowers,
+            false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
         );
 
         apchat.current_model = model;
@@ -339,6 +340,7 @@ impl SessionManager {
                             false, // verbose
                             crate::terminal::TerminalBackendType::Pty,
                             false, // early_superpowers - default to false for loaded sessions
+                            false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
                         );
 
                         // Restore state

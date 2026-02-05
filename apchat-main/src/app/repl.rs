@@ -187,11 +187,17 @@ pub async fn run_repl_mode(
     let interrupt_sender_for_main = interrupt_sender;
 
     // ── Scheduled instruction poller ───────────────────────────────────────
-    // Create and start the scheduled instruction poller
-    let db_path = apchat_tools::memory::get_memory_db_path();
-    let mut scheduled_instruction_poller = ScheduledInstructionPoller::new(db_path);
-    scheduled_instruction_poller.set_channel(mspc_channel.clone());
-    let poller_handle = scheduled_instruction_poller.start();
+    // Create and start the scheduled instruction poller only if enabled
+    let poller_handle = if cli.delayed_instructions {
+        print_heart_yellow(&format!("{} Scheduled instructions enabled - starting poller", "⏰".bright_cyan()), true);
+        let db_path = apchat_tools::memory::get_memory_db_path();
+        let mut scheduled_instruction_poller = ScheduledInstructionPoller::new(db_path);
+        scheduled_instruction_poller.set_channel(mspc_channel.clone());
+        Some(scheduled_instruction_poller.start())
+    } else {
+        print_heart_yellow(&format!("{} Scheduled instructions disabled", "⏰".bright_black()), true);
+        None
+    };
 
     // Spawn the LLM task
     let mut llm_channels = spawn_llm_task();
@@ -351,9 +357,11 @@ pub async fn run_repl_mode(
     // ── Cleanup ────────────────────────────────────────────────────────────
     router_handle.abort();
     
-    // Stop the scheduled instruction poller
-    poller_handle.abort();
-    let _ = poller_handle.await;
+    // Stop the scheduled instruction poller if it was started
+    if let Some(poller_handle) = poller_handle {
+        poller_handle.abort();
+        let _ = poller_handle.await;
+    }
 
     if let Some(logger) = &mut chat.logger {
         logger.shutdown().await;

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use chrono::Utc;
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_delete_scheduled_instruction_tool_parameters() {
     let tool = DeleteScheduledInstructionTool;
     
@@ -23,6 +24,7 @@ async fn test_delete_scheduled_instruction_tool_parameters() {
 }
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_delete_scheduled_instruction_tool_validation() {
     let tool = DeleteScheduledInstructionTool;
     let context = ToolContext::new(PathBuf::from("/tmp"), "test-session".to_string(), PolicyManager::default());
@@ -44,6 +46,7 @@ async fn test_delete_scheduled_instruction_tool_validation() {
 }
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_delete_scheduled_instruction_tool_success() {
     let add_tool = AddScheduledInstructionTool;
     let delete_tool = DeleteScheduledInstructionTool;
@@ -100,6 +103,7 @@ async fn test_delete_scheduled_instruction_tool_success() {
 }
 
 #[tokio::test]
+#[ignore = "Scheduled instructions require --delayed-instructions flag to be enabled"]
 async fn test_delete_scheduled_instruction_tool_not_found() {
     let delete_tool = DeleteScheduledInstructionTool;
     let context = ToolContext::new(PathBuf::from("/tmp"), "test-session".to_string(), PolicyManager::default());

@@ -106,7 +106,7 @@ impl ClientConfig {
 mod tool_registry_integration_tests;
 
 /// Initialize the tool registry with all available tools
-pub fn initialize_tool_registry() -> ToolRegistry {
+pub fn initialize_tool_registry(delayed_instructions_enabled: bool) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
@@ -171,14 +171,16 @@ pub fn initialize_tool_registry() -> ToolRegistry {
     registry.register_with_categories(UpdateMemoryTool, vec!["memory".to_string()]);
     registry.register_with_categories(DeleteMemoryTool, vec!["memory".to_string()]);
     registry.register_with_categories(ListMemoriesTool, vec!["memory".to_string()]);
-    
-    // Register scheduled instruction tools
-    registry.register_with_categories(AddScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
-    registry.register_with_categories(ListScheduledInstructionsTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
-    registry.register_with_categories(DeleteScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
 
     // Register wait/sleep tools
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
+
+    // Register scheduled instruction tools (only if enabled via CLI flag)
+    if delayed_instructions_enabled {
+        registry.register_with_categories(AddScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
+        registry.register_with_categories(ListScheduledInstructionsTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
+        registry.register_with_categories(DeleteScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
+    }
 
     registry
 }
