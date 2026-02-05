@@ -17,7 +17,7 @@ WORKDIR /app
 COPY . .
 
 # Build the release binary
-RUN cargo build --release -p apchat-main
+RUN cargo build --release
 
 # Stage 2: Create minimal runtime image
 FROM debian:bookworm-slim
