@@ -330,9 +330,9 @@ pub(crate) async fn call_api_streaming_stateless(
                                 }
 
                                 // If we just finished reasoning, add separator
-                                if !first_reasoning && accumulated_content.is_empty() {
-                                    print_heart_red("", true); // New line after reasoning
-                                }
+                                // if !first_reasoning && accumulated_content.is_empty() {
+                                // print_heart_red("", true); // New line after reasoning
+                                // }
 
                                 accumulated_content.push_str(content);
                                 let chunk_text = content.to_string();
