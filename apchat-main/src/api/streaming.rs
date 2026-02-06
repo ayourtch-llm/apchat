@@ -236,7 +236,7 @@ pub(crate) async fn call_api_streaming_stateless(
                 let chunk_str = String::from_utf8_lossy(&bytes);
                 raw_response_body.push_str(&chunk_str); // Capture raw response
                 buffer.push_str(&chunk_str);
-                // print_heart_to_file(&format!("CHUNK: '{}'", &chunk_str), true);
+                print_heart_to_file(&format!("CHUNK: '{}'", &chunk_str), true);
 
                 // Process complete lines (SSE format: "data: {json}\n\n")
                 while let Some(line_end) = buffer.find("\n\n") {
