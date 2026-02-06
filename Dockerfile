@@ -31,14 +31,17 @@ RUN apt-get update && \
 # Create a non-root user
 RUN useradd -m -u 1000 apchat
 
+# Create workspace directory and set ownership
+RUN mkdir -p /workspace && chown apchat:apchat /workspace
+
 # Copy the binary from builder
 COPY --from=builder /app/target/release/apchat /usr/local/bin/apchat
 
 # Set the user
 USER apchat
 
-# Set working directory
-WORKDIR /home/apchat
+# Set working directory to /workspace for user projects
+WORKDIR /workspace
 
 # The entrypoint is the apchat binary
 ENTRYPOINT ["/usr/local/bin/apchat"]

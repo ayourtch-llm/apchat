@@ -169,6 +169,12 @@ docker run -it --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
   ghcr.io/ayourtch/apchat:latest -i
 
+# Run with your project directory mounted
+docker run -it --rm \
+  -v $(pwd):/workspace \
+  -e GROQ_API_KEY=$GROQ_API_KEY \
+  ghcr.io/ayourtch/apchat:latest -i
+
 # Run with a one-shot task
 docker run --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \

@@ -103,15 +103,23 @@ docker run -it --rm \
 
 ### Working with Local Files
 
-Mount your project directory to work with local code:
+The container uses `/workspace` as the working directory. Mount your project directory there to work with local code:
 
 ```bash
+# Mount current directory to /workspace
 docker run -it --rm \
   -v $(pwd):/workspace \
-  -w /workspace \
+  -e GROQ_API_KEY=$GROQ_API_KEY \
+  ghcr.io/ayourtch/apchat:latest -i
+
+# Or with a specific project directory
+docker run -it --rm \
+  -v /path/to/your/project:/workspace \
   -e GROQ_API_KEY=$GROQ_API_KEY \
   ghcr.io/ayourtch/apchat:latest --task "Analyze the codebase"
 ```
+
+All file operations (read_file, write_file, edit_file, etc.) will work relative to `/workspace`.
 
 ### Custom Policy Files
 
@@ -168,8 +176,7 @@ services:
       - ANTHROPIC_AUTH_TOKEN_GRN=${ANTHROPIC_AUTH_TOKEN_GRN}
     volumes:
       - ./apchat-data:/home/apchat/.apchat
-      - ./workspace:/workspace
-    working_dir: /workspace
+      - .:/workspace  # Mount current directory to /workspace
     command: ["--agents", "-i"]
 
   apchat-web:
