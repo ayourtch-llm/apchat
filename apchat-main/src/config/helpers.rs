@@ -255,6 +255,14 @@ pub fn create_model_client(
                 verbose
             ))
         }
+        BackendType::Ollama => {
+            let url = api_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+            print_heart_red(&format!("{} Using Ollama for '{}_model' at: {}", "🦙".cyan(), model_name, url), true);
+            Arc::new(apchat_llm_api::client::ollama::OllamaClient::new(
+                url,
+                model_str
+            ))
+        }
         BackendType::Groq => {
             let url = api_url.unwrap_or_else(|| GROQ_API_URL.to_string());
             let key = api_key

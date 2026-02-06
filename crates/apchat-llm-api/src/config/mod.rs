@@ -19,6 +19,7 @@ pub fn get_default_url_for_backend(backend: &BackendType) -> Option<String> {
         BackendType::Groq => Some(GROQ_API_URL.to_string()),
         BackendType::OpenAI => Some(OPENAI_API_URL.to_string()),
         BackendType::Llama => None, // Llama.cpp doesn't have a default URL
+        BackendType::Ollama => Some("http://localhost:11434".to_string()),
     }
 }
 
@@ -29,6 +30,7 @@ pub fn get_default_model_for_backend(backend: &BackendType) -> &'static str {
         BackendType::OpenAI => "gpt-4o-mini",
         BackendType::Groq => "llama-3.1-8b-instant",
         BackendType::Llama => "llama3.1", // Common default for self-hosted Llama
+        BackendType::Ollama => "llama3",
     }
 }
 

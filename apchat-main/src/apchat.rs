@@ -305,6 +305,7 @@ impl APChat {
             Some(apchat_models::BackendType::OpenAI) => "openai",
             Some(apchat_models::BackendType::Anthropic) => "anthropic",
             Some(apchat_models::BackendType::Llama) => "llama",
+            Some(apchat_models::BackendType::Ollama) => "ollama",
             None => "unknown",
         };
 

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub mod anthropic;
 pub mod groq;
 pub mod llama_cpp;
+pub mod ollama;
 
 /// Chat message structure (OpenAI-compatible format)
 #[derive(Debug, Clone, Serialize, Deserialize)]

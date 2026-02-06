@@ -63,4 +63,15 @@ mod tests {
         assert_eq!(provider.api_url, None);
         assert_eq!(provider.api_key, None);
     }
+
+
+    #[test]
+    fn test_backend_type_parsing() {
+        assert_eq!(BackendType::from_str("ollama"), Some(BackendType::Ollama));
+        assert_eq!(BackendType::from_str("openai"), Some(BackendType::OpenAI));
+        assert_eq!(BackendType::from_str("groq"), Some(BackendType::Groq));
+        assert_eq!(BackendType::from_str("anthropic"), Some(BackendType::Anthropic));
+        
+        assert_eq!(BackendType::Ollama.as_str(), "ollama");
+    }
 }
