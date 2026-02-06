@@ -5,7 +5,7 @@
 
 use crossterm::cursor::{MoveDown, MoveTo, MoveToColumn, MoveUp};
 use crossterm::event::{poll, read, Event, KeyCode, KeyEvent, KeyModifiers};
-use crossterm::terminal::Clear;
+use crossterm::terminal::{Clear, size as terminal_size};
 use crossterm::QueueableCommand;
 use std::io::{self, Write};
 use std::time::Duration;
@@ -56,6 +56,32 @@ fn strip_ansi_codes(s: &str) -> String {
     }
 
     result
+}
+
+/// Calculates the display width of a string, accounting for ANSI codes and unicode.
+///
+/// This function strips ANSI escape codes and then calculates the actual display
+/// width of the remaining characters. Most characters are 1 column wide, but some
+/// unicode characters (like emojis) can be 2 columns wide.
+///
+/// # Arguments
+///
+/// * `s` - The string to measure
+///
+/// # Returns
+///
+/// * `usize` - The display width in columns
+fn display_width(s: &str) -> usize {
+    let stripped = strip_ansi_codes(s);
+    stripped.chars().map(|c| {
+        // Simple heuristic: emojis and wide characters are typically 2 columns
+        // Regular ASCII and most unicode is 1 column
+        if c as u32 > 0x1F300 {
+            2  // Emoji range and other wide characters
+        } else {
+            1
+        }
+    }).sum()
 }
 
 /// Result type for the readline operation.
@@ -2310,10 +2336,30 @@ impl Readline {
                     //stdout.queue(MoveToColumn(0)).ok();
                     //stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
 
+                    // Get terminal width (default to 80 if unavailable)
+                    let term_width = terminal_size().map(|(cols, _rows)| cols as usize).unwrap_or(80);
+
                     /* Split the output into lines, and scroll up as needed */
                     let lines: Vec<String> = content.split('\n').map(String::from).collect();
                     if lines.len() > 0 {
                         for (i, ref line) in lines.iter().enumerate() {
+                            // Calculate current display width with emoji prefix
+                            let current_width = if curr_output_data.is_empty() {
+                                display_width(emoji) + 1  // emoji + space
+                            } else {
+                                display_width(&curr_output_data)
+                            };
+
+                            let line_width = display_width(line);
+
+                            // Check if adding this content would wrap
+                            if !curr_output_data.is_empty() && current_width + line_width > term_width {
+                                // Would wrap - flush current data first with newline
+                                let lines_up = self.editor_height.saturating_sub(self.cursor_offset_from_bottom) as u16 + 2;
+                                scroll_insert_up(lines_up, &curr_output_data, true);
+                                curr_output_data = format!("");
+                            }
+
                             curr_output_data.push_str(&line);
                             let lines_up = self.editor_height.saturating_sub(self.cursor_offset_from_bottom) as u16 + 2;
                             if i < lines.len() - 1 {
