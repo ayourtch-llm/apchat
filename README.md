@@ -10,12 +10,13 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 
 ### 🤖 Multi-Model & Multi-Provider Support
 - **Four LLM Providers**: Groq, Anthropic Claude, OpenAI, and llama.cpp (local inference)
-- **Flexible Model Slots**: BluModel, GrnModel, RedModel, and custom model support
+- **Flexible Model Slots**: BluModel, GrnModel, RedModel with per-slot configuration and custom model support
 - **Intelligent Model Switching**: Models can autonomously switch based on task requirements
 - **Streaming Support**: Real-time response streaming for all providers
 - **Automatic Backend Detection**: Smart provider selection from API URLs
+- **Unified Model Syntax**: `model@backend[url]` syntax for easy configuration
 
-### 🛠️ Comprehensive Tool System (20+ Tools)
+### 🛠️ Comprehensive Tool System (40+ Tools)
 
 #### File Operations
 - **read_file** - Display file contents with optional line ranges
@@ -23,6 +24,8 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **write_file** - Create and write files to workspace
 - **edit_file** - Edit files with old/new content replacement
 - **list_files** - List files matching glob patterns
+- **file_curly_glance** - Quick structural overview of source files
+- **read_pdf** - Extract text from PDF files
 - **plan_edits** - Plan batch edits with diff previews
 - **apply_edit_plan** - Apply pre-planned edit operations
 
@@ -30,9 +33,16 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **search_files** - Full-text search with regex, glob patterns, and `.gitignore` support
 - **project_analysis** - Analyze project structure, dependencies, and file types
 
+#### Web
+- **fetch_url** - Fetch content from URLs
+
+#### LLM
+- **llm_oneshot** - One-shot LLM calls for simple tasks without agent overhead
+
 #### Terminal Management (PTY-based)
 - **pty_launch** - Launch new terminal sessions
 - **pty_send_keys** - Send keyboard input to terminals
+- **pty_send_credential_keys** - Send sensitive input (e.g., passwords) to terminals
 - **pty_get_screen** - Capture terminal screen content
 - **pty_get_cursor** - Get cursor position
 - **pty_resize** - Resize terminal dimensions
@@ -48,6 +58,13 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - Multiple backend support (native PTY, tmux)
 - Session logging
 
+#### Memory
+- **store_memory** - Store key-value pairs in persistent memory
+- **query_memory** - Query stored memories
+- **update_memory** - Update existing memories
+- **delete_memory** - Delete memories
+- **list_memories** - List all stored memories
+
 #### Task & Workflow Management
 - **todo_write** - Create and manage task lists with status tracking (pending, in_progress, completed)
 - **todo_list** - View task progress
@@ -55,21 +72,27 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **list_skills** - Discover available skills
 - **find_relevant_skills** - AI-powered skill discovery with semantic search
 
-**Available Skills** (20+ curated workflows):
+**Available Skills** (22 curated workflows):
 - Brainstorming, Commands, Condition-based Waiting
 - Defense-in-Depth, Dispatching Parallel Agents
-- Executing Plans, Finishing Development Branches
-- Receiving/Requesting Code Review
+- Executing Plans, Finishing a Development Branch
+- Receiving/Requesting Code Review, Refactoring for Clarity
 - Root Cause Tracing, Sharing Skills
 - Subagent-Driven Development, Systematic Debugging
 - Test-Driven Development, Testing Anti-Patterns
+- Testing Skills with Subagents
 - Using Git Worktrees, Using Superpowers
-- Verification Before Completion, Writing Plans
+- Verification Before Completion, Writing Plans, Writing Skills
+
+#### Subagents
+- **launch_subagent** - Launch specialized subagents for delegated tasks
+- **launch_subagent_pretty** - Launch subagents with formatted output
 
 #### System & Control
 - **run_command** - Execute shell commands with security checks
 - **switch_model** - Request model switching with justification
 - **request_more_iterations** - Request additional processing iterations
+- **long_wait** - Wait for a specified duration
 
 ### 🌐 Web Server & API
 
@@ -107,10 +130,9 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 
 ### 🚀 Operating Modes
 
-1. **REPL Mode** - Interactive command-line conversation (default)
-2. **Task Mode** - One-shot task execution with `--task` flag
-3. **Web Server Mode** - Full HTTP/WebSocket API for web interfaces
-4. **Agent Mode** - Multi-agent coordination for complex tasks (`--agents` flag)
+1. **REPL Mode** - Interactive command-line conversation (default with `-i`)
+2. **Task Mode** - One-shot task execution with `--task` flag (uses subagent orchestration)
+3. **Web Server Mode** - Full HTTP/WebSocket API for web interfaces (`--web` flag)
 
 ### 📊 Session Persistence & Logging
 
@@ -223,11 +245,8 @@ export OPENAI_API_KEY=your_openai_api_key
 
 #### Mode Selection
 ```bash
-# Run single task and exit
+# Run single task and exit (uses subagent orchestration)
 --task "Your task here"
-
-# Enable multi-agent system
---agents
 
 # Enable streaming responses
 --stream
@@ -236,13 +255,40 @@ export OPENAI_API_KEY=your_openai_api_key
 --interactive
 ```
 
+#### Behavior
+```bash
+# Auto-confirm all actions (auto-pilot mode)
+--auto-confirm
+
+# Load all skills at conversation start
+--early-superpowers
+
+# Learn from user decisions and save to policy file
+--learn-policies
+
+# Path to policy file
+--policy-file <PATH>
+```
+
+#### Web Server
+```bash
+# Enable web server
+--web
+
+# Web server port (default: 8080)
+--web-port <PORT>
+
+# Web server bind address (default: 127.0.0.1)
+--web-bind <ADDRESS>
+
+# Allow TUI session attachment from web
+--web-attachable
+```
+
 #### Debug & Output
 ```bash
 # Enable verbose output
 --verbose
-
-# Set debug level (0-5)
---debug <LEVEL>
 
 # Pretty-print JSON output
 --pretty
@@ -255,9 +301,9 @@ export OPENAI_API_KEY=your_openai_api_key
 Start an interactive session:
 
 ```bash
-cargo run
+cargo run -- -i
 # or
-./target/release/apchat
+./target/release/apchat -i
 ```
 
 The application will:
@@ -294,7 +340,7 @@ Results are logged to `~/.apchat/sessions/` by default.
 Start the web server:
 
 ```bash
-apchat --web --bind 127.0.0.1:8080
+apchat --web --web-bind 127.0.0.1 --web-port 8080
 ```
 
 Then interact via HTTP API or WebSocket. Example using curl:
@@ -310,15 +356,15 @@ curl http://localhost:8080/api/sessions
 # ws://localhost:8080/ws/<session-id>
 ```
 
-### Agent Mode
+### Task Mode (with Subagent Orchestration)
 
-Enable multi-agent system for complex tasks:
+Execute a task with multi-agent coordination:
 
 ```bash
-apchat --agents --task "Design and implement a complete authentication system"
+apchat --task "Design and implement a complete authentication system"
 ```
 
-Multiple specialized agents coordinate to complete the task.
+In task mode, specialized agents coordinate to complete the task. In interactive mode, you can also use the `launch_subagent` tool to delegate subtasks to specialized agents.
 
 ## Advanced Features
 
@@ -427,19 +473,24 @@ For information on how to add new tools to the system, see [docs/dev/how_to_new_
 ```
 apchat/
 ├── Cargo.toml              # Workspace configuration
-├── apchat-main/          # Main binary and CLI
-├── apchat-agents/        # Multi-agent orchestration
-├── apchat-llm-api/       # Unified LLM client interface
-├── apchat-models/        # Data structures and types
-├── apchat-toolcore/      # Tool execution framework
-├── apchat-tools/         # 20+ implemented tools
-├── apchat-terminal/      # PTY session management
-├── apchat-skills/        # Skill registry and loading
-├── apchat-policy/        # Security and approval system
-├── apchat-logging/       # Conversation logging
-├── apchat-todo/          # Task tracking
-├── apchat-wasm/          # WebAssembly frontend
-└── skills/                 # Skill definitions (SKILL.md files)
+├── apchat-main/            # Main binary and CLI
+├── crates/
+│   ├── apchat-llm-api/     # Unified LLM client interface
+│   ├── apchat-logging/     # Conversation logging
+│   ├── apchat-models/      # Data structures and types
+│   ├── apchat-mspc/        # Message passing channels
+│   ├── apchat-policy/      # Security and approval system
+│   ├── apchat-progress/    # Progress tracking for streaming
+│   ├── apchat-skills/      # Skill registry and loading
+│   ├── apchat-terminal/    # PTY session management
+│   ├── apchat-todo/        # Task tracking
+│   ├── apchat-toolcore/    # Tool execution framework
+│   ├── apchat-tools/       # 40+ implemented tools
+│   ├── apchat-vty/         # VTY/readline abstractions
+│   ├── apchat-wasm/        # WebAssembly frontend
+│   └── apchat-webex/       # Webex bot integration
+├── agents/configs/         # Agent JSON configurations (7 agents)
+└── skills/                 # Skill definitions (22 SKILL.md files)
 ```
 
 ### Component Overview
@@ -453,9 +504,10 @@ APChat
 ├── Terminal Manager (PTY sessions)
 ├── Policy Manager (security/approval)
 ├── Skill Registry (workflow patterns)
+├── Memory System (persistent key-value store)
 ├── Logger (conversation tracking)
 ├── Task Coordinator (todo management)
-└── Multi-Agent System (specialized agents)
+└── Subagent System (specialized agents for task delegation)
 ```
 
 ## Contributing
@@ -471,10 +523,11 @@ Contributions are welcome! Areas for enhancement:
 
 ## Code Metrics
 
-- **12,800+ lines** of Rust code
-- **12 modular crates** for clean separation
-- **20+ tools** for diverse operations
-- **20+ curated skills** for proven workflows
+- **44,900+ lines** of Rust code
+- **15 modular crates** for clean separation
+- **40+ tools** for diverse operations
+- **22 curated skills** for proven workflows
+- **7 specialized agents** for multi-agent orchestration
 - **4 LLM providers** supported
 - **15 concurrent** terminal sessions
 - **Full test coverage** (in progress)
