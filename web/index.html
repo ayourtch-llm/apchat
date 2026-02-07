@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>APChat - Sessions</title>
+    <title>netpoke - Sessions</title>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#111827">
     <style>
@@ -154,6 +154,27 @@
             padding: 1rem;
             margin-top: 1rem;
         }
+        .project-description {
+            background: #1F2937;
+            border: 1px solid #374151;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .project-description h2 {
+            margin-bottom: 0.75rem;
+            font-size: 1.25rem;
+        }
+        .project-description p {
+            color: #D1D5DB;
+            line-height: 1.6;
+            margin-bottom: 0.75rem;
+        }
+        .project-description p:last-child {
+            color: #9CA3AF;
+            font-size: 0.875rem;
+            margin-bottom: 0;
+        }
 
         /* Mobile responsiveness */
         @media (max-width: 640px) {
@@ -173,9 +194,22 @@
 <body>
     <div class="container">
         <header>
-            <h1>🤖 APChat</h1>
-            <p class="subtitle">Multi-agent AI CLI with web interface</p>
+            <h1>🌐 netpoke</h1>
+            <p class="subtitle">Clientless Network Tester</p>
         </header>
+
+        <div class="project-description">
+            <h2>About netpoke</h2>
+            <p>
+                netpoke is a clientless network testing tool that lets you probe, diagnose, and analyze network services directly from your browser — no dedicated client software required. Powered by an AI assistant, it can run network tests, interpret results, and help you troubleshoot connectivity issues interactively.
+            </p>
+            <p>
+                <strong>How it works:</strong> Create a session below to start an interactive conversation with the AI-powered network testing assistant. Describe the network test you need — such as checking port availability, DNS resolution, HTTP endpoint health, or tracing routes — and netpoke will execute the tests and walk you through the results.
+            </p>
+            <p>
+                Supports multi-agent mode for complex network diagnostics involving multiple steps and coordinated analysis.
+            </p>
+        </div>
 
         <div class="create-session-form">
             <h2 style="margin-bottom: 1rem;">Create New Session</h2>
