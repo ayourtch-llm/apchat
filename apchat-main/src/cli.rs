@@ -189,7 +189,7 @@ pub struct Cli {
 
     /// Enable metacognitive tools (become, drugs, ritual)
     /// Based on https://github.com/inanna-malick/metacog
-    #[arg(long, action = clap::ArgAction::SetTrue)]
+    #[arg(long)]
     pub metacog_tools: bool,
 }
 
