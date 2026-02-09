@@ -54,6 +54,7 @@ pub async fn run_subagent_mode(
         backend_type,
         cli.early_superpowers,
         false, // delayed_instructions_enabled - subagent doesn't need scheduled instructions
+        false, // metacog_tools_enabled - subagent doesn't need metacog tools
     );
 
     // Mark as non-interactive to prevent prompts

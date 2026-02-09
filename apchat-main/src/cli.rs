@@ -186,6 +186,11 @@ pub struct Cli {
     /// Requires --webex-bot to be set
     #[arg(long)]
     pub webex_websocket: bool,
+
+    /// Enable metacognitive tools (become, drugs, ritual)
+    /// Based on https://github.com/inanna-malick/metacog
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub metacog_tools: bool,
 }
 
 #[derive(Subcommand)]
