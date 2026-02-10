@@ -35,6 +35,7 @@ pub async fn run_task_mode(
         cli.early_superpowers,
         false, // delayed_instructions_enabled - task mode doesn't need scheduled instructions
         false, // metacog_tools_enabled - task mode doesn't need metacog tools
+        false, // self_regulate_enabled - task mode doesn't need self-regulate
     );
 
     // Initialize logger for task mode

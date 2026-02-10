@@ -550,6 +550,7 @@ async fn prep_and_send_request(
             verbose: chat.verbose,
             debug_level: chat.debug_level,
             http_client: chat.client.clone(),
+            llm_overrides: Some(chat.llm_overrides.clone()),
         };
 
         // Prepare streaming channel if needed
@@ -799,6 +800,7 @@ mod repl_compact_tests {
             signal_sender: None,
             signal_receiver: None,
             confirmation_registry: None,
+            llm_overrides: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 

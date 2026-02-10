@@ -257,6 +257,7 @@ impl SessionManager {
             config.early_superpowers,
             false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
             false, // metacog_tools_enabled - web sessions don't need metacog tools
+            false, // self_regulate_enabled - web sessions don't need self-regulate
         );
 
         apchat.current_model = model;
@@ -343,6 +344,7 @@ impl SessionManager {
                             false, // early_superpowers - default to false for loaded sessions
                             false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
                             false, // metacog_tools_enabled - web sessions don't need metacog tools
+                            false, // self_regulate_enabled - web sessions don't need self-regulate
                         );
 
                         // Restore state

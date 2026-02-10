@@ -1,4 +1,4 @@
-use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage, StreamingChunk};
+use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage, StreamingChunk, LlmRequestOverrides};
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use futures::Stream;
@@ -14,6 +14,7 @@ pub struct LlamaCppClient {
     model: String,
     client: reqwest::Client,
     verbose: bool,
+    request_overrides: std::sync::Mutex<Option<LlmRequestOverrides>>,
 }
 
 impl LlamaCppClient {
@@ -39,6 +40,7 @@ impl LlamaCppClient {
             model,
             client,
             verbose,
+            request_overrides: std::sync::Mutex::new(None),
         }
     }
 
@@ -50,7 +52,15 @@ impl LlamaCppClient {
 #[async_trait]
 impl LlmClient for LlamaCppClient {
     async fn chat(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<LlmResponse> {
-        let request = self.build_chat_request(messages, tools).await?;
+        let mut request = self.build_chat_request(messages, tools).await?;
+
+        // Apply request overrides if set (from self-regulate tool)
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            if let Some(ref overrides) = *guard {
+                overrides.apply_to_request(&mut request);
+            }
+            *guard = None;
+        }
 
         let response = self.client
             .post(self.get_chat_completions_url())
@@ -153,7 +163,15 @@ impl LlmClient for LlamaCppClient {
     }
 
     async fn chat_streaming(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<Box<dyn Stream<Item = Result<StreamingChunk>> + Send + Unpin>> {
-        let request = self.build_chat_request(messages, tools).await?;
+        let mut request = self.build_chat_request(messages, tools).await?;
+
+        // Apply request overrides if set (from self-regulate tool)
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            if let Some(ref overrides) = *guard {
+                overrides.apply_to_request(&mut request);
+            }
+            *guard = None;
+        }
 
         // Enable streaming in the request
         let mut streaming_request = request.as_object().unwrap().clone();
@@ -307,6 +325,12 @@ impl LlmClient for LlamaCppClient {
         };
 
         Ok(Box::new(Box::pin(stream)))
+    }
+
+    fn set_request_overrides(&self, overrides: Option<LlmRequestOverrides>) {
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            *guard = overrides;
+        }
     }
 }
 

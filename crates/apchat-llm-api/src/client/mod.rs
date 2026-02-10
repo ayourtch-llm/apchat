@@ -60,6 +60,32 @@ pub struct StreamingChunk {
     pub tool_call_event: Option<ToolCallEvent>,
 }
 
+/// Temporary overrides for LLM request parameters.
+/// Used by the self-regulate tool to let the LLM adjust its own parameters
+/// for a specified number of upcoming calls.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmRequestOverrides {
+    pub temperature: Option<f64>,
+    pub top_p: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub remaining_calls: u32,
+}
+
+impl LlmRequestOverrides {
+    /// Apply overrides to a JSON request body by inserting/overwriting the relevant fields.
+    pub fn apply_to_request(&self, request: &mut serde_json::Value) {
+        if let Some(temp) = self.temperature {
+            request["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(top_p) = self.top_p {
+            request["top_p"] = serde_json::json!(top_p);
+        }
+        if let Some(max_tokens) = self.max_tokens {
+            request["max_tokens"] = serde_json::json!(max_tokens);
+        }
+    }
+}
+
 /// LLM client trait - unified interface for all LLM providers
 #[async_trait]
 pub trait LlmClient: Send + Sync + std::fmt::Debug {
@@ -77,6 +103,12 @@ pub trait LlmClient: Send + Sync + std::fmt::Debug {
     ) -> Result<Box<dyn Stream<Item = Result<StreamingChunk>> + Send + Unpin>> {
         // Default implementation falls back to non-streaming
         Err(anyhow::anyhow!("Streaming not implemented for this client"))
+    }
+
+    /// Set temporary request parameter overrides (temperature, top_p, max_tokens).
+    /// These are consumed on the next chat/chat_streaming call.
+    fn set_request_overrides(&self, _overrides: Option<LlmRequestOverrides>) {
+        // Default: no-op for clients that don't support overrides
     }
 }
 

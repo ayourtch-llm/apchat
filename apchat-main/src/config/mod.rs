@@ -106,7 +106,7 @@ impl ClientConfig {
 mod tool_registry_integration_tests;
 
 /// Initialize the tool registry with all available tools
-pub fn initialize_tool_registry(delayed_instructions_enabled: bool, metacog_tools_enabled: bool) -> ToolRegistry {
+pub fn initialize_tool_registry(delayed_instructions_enabled: bool, metacog_tools_enabled: bool, self_regulate_enabled: bool) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
@@ -187,6 +187,11 @@ pub fn initialize_tool_registry(delayed_instructions_enabled: bool, metacog_tool
         registry.register_with_categories(BecomeTool, vec!["metacog".to_string()]);
         registry.register_with_categories(DrugsTool, vec!["metacog".to_string()]);
         registry.register_with_categories(RitualTool, vec!["metacog".to_string()]);
+    }
+
+    // Register self-regulate tool (only if enabled via --self-regulate CLI flag)
+    if self_regulate_enabled {
+        registry.register_with_categories(SelfRegulateTool, vec!["self_regulate".to_string()]);
     }
 
     registry

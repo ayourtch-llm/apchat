@@ -178,12 +178,28 @@ pub(crate) async fn call_api_streaming_stateless(
     let _ = log_request_to_file(&api_url, &request, &current_model, &params.api_key);
 
     let api_key = crate::config::get_api_key(&params.client_config, &params.api_key, &current_model);
+
+    // Serialize request and apply LLM overrides if set (from self-regulate tool)
+    let mut request_json = serde_json::to_value(&request)?;
+    if let Some(ref overrides_arc) = params.llm_overrides {
+        if let Ok(mut guard) = overrides_arc.lock() {
+            if let Some(ref mut overrides) = *guard {
+                overrides.apply_to_request(&mut request_json);
+                if overrides.remaining_calls <= 1 {
+                    *guard = None;
+                } else {
+                    overrides.remaining_calls -= 1;
+                }
+            }
+        }
+    }
+
     let response = params
         .http_client
         .post(&api_url)
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
-        .json(&request)
+        .json(&request_json)
         .send()
         .await?;
 
@@ -562,6 +578,20 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
         &params.api_key,
         params.verbose,
     );
+
+    // Apply and consume one use of LLM request overrides (from self-regulate tool)
+    if let Some(ref overrides_arc) = params.llm_overrides {
+        if let Ok(mut guard) = overrides_arc.lock() {
+            if let Some(ref mut overrides) = *guard {
+                llm_client.set_request_overrides(Some(overrides.clone()));
+                if overrides.remaining_calls <= 1 {
+                    *guard = None;
+                } else {
+                    overrides.remaining_calls -= 1;
+                }
+            }
+        }
+    }
 
     // Get the appropriate API URL based on the current model
     let _api_url = crate::config::get_api_url(&params.client_config, &params.current_model);

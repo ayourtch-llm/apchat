@@ -45,6 +45,7 @@ pub async fn initialize_repl(
         cli.early_superpowers,
         cli.delayed_instructions,
         cli.metacog_tools,
+        cli.self_regulate,
     );
 
     // Set process ID for status info

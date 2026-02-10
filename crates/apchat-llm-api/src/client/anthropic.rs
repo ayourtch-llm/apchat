@@ -1,4 +1,4 @@
-use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, StreamingChunk, ToolCall, FunctionCall, TokenUsage, ToolCallEvent};
+use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, StreamingChunk, ToolCall, FunctionCall, TokenUsage, ToolCallEvent, LlmRequestOverrides};
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -20,6 +20,7 @@ pub struct AnthropicLlmClient {
     agent_name: String,
     client: reqwest::Client,
     verbose: bool,
+    request_overrides: std::sync::Mutex<Option<LlmRequestOverrides>>,
 }
 
 impl AnthropicLlmClient {
@@ -47,6 +48,7 @@ impl AnthropicLlmClient {
             agent_name,
             client,
             verbose,
+            request_overrides: std::sync::Mutex::new(None),
         }
     }
 
@@ -198,6 +200,14 @@ impl LlmClient for AnthropicLlmClient {
             request["system"] = serde_json::Value::String(system_content);
         }
 
+        // Apply request overrides if set (from self-regulate tool)
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            if let Some(ref overrides) = *guard {
+                overrides.apply_to_request(&mut request);
+            }
+            *guard = None;
+        }
+
         // Log request to file for persistent debugging
         let _ = self.log_request_to_file(&self.get_messages_url(), &request);
 
@@ -272,6 +282,14 @@ impl LlmClient for AnthropicLlmClient {
         // Add system message if present
         if let Some(system_content) = combined_system {
             request["system"] = serde_json::Value::String(system_content);
+        }
+
+        // Apply request overrides if set (from self-regulate tool)
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            if let Some(ref overrides) = *guard {
+                overrides.apply_to_request(&mut request);
+            }
+            *guard = None;
         }
 
         // Log request to file for persistent debugging
@@ -475,6 +493,12 @@ impl LlmClient for AnthropicLlmClient {
             Ok(text)
         } else {
             Err(anyhow::anyhow!("No content in response"))
+        }
+    }
+
+    fn set_request_overrides(&self, overrides: Option<LlmRequestOverrides>) {
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            *guard = overrides;
         }
     }
 }

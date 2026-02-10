@@ -191,6 +191,11 @@ pub struct Cli {
     /// Based on https://github.com/inanna-malick/metacog
     #[arg(long)]
     pub metacog_tools: bool,
+
+    /// Enable self-regulate tool for LLM parameter self-adjustment
+    /// Allows the LLM to alter temperature, top_p, max_tokens for the next N calls
+    #[arg(long)]
+    pub self_regulate: bool,
 }
 
 #[derive(Subcommand)]
