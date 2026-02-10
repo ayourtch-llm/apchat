@@ -25,6 +25,7 @@ pub mod pdf_reader;
 pub mod pdf_tool;
 pub mod pdf_content_parser;
 pub mod long_wait;
+pub mod metacog;
 
 pub use file_ops::*;
 pub use search::*;
@@ -41,5 +42,6 @@ pub use file_curly_glance::*;
 pub use memory::*;
 pub use pdf_tool::*;
 pub use long_wait::*;
+pub use metacog::*;
 
 

@@ -120,6 +120,7 @@ impl APChat {
             TerminalBackendType::Pty,
             false, // Default early_superpowers to false
             false, // Default delayed_instructions_enabled to false
+            false, // Default metacog_tools_enabled to false
         )
     }
 
@@ -147,8 +148,9 @@ impl APChat {
         backend_type: TerminalBackendType,
         early_superpowers: bool,
         delayed_instructions_enabled: bool,
+        metacog_tools_enabled: bool,
     ) -> Self {
-        let tool_registry = initialize_tool_registry(delayed_instructions_enabled);
+        let tool_registry = initialize_tool_registry(delayed_instructions_enabled, metacog_tools_enabled);
 
         // Initialize content limiter
         let content_limiter_config = apchat_toolcore::content_limiter::ContentLimiterConfig::new(&work_dir);

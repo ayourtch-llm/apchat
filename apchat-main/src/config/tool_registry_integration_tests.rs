@@ -9,7 +9,7 @@ fn test_llm_oneshot_tool_registration() {
     use crate::config::initialize_tool_registry;
     
     // Initialize the tool registry
-    let registry = initialize_tool_registry(false);
+    let registry = initialize_tool_registry(false, false);
     
     // Verify that the llm_oneshot tool is registered
     assert!(registry.has_tool("llm_oneshot"), "llm_oneshot tool should be registered");

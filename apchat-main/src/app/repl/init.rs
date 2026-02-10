@@ -44,6 +44,7 @@ pub async fn initialize_repl(
         backend_type,
         cli.early_superpowers,
         cli.delayed_instructions,
+        cli.metacog_tools,
     );
 
     // Set process ID for status info
