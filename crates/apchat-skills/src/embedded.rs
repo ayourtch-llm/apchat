@@ -13,9 +13,7 @@ pub fn get_embedded_skills() -> HashMap<&'static str, &'static str> {
 
     // Embed all SKILL.md files from skills/ directory
     skills.insert("brainstorming", include_str!("../../../skills/brainstorming/SKILL.md"));
-    skills.insert("clarify-before-coding", include_str!("../../../skills/clarify-before-coding/SKILL.md"));
     skills.insert("condition-based-waiting", include_str!("../../../skills/condition-based-waiting/SKILL.md"));
-    skills.insert("context-management", include_str!("../../../skills/context-management/SKILL.md"));
     skills.insert("defense-in-depth", include_str!("../../../skills/defense-in-depth/SKILL.md"));
     skills.insert("dispatching-parallel-agents", include_str!("../../../skills/dispatching-parallel-agents/SKILL.md"));
     skills.insert("executing-plans", include_str!("../../../skills/executing-plans/SKILL.md"));
