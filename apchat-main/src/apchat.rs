@@ -16,7 +16,7 @@ use apchat_policy::PolicyManager;
 use apchat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
 use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext, parameter_validation::validate_tool_call};
 use crate::cli::Cli;
-use crate::config::{ClientConfig, initialize_tool_registry};
+use crate::config::{ClientConfig, FeatureFlags, initialize_tool_registry};
 use crate::chat::{save_state, load_state};
 use apchat_models::{
     ModelColor, Message, ToolCall, FunctionCall, ModelProvider,
@@ -120,10 +120,7 @@ impl APChat {
             false,
             false,
             TerminalBackendType::Pty,
-            false, // Default early_superpowers to false
-            false, // Default delayed_instructions_enabled to false
-            false, // Default metacog_tools_enabled to false
-            false, // Default self_regulate_enabled to false
+            FeatureFlags::default(),
         )
     }
 
@@ -149,12 +146,9 @@ impl APChat {
         stream_responses: bool,
         verbose: bool,
         backend_type: TerminalBackendType,
-        early_superpowers: bool,
-        delayed_instructions_enabled: bool,
-        metacog_tools_enabled: bool,
-        self_regulate_enabled: bool,
+        flags: FeatureFlags,
     ) -> Self {
-        let tool_registry = initialize_tool_registry(delayed_instructions_enabled, metacog_tools_enabled, self_regulate_enabled);
+        let tool_registry = initialize_tool_registry(&flags);
 
         // Initialize content limiter
         let content_limiter_config = apchat_toolcore::content_limiter::ContentLimiterConfig::new(&work_dir);
@@ -164,7 +158,12 @@ impl APChat {
         // Initialize skill registry
         let skills_dir = work_dir.join("skills");
         let skill_registry = match apchat_skills::SkillRegistry::new(skills_dir) {
-            Ok(registry) => Some(Arc::new(registry)),
+            Ok(mut registry) => {
+                if !flags.learning_opportunities {
+                    registry.remove_skill("learning-opportunities");
+                }
+                Some(Arc::new(registry))
+            }
             Err(e) => {
                 print_heart_yellow(&format!("{} Failed to load skills: {}", "⚠️".yellow(), e), true);
                 print_heart_yellow(&format!("{} Skills will not be available", "⚠️".yellow()), true);
@@ -193,7 +192,7 @@ impl APChat {
         };
 
         // Generate system message to inform the model about capabilities (before moving client_config)
-        let system_content = crate::config::get_system_prompt(&client_config, skill_registry.as_ref(), early_superpowers);
+        let system_content = crate::config::get_system_prompt(&client_config, skill_registry.as_ref(), flags.early_superpowers);
 
         let mut chat = Self {
             api_key: client_config.api_key.clone(),

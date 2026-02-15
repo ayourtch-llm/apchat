@@ -10,6 +10,17 @@ pub use helpers::{get_system_prompt, get_api_url, get_api_key, create_model_clie
 // Re-export types from apchat-llm-api
 pub use apchat_llm_api::{BackendType, GROQ_API_URL, normalize_api_url};
 
+/// Feature flags that control optional capabilities.
+/// Centralizes the boolean flags that were previously passed as individual parameters.
+#[derive(Debug, Clone, Default)]
+pub struct FeatureFlags {
+    pub early_superpowers: bool,
+    pub delayed_instructions: bool,
+    pub metacog_tools: bool,
+    pub self_regulate: bool,
+    pub learning_opportunities: bool,
+}
+
 /// Configuration for APChat client
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
@@ -106,7 +117,7 @@ impl ClientConfig {
 mod tool_registry_integration_tests;
 
 /// Initialize the tool registry with all available tools
-pub fn initialize_tool_registry(delayed_instructions_enabled: bool, metacog_tools_enabled: bool, self_regulate_enabled: bool) -> ToolRegistry {
+pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
@@ -176,21 +187,21 @@ pub fn initialize_tool_registry(delayed_instructions_enabled: bool, metacog_tool
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
 
     // Register scheduled instruction tools (only if enabled via CLI flag)
-    if delayed_instructions_enabled {
+    if flags.delayed_instructions {
         registry.register_with_categories(AddScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
         registry.register_with_categories(ListScheduledInstructionsTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
         registry.register_with_categories(DeleteScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
     }
 
     // Register metacognitive tools (only if enabled via --metacog-tools CLI flag)
-    if metacog_tools_enabled {
+    if flags.metacog_tools {
         registry.register_with_categories(BecomeTool, vec!["metacog".to_string()]);
         registry.register_with_categories(DrugsTool, vec!["metacog".to_string()]);
         registry.register_with_categories(RitualTool, vec!["metacog".to_string()]);
     }
 
     // Register self-regulate tool (only if enabled via --self-regulate CLI flag)
-    if self_regulate_enabled {
+    if flags.self_regulate {
         registry.register_with_categories(SelfRegulateTool, vec!["self_regulate".to_string()]);
     }
 

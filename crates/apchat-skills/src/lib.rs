@@ -238,6 +238,12 @@ impl SkillRegistry {
         self.skills.get(name)
     }
 
+    /// Remove a skill by name
+    pub fn remove_skill(&mut self, name: &str) {
+        self.skills.remove(name);
+        self.skill_embeddings.remove(name);
+    }
+
     /// Get all skill names
     pub fn list_skills(&self) -> Vec<String> {
         let mut names: Vec<_> = self.skills.keys().cloned().collect();

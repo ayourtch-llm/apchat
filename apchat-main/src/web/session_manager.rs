@@ -8,7 +8,7 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use uuid::Uuid;
 
 use apchat_vty::{print_heart_red, print_heart_yellow};
-use crate::config::ClientConfig;
+use crate::config::{ClientConfig, FeatureFlags};
 use apchat_policy::PolicyManager;
 use crate::web::protocol::{ServerMessage, SessionConfig, SessionInfo};
 use crate::web::persistence::{SessionPersistence, PersistentSession};
@@ -254,10 +254,10 @@ impl SessionManager {
             config.stream_responses,
             false, // verbose
             crate::terminal::TerminalBackendType::Pty,
-            config.early_superpowers,
-            false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
-            false, // metacog_tools_enabled - web sessions don't need metacog tools
-            false, // self_regulate_enabled - web sessions don't need self-regulate
+            FeatureFlags {
+                early_superpowers: config.early_superpowers,
+                ..FeatureFlags::default()
+            },
         );
 
         apchat.current_model = model;
@@ -341,10 +341,7 @@ impl SessionManager {
                             false, // stream_responses - default to false
                             false, // verbose
                             crate::terminal::TerminalBackendType::Pty,
-                            false, // early_superpowers - default to false for loaded sessions
-                            false, // delayed_instructions_enabled - web sessions don't need scheduled instructions
-                            false, // metacog_tools_enabled - web sessions don't need metacog tools
-                            false, // self_regulate_enabled - web sessions don't need self-regulate
+                            FeatureFlags::default(),
                         );
 
                         // Restore state

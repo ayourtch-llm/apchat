@@ -6,10 +6,10 @@ use apchat_toolcore::ToolRegistry;
 #[test]
 fn test_llm_oneshot_tool_registration() {
     // Import the initialize_tool_registry function
-    use crate::config::initialize_tool_registry;
+    use crate::config::{initialize_tool_registry, FeatureFlags};
     
     // Initialize the tool registry
-    let registry = initialize_tool_registry(false, false, false);
+    let registry = initialize_tool_registry(&FeatureFlags::default());
     
     // Verify that the llm_oneshot tool is registered
     assert!(registry.has_tool("llm_oneshot"), "llm_oneshot tool should be registered");
@@ -42,4 +42,33 @@ fn test_llm_oneshot_tool_registration() {
     } else {
         panic!("llm_oneshot tool should exist in registry");
     }
+}
+
+/// Test that feature flags correctly gate tool registration
+#[test]
+fn test_feature_flags_gate_tools() {
+    use crate::config::{initialize_tool_registry, FeatureFlags};
+
+    // Default flags: metacog and self_regulate disabled
+    let registry = initialize_tool_registry(&FeatureFlags::default());
+    assert!(!registry.has_tool("become"), "become should not be registered by default");
+    assert!(!registry.has_tool("drugs"), "drugs should not be registered by default");
+    assert!(!registry.has_tool("ritual"), "ritual should not be registered by default");
+    assert!(!registry.has_tool("self_regulate"), "self_regulate should not be registered by default");
+
+    // Enable metacog tools
+    let registry = initialize_tool_registry(&FeatureFlags {
+        metacog_tools: true,
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("become"), "become should be registered when metacog_tools is true");
+    assert!(registry.has_tool("drugs"), "drugs should be registered when metacog_tools is true");
+    assert!(registry.has_tool("ritual"), "ritual should be registered when metacog_tools is true");
+
+    // Enable self-regulate
+    let registry = initialize_tool_registry(&FeatureFlags {
+        self_regulate: true,
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("self_regulate"), "self_regulate should be registered when self_regulate is true");
 }

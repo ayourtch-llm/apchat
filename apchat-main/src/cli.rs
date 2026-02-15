@@ -196,6 +196,11 @@ pub struct Cli {
     /// Allows the LLM to alter temperature, top_p, max_tokens for the next N calls
     #[arg(long)]
     pub self_regulate: bool,
+
+    /// Enable the learning-opportunities skill
+    /// Suggests interactive learning exercises after significant work
+    #[arg(long)]
+    pub learning_opportunities: bool,
 }
 
 #[derive(Subcommand)]
