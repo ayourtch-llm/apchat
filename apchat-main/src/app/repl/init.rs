@@ -9,7 +9,7 @@ use apchat_policy::PolicyManager;
 
 use crate::APChat;
 use crate::cli::Cli;
-use crate::config::ClientConfig;
+use crate::config::{ClientConfig, FeatureFlags};
 
 /// Idle timeout configuration, present only when both --idle-timeout and --idle-input are set.
 pub struct IdleConfig {
@@ -42,10 +42,13 @@ pub async fn initialize_repl(
         cli.stream,
         cli.verbose,
         backend_type,
-        cli.early_superpowers,
-        cli.delayed_instructions,
-        cli.metacog_tools,
-        cli.self_regulate,
+        FeatureFlags {
+            early_superpowers: cli.early_superpowers,
+            delayed_instructions: cli.delayed_instructions,
+            metacog_tools: cli.metacog_tools,
+            self_regulate: cli.self_regulate,
+            learning_opportunities: cli.learning_opportunities,
+        },
     );
 
     // Set process ID for status info

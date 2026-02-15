@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::APChat;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::cli::Cli;
-use crate::config::ClientConfig;
+use crate::config::{ClientConfig, FeatureFlags};
 use apchat_policy::PolicyManager;
 
 /// Subagent task summary structure
@@ -52,10 +52,10 @@ pub async fn run_subagent_mode(
         false, // No streaming in subagent mode
         cli.verbose,
         backend_type,
-        cli.early_superpowers,
-        false, // delayed_instructions_enabled - subagent doesn't need scheduled instructions
-        false, // metacog_tools_enabled - subagent doesn't need metacog tools
-        false, // self_regulate_enabled - subagent doesn't need self-regulate
+        FeatureFlags {
+            early_superpowers: cli.early_superpowers,
+            ..FeatureFlags::default()
+        },
     );
 
     // Mark as non-interactive to prevent prompts
