@@ -26,6 +26,7 @@ pub mod pdf_tool;
 pub mod pdf_content_parser;
 pub mod long_wait;
 pub mod metacog;
+pub mod self_regulate;
 
 pub use file_ops::*;
 pub use search::*;
@@ -43,5 +44,6 @@ pub use memory::*;
 pub use pdf_tool::*;
 pub use long_wait::*;
 pub use metacog::*;
+pub use self_regulate::*;
 
 

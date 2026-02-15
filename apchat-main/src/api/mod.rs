@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use apchat_models::{ModelColor, Message, Tool};
+use apchat_llm_api::LlmRequestOverrides;
 use crate::config::ClientConfig;
 
 /// Parameters needed for a stateless API call
@@ -14,6 +15,7 @@ pub struct ApiCallParams {
     pub verbose: bool,
     pub debug_level: u32,
     pub http_client: reqwest::Client,
+    pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>,
 }
 
 impl ApiCallParams {
@@ -29,6 +31,7 @@ impl ApiCallParams {
             verbose: chat.verbose,
             debug_level: chat.debug_level,
             http_client: chat.client.clone(),
+            llm_overrides: Some(chat.llm_overrides.clone()),
         }
     }
 

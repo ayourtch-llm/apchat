@@ -59,6 +59,7 @@ mod tests;
 // Re-export commonly used types
 pub use client::{
     LlmClient,
+    LlmRequestOverrides,
     ChatMessage,
     ToolCall,
     FunctionCall,

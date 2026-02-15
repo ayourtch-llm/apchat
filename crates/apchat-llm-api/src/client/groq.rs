@@ -1,4 +1,4 @@
-use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage};
+use crate::client::{LlmClient, LlmResponse, ChatMessage, ToolDefinition, TokenUsage, LlmRequestOverrides};
 use anyhow::{Result, Context};
 use async_trait::async_trait;
 use std::fs;
@@ -14,6 +14,7 @@ pub struct GroqLlmClient {
     api_url: String,
     agent_name: String,
     client: reqwest::Client,
+    request_overrides: std::sync::Mutex<Option<LlmRequestOverrides>>,
 }
 
 impl GroqLlmClient {
@@ -24,6 +25,7 @@ impl GroqLlmClient {
             api_url,
             agent_name,
             client: reqwest::Client::new(),
+            request_overrides: std::sync::Mutex::new(None),
         }
     }
 }
@@ -31,7 +33,15 @@ impl GroqLlmClient {
 #[async_trait]
 impl LlmClient for GroqLlmClient {
     async fn chat(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<LlmResponse> {
-        let request = self.build_chat_request(messages, tools).await?;
+        let mut request = self.build_chat_request(messages, tools).await?;
+
+        // Apply request overrides if set (from self-regulate tool)
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            if let Some(ref overrides) = *guard {
+                overrides.apply_to_request(&mut request);
+            }
+            *guard = None;
+        }
 
         // Log request to file for persistent debugging
         let _ = self.log_request_to_file(&self.api_url, &request);
@@ -139,6 +149,12 @@ impl LlmClient for GroqLlmClient {
             Ok(content.to_string())
         } else {
             Err(anyhow::anyhow!("No content in response"))
+        }
+    }
+
+    fn set_request_overrides(&self, overrides: Option<LlmRequestOverrides>) {
+        if let Ok(mut guard) = self.request_overrides.lock() {
+            *guard = overrides;
         }
     }
 }

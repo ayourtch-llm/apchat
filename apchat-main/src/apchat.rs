@@ -69,6 +69,8 @@ pub struct APChat {
     pub(crate) signal_receiver: Option<Arc<tokio::sync::Mutex<tokio::sync::mpsc::Receiver<crate::mspc::MspcMessage>>>>,
     // Confirmation registry for managing tool confirmation requests
     pub(crate) confirmation_registry: Option<Arc<apchat_toolcore::confirmation::ConfirmationRegistry>>,
+    // Shared LLM request overrides (self-regulate tool)
+    pub(crate) llm_overrides: Arc<std::sync::Mutex<Option<apchat_llm_api::LlmRequestOverrides>>>,
 }
 
 impl APChat {
@@ -121,6 +123,7 @@ impl APChat {
             false, // Default early_superpowers to false
             false, // Default delayed_instructions_enabled to false
             false, // Default metacog_tools_enabled to false
+            false, // Default self_regulate_enabled to false
         )
     }
 
@@ -149,8 +152,9 @@ impl APChat {
         early_superpowers: bool,
         delayed_instructions_enabled: bool,
         metacog_tools_enabled: bool,
+        self_regulate_enabled: bool,
     ) -> Self {
-        let tool_registry = initialize_tool_registry(delayed_instructions_enabled, metacog_tools_enabled);
+        let tool_registry = initialize_tool_registry(delayed_instructions_enabled, metacog_tools_enabled, self_regulate_enabled);
 
         // Initialize content limiter
         let content_limiter_config = apchat_toolcore::content_limiter::ContentLimiterConfig::new(&work_dir);
@@ -216,6 +220,7 @@ impl APChat {
             signal_sender: None,
             signal_receiver: None,
             confirmation_registry: None,
+            llm_overrides: Arc::new(std::sync::Mutex::new(None)),
         };
 
         chat.messages.push(Message {
@@ -447,6 +452,9 @@ impl APChat {
                 if let Some(ref confirmation_registry) = self.confirmation_registry {
                     context = context.with_confirmation_registry(confirmation_registry.clone());
                 }
+
+                // Add LLM overrides
+                context = context.with_llm_overrides(self.llm_overrides.clone());
 
                 let context = context;
 
