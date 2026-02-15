@@ -238,10 +238,10 @@ impl SkillRegistry {
         self.skills.get(name)
     }
 
-    /// Remove a skill by name
-    pub fn remove_skill(&mut self, name: &str) {
-        self.skills.remove(name);
+    /// Remove a skill by name. Returns true if the skill was present.
+    pub fn remove_skill(&mut self, name: &str) -> bool {
         self.skill_embeddings.remove(name);
+        self.skills.remove(name).is_some()
     }
 
     /// Get all skill names
