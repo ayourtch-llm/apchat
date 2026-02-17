@@ -211,6 +211,11 @@ pub struct Cli {
     /// Based on https://github.com/roby2358/skills
     #[arg(long)]
     pub community_skills: bool,
+
+    /// Disable summarization of subagent output via LLM
+    /// By default, subagent output is summarized to pass only the most critically important parts upward
+    #[arg(long)]
+    pub no_summarize_subagents: bool,
 }
 
 #[derive(Subcommand)]

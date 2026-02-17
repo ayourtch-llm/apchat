@@ -6,6 +6,41 @@ use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
 use serde_json;
 use apchat_vty::print_heart_red;
+use apchat_models::types::ModelColor;
+use apchat_llm_api::client::ChatMessage;
+
+
+/// Summarize subagent output using an LLM call
+async fn summarize_subagent_output(context: &ToolContext, task: &str, output: &str) -> Option<String> {
+    let prompt = format!(
+        "You are summarizing the output of a subagent that was given a task. \
+        Extract and return ONLY the most critically important parts of the content. \
+        Be concise but preserve all essential information, key results, file paths, \
+        error messages, and actionable details.\n\n\
+        **Original Task:** {}\n\n\
+        **Subagent Output:**\n{}", task, output
+    );
+
+    let message = ChatMessage {
+        role: "user".to_string(),
+        content: prompt,
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+        reasoning: None,
+    };
+
+    // Try each model color in order of preference
+    for color in &[ModelColor::GrnModel, ModelColor::BluModel, ModelColor::RedModel] {
+        if let Some(client) = context.get_llm_client(color) {
+            match client.chat_completion(&[message.clone()]).await {
+                Ok(summary) => return Some(summary),
+                Err(_) => continue,
+            }
+        }
+    }
+    None
+}
 
 
 /// Tool for launching a subagent to execute a task independently
@@ -47,6 +82,11 @@ impl Tool for LaunchSubagentTool {
         cmd.arg("--task")
            .arg(&task)
            .arg("--auto-confirm"); // Always use auto-confirm for subagent calls
+
+        // Propagate --no-summarize-subagents if summarization is disabled
+        if !context.summarize_subagents {
+            cmd.arg("--no-summarize-subagents");
+        }
 
         // Add model parameter if current model string is available
         if let Some(model_string) = &context.current_model_string {
@@ -118,26 +158,33 @@ impl Tool for LaunchSubagentTool {
         // Parse the JSON output
         if status.success() {
             // Try to parse as JSON
-            match serde_json::from_str::<serde_json::Value>(&stdout) {
+            let formatted_result = match serde_json::from_str::<serde_json::Value>(&stdout) {
                 Ok(json_result) => {
-                    // Format the result nicely
-                    let formatted_result = format!(
+                    format!(
                         "✅ **Subagent Task Completed Successfully**\n\n**Task:** {}\n\n**Result:** {}",
                         task,
                         serde_json::to_string_pretty(&json_result).unwrap_or_else(|_| stdout.to_string())
-                    );
-                    ToolResult::success(formatted_result)
+                    )
                 }
                 Err(_) => {
-                    // If not valid JSON, return as plain text
-                    let result = format!(
+                    format!(
                         "✅ **Subagent Task Completed**\n\n**Task:** {}\n\n**Output:**\n{}",
                         task,
                         stdout
-                    );
-                    ToolResult::success(result)
+                    )
+                }
+            };
+
+            if context.summarize_subagents {
+                if let Some(summary) = summarize_subagent_output(context, &task, &formatted_result).await {
+                    return ToolResult::success(format!(
+                        "✅ **Subagent Task Completed (Summarized)**\n\n**Task:** {}\n\n**Summary:**\n{}",
+                        task, summary
+                    ));
                 }
             }
+
+            ToolResult::success(formatted_result)
         } else {
             let error_msg = format!(
                 "❌ **Subagent Task Failed**\n\n**Task:** {}\n\n**Error:**\n{}\n\n**Output:**\n{}",
@@ -192,6 +239,11 @@ impl Tool for LaunchSubagentPrettyTool {
            .arg("--pretty")
            .arg("--auto-confirm");
 
+        // Propagate --no-summarize-subagents if summarization is disabled
+        if !context.summarize_subagents {
+            cmd.arg("--no-summarize-subagents");
+        }
+
         // Add model parameter if current model string is available
         if let Some(model_string) = &context.current_model_string {
             cmd.arg("--model").arg(model_string);
@@ -262,26 +314,33 @@ impl Tool for LaunchSubagentPrettyTool {
         // Parse the JSON output
         if status.success() {
             // Try to parse as JSON
-            match serde_json::from_str::<serde_json::Value>(&stdout) {
+            let formatted_result = match serde_json::from_str::<serde_json::Value>(&stdout) {
                 Ok(json_result) => {
-                    // Format the result nicely
-                    let formatted_result = format!(
+                    format!(
                         "✅ **Subagent Task Completed Successfully**\n\n**Task:** {}\n\n**Pretty JSON Result:**\n```json\n{}\n```",
                         task,
                         serde_json::to_string_pretty(&json_result).unwrap_or_else(|_| stdout.to_string())
-                    );
-                    ToolResult::success(formatted_result)
+                    )
                 }
                 Err(_) => {
-                    // If not valid JSON, return as plain text
-                    let result = format!(
+                    format!(
                         "✅ **Subagent Task Completed**\n\n**Task:** {}\n\n**Output:**\n```\n{}\n```",
                         task,
                         stdout
-                    );
-                    ToolResult::success(result)
+                    )
+                }
+            };
+
+            if context.summarize_subagents {
+                if let Some(summary) = summarize_subagent_output(context, &task, &formatted_result).await {
+                    return ToolResult::success(format!(
+                        "✅ **Subagent Task Completed (Summarized)**\n\n**Task:** {}\n\n**Summary:**\n{}",
+                        task, summary
+                    ));
                 }
             }
+
+            ToolResult::success(formatted_result)
         } else {
             let error_msg = format!(
                 "❌ **Subagent Task Failed**\n\n**Task:** {}\n\n**Error:**\n```\n{}\n```\n\n**Output:**\n```\n{}\n```",

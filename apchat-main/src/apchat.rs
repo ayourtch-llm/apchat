@@ -73,6 +73,8 @@ pub struct APChat {
     pub(crate) llm_overrides: Arc<std::sync::Mutex<Option<apchat_llm_api::LlmRequestOverrides>>>,
     // Shared context edits queue (self-edit tools)
     pub(crate) context_edits: Arc<std::sync::Mutex<Vec<apchat_toolcore::ContextEdit>>>,
+    // Whether to summarize subagent output via LLM (default: true)
+    pub(crate) summarize_subagents: bool,
 }
 
 impl APChat {
@@ -230,6 +232,7 @@ impl APChat {
             confirmation_registry: None,
             llm_overrides: Arc::new(std::sync::Mutex::new(None)),
             context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
+            summarize_subagents: true,
         };
 
         chat.messages.push(Message {
@@ -467,6 +470,9 @@ impl APChat {
 
                 // Add context edits
                 context = context.with_context_edits(self.context_edits.clone());
+
+                // Add summarize_subagents flag
+                context = context.with_summarize_subagents(self.summarize_subagents);
 
                 let context = context;
 

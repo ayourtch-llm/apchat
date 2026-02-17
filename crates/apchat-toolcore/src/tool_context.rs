@@ -47,6 +47,7 @@ pub struct ToolContext {
     pub confirmation_registry: Option<Arc<crate::confirmation::ConfirmationRegistry>>, // NEW - Confirmation registry
     pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>, // Shared LLM request overrides (self-regulate)
     pub context_edits: Option<Arc<std::sync::Mutex<Vec<ContextEdit>>>>, // Pending context edits (self-edit tools)
+    pub summarize_subagents: bool, // Whether to summarize subagent output via LLM (default: true)
 }
 
 impl Clone for ToolContext {
@@ -71,6 +72,7 @@ impl Clone for ToolContext {
             confirmation_registry: self.confirmation_registry.clone(),
             llm_overrides: self.llm_overrides.clone(),
             context_edits: self.context_edits.clone(),
+            summarize_subagents: self.summarize_subagents,
         }
     }
 }
@@ -95,6 +97,7 @@ impl std::fmt::Debug for ToolContext {
             .field("signal_receiver", &self.signal_receiver.is_some())
             .field("llm_overrides", &self.llm_overrides.is_some())
             .field("context_edits", &self.context_edits.is_some())
+            .field("summarize_subagents", &self.summarize_subagents)
             .finish()
     }
 }
@@ -120,6 +123,7 @@ impl ToolContext {
             confirmation_registry: None,
             llm_overrides: None,
             context_edits: None,
+            summarize_subagents: true,
         }
     }
 
@@ -195,6 +199,11 @@ impl ToolContext {
 
     pub fn with_context_edits(mut self, edits: Arc<std::sync::Mutex<Vec<ContextEdit>>>) -> Self {
         self.context_edits = Some(edits);
+        self
+    }
+
+    pub fn with_summarize_subagents(mut self, summarize: bool) -> Self {
+        self.summarize_subagents = summarize;
         self
     }
 
