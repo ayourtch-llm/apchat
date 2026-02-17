@@ -17,7 +17,7 @@ impl Tool for DeleteItemsTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("indices", "array", "Array of 0-based message indices to delete from the context window. Related messages (assistant+tool pairs) are automatically included.", required),
+            param!("indices", "array", "Array of 0-based message indices to delete from the context window. Related messages (assistant messages with tool_calls and their tool results) are automatically included to preserve role ordering.", required),
         ])
     }
 
