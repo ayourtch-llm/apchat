@@ -48,6 +48,7 @@ pub async fn initialize_repl(
             metacog_tools: cli.metacog_tools,
             self_regulate: cli.self_regulate,
             learning_opportunities: cli.learning_opportunities,
+            community_skills: cli.community_skills,
         },
     );
 

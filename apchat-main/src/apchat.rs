@@ -162,6 +162,13 @@ impl APChat {
                 if !flags.learning_opportunities {
                     registry.remove_skill("learning-opportunities");
                 }
+                if !flags.community_skills {
+                    registry.remove_skill("socratic");
+                    registry.remove_skill("reverse-socratic-examination");
+                    registry.remove_skill("specification");
+                    registry.remove_skill("coding-conventions");
+                    registry.remove_skill("skill-creator");
+                }
                 Some(Arc::new(registry))
             }
             Err(e) => {

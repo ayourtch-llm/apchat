@@ -19,6 +19,7 @@ pub struct FeatureFlags {
     pub metacog_tools: bool,
     pub self_regulate: bool,
     pub learning_opportunities: bool,
+    pub community_skills: bool,
 }
 
 /// Configuration for APChat client
