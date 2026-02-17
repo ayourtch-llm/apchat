@@ -61,6 +61,9 @@ pub async fn run_subagent_mode(
     // Mark as non-interactive to prevent prompts
     subagent.non_interactive = true;
 
+    // Set summarize_subagents flag from CLI
+    subagent.summarize_subagents = !cli.no_summarize_subagents;
+
     // Disable logging for subagent mode to avoid clutter
     subagent.logger = None;
 

@@ -38,6 +38,9 @@ pub async fn run_task_mode(
         },
     );
 
+    // Set summarize_subagents flag from CLI
+    chat.summarize_subagents = !cli.no_summarize_subagents;
+
     // Initialize logger for task mode
     chat.logger = match ConversationLogger::new_task_mode(&chat.work_dir).await {
         Ok(l) => Some(l),

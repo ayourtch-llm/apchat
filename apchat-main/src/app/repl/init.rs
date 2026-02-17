@@ -53,6 +53,9 @@ pub async fn initialize_repl(
         },
     );
 
+    // Set summarize_subagents flag from CLI
+    chat.summarize_subagents = !cli.no_summarize_subagents;
+
     // Set process ID for status info
     status_info::set_pid(std::process::id().try_into().unwrap());
 
