@@ -11,6 +11,7 @@ use crate::content_limiter::ContentLimiter;
 use apchat_models::types::ModelColor;
 use apchat_mspc::MspcMessage;
 use apchat_llm_api::LlmRequestOverrides;
+use crate::context_edit::ContextEdit;
 
 /// Tool execution context
 ///
@@ -45,6 +46,7 @@ pub struct ToolContext {
     pub signal_receiver: Option<Arc<Mutex<tokio_mpsc::Receiver<MspcMessage>>>>, // NEW - Signal channel receiver (for interrupts)
     pub confirmation_registry: Option<Arc<crate::confirmation::ConfirmationRegistry>>, // NEW - Confirmation registry
     pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>, // Shared LLM request overrides (self-regulate)
+    pub context_edits: Option<Arc<std::sync::Mutex<Vec<ContextEdit>>>>, // Pending context edits (self-edit tools)
 }
 
 impl Clone for ToolContext {
@@ -68,6 +70,7 @@ impl Clone for ToolContext {
             signal_receiver: None,
             confirmation_registry: self.confirmation_registry.clone(),
             llm_overrides: self.llm_overrides.clone(),
+            context_edits: self.context_edits.clone(),
         }
     }
 }
@@ -91,6 +94,7 @@ impl std::fmt::Debug for ToolContext {
             .field("signal_sender", &self.signal_sender.is_some())
             .field("signal_receiver", &self.signal_receiver.is_some())
             .field("llm_overrides", &self.llm_overrides.is_some())
+            .field("context_edits", &self.context_edits.is_some())
             .finish()
     }
 }
@@ -115,6 +119,7 @@ impl ToolContext {
             signal_receiver: None,
             confirmation_registry: None,
             llm_overrides: None,
+            context_edits: None,
         }
     }
 
@@ -185,6 +190,11 @@ impl ToolContext {
 
     pub fn with_llm_overrides(mut self, overrides: Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>) -> Self {
         self.llm_overrides = Some(overrides);
+        self
+    }
+
+    pub fn with_context_edits(mut self, edits: Arc<std::sync::Mutex<Vec<ContextEdit>>>) -> Self {
+        self.context_edits = Some(edits);
         self
     }
 

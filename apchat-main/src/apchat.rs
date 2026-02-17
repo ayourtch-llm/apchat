@@ -71,6 +71,8 @@ pub struct APChat {
     pub(crate) confirmation_registry: Option<Arc<apchat_toolcore::confirmation::ConfirmationRegistry>>,
     // Shared LLM request overrides (self-regulate tool)
     pub(crate) llm_overrides: Arc<std::sync::Mutex<Option<apchat_llm_api::LlmRequestOverrides>>>,
+    // Shared context edits queue (self-edit tools)
+    pub(crate) context_edits: Arc<std::sync::Mutex<Vec<apchat_toolcore::ContextEdit>>>,
 }
 
 impl APChat {
@@ -227,6 +229,7 @@ impl APChat {
             signal_receiver: None,
             confirmation_registry: None,
             llm_overrides: Arc::new(std::sync::Mutex::new(None)),
+            context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
         };
 
         chat.messages.push(Message {
@@ -461,6 +464,9 @@ impl APChat {
 
                 // Add LLM overrides
                 context = context.with_llm_overrides(self.llm_overrides.clone());
+
+                // Add context edits
+                context = context.with_context_edits(self.context_edits.clone());
 
                 let context = context;
 

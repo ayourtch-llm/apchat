@@ -38,6 +38,11 @@ mod tests {
             readline_history: None,
             content_limiter: None,
             mspc_channel: None,
+            signal_sender: None,
+            signal_receiver: None,
+            confirmation_registry: None,
+            llm_overrides: Arc::new(std::sync::Mutex::new(None)),
+            context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 

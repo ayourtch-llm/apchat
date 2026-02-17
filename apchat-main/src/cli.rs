@@ -197,6 +197,11 @@ pub struct Cli {
     #[arg(long)]
     pub self_regulate: bool,
 
+    /// Enable self-edit tools for context window manipulation
+    /// Allows the agent to delete items and edit editable items in the conversation history
+    #[arg(long)]
+    pub self_edit: bool,
+
     /// Enable the learning-opportunities skill
     /// Suggests interactive learning exercises after significant work
     #[arg(long)]

@@ -3,6 +3,7 @@ pub mod state;
 pub mod history;
 pub mod session;
 pub mod mspc_session; // MSPC-integrated session module
+pub mod context_edit;
 
 // Re-export commonly used items
 pub use state::{save_state, load_state};
