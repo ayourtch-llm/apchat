@@ -479,4 +479,71 @@ This is the content.
         assert_eq!(name, "test-skill");
         assert_eq!(description, "A test skill for testing");
     }
+
+    #[test]
+    fn test_embedded_community_skills_present() {
+        let embedded = crate::embedded::get_embedded_skills();
+        let community_skills = [
+            "socratic",
+            "reverse-socratic-examination",
+            "specification",
+            "coding-conventions",
+            "skill-creator",
+        ];
+        for skill_name in &community_skills {
+            assert!(
+                embedded.contains_key(skill_name),
+                "Community skill '{}' should be embedded",
+                skill_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_community_skills_have_valid_frontmatter() {
+        let embedded = crate::embedded::get_embedded_skills();
+        let registry = SkillRegistry {
+            skills: HashMap::new(),
+            skills_dir: PathBuf::from("skills"),
+            embedding_backend: None,
+            skill_embeddings: HashMap::new(),
+        };
+        let community_skills = [
+            "socratic",
+            "reverse-socratic-examination",
+            "specification",
+            "coding-conventions",
+            "skill-creator",
+        ];
+        for skill_name in &community_skills {
+            let content = embedded.get(skill_name).unwrap();
+            let (name, description) = registry.parse_frontmatter(content)
+                .unwrap_or_else(|e| panic!("Community skill '{}' has invalid frontmatter: {}", skill_name, e));
+            assert_eq!(name, *skill_name, "Skill name in frontmatter should match key");
+            assert!(!description.is_empty(), "Skill '{}' should have a non-empty description", skill_name);
+        }
+    }
+
+    #[test]
+    fn test_remove_community_skills() {
+        let skills_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("..").join("skills");
+        let mut registry = SkillRegistry::new(skills_dir).unwrap();
+        assert!(registry.get_skill("socratic").is_some(), "socratic should be loaded");
+        assert!(registry.get_skill("reverse-socratic-examination").is_some());
+        assert!(registry.get_skill("specification").is_some());
+        assert!(registry.get_skill("coding-conventions").is_some());
+        assert!(registry.get_skill("skill-creator").is_some());
+
+        registry.remove_skill("socratic");
+        registry.remove_skill("reverse-socratic-examination");
+        registry.remove_skill("specification");
+        registry.remove_skill("coding-conventions");
+        registry.remove_skill("skill-creator");
+
+        assert!(registry.get_skill("socratic").is_none(), "socratic should be removed");
+        assert!(registry.get_skill("reverse-socratic-examination").is_none());
+        assert!(registry.get_skill("specification").is_none());
+        assert!(registry.get_skill("coding-conventions").is_none());
+        assert!(registry.get_skill("skill-creator").is_none());
+    }
 }

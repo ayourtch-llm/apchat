@@ -201,6 +201,11 @@ pub struct Cli {
     /// Suggests interactive learning exercises after significant work
     #[arg(long)]
     pub learning_opportunities: bool,
+
+    /// Enable community skills (socratic, reverse-socratic-examination, specification, coding-conventions, skill-creator)
+    /// Based on https://github.com/roby2358/skills
+    #[arg(long)]
+    pub community_skills: bool,
 }
 
 #[derive(Subcommand)]

@@ -37,5 +37,12 @@ pub fn get_embedded_skills() -> HashMap<&'static str, &'static str> {
     skills.insert("writing-plans", include_str!("../../../skills/writing-plans/SKILL.md"));
     skills.insert("writing-skills", include_str!("../../../skills/writing-skills/SKILL.md"));
 
+    // Community skills (from https://github.com/roby2358/skills) - behind --community-skills flag
+    skills.insert("socratic", include_str!("../../../skills/socratic/SKILL.md"));
+    skills.insert("reverse-socratic-examination", include_str!("../../../skills/reverse-socratic-examination/SKILL.md"));
+    skills.insert("specification", include_str!("../../../skills/specification/SKILL.md"));
+    skills.insert("coding-conventions", include_str!("../../../skills/coding-conventions/SKILL.md"));
+    skills.insert("skill-creator", include_str!("../../../skills/skill-creator/SKILL.md"));
+
     skills
 }
