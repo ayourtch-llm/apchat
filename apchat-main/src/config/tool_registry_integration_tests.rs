@@ -71,4 +71,16 @@ fn test_feature_flags_gate_tools() {
         ..FeatureFlags::default()
     });
     assert!(registry.has_tool("self_regulate"), "self_regulate should be registered when self_regulate is true");
+
+    // Default: self_edit tools disabled
+    assert!(!registry.has_tool("delete_items"), "delete_items should not be registered by default");
+    assert!(!registry.has_tool("edit_item"), "edit_item should not be registered by default");
+
+    // Enable self-edit
+    let registry = initialize_tool_registry(&FeatureFlags {
+        self_edit: true,
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("delete_items"), "delete_items should be registered when self_edit is true");
+    assert!(registry.has_tool("edit_item"), "edit_item should be registered when self_edit is true");
 }

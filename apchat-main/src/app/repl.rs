@@ -678,6 +678,7 @@ async fn process_llm_response(
                         reasoning: None,
                     };
 
+                    let pre_batch_len = chat.messages.len();
                     chat.messages.push(assistant_message.clone());
 
                     if chat.verbose {
@@ -712,6 +713,9 @@ async fn process_llm_response(
 
                         chat.messages.push(tool_response_message);
                     }
+
+                    // Apply any pending context edits from self-edit tools
+                    crate::chat::context_edit::apply_pending_context_edits(chat, pre_batch_len);
 
                     print_heart_red("", true); // New line after tool outputs
 
@@ -801,6 +805,7 @@ mod repl_compact_tests {
             signal_receiver: None,
             confirmation_registry: None,
             llm_overrides: Arc::new(std::sync::Mutex::new(None)),
+            context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 

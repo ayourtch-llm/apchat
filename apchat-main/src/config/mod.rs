@@ -20,6 +20,7 @@ pub struct FeatureFlags {
     pub self_regulate: bool,
     pub learning_opportunities: bool,
     pub community_skills: bool,
+    pub self_edit: bool,
 }
 
 /// Configuration for APChat client
@@ -204,6 +205,12 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     // Register self-regulate tool (only if enabled via --self-regulate CLI flag)
     if flags.self_regulate {
         registry.register_with_categories(SelfRegulateTool, vec!["self_regulate".to_string()]);
+    }
+
+    // Register context editing tools (only if enabled via --self-edit CLI flag)
+    if flags.self_edit {
+        registry.register_with_categories(DeleteItemsTool, vec!["self_edit".to_string()]);
+        registry.register_with_categories(EditItemTool, vec!["self_edit".to_string()]);
     }
 
     registry

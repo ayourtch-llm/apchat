@@ -565,6 +565,9 @@ pub(crate) async fn chat(
                        chat.messages.truncate(rollback_len);
                     }
                 }
+
+                // Apply any pending context edits from self-edit tools
+                crate::chat::context_edit::apply_pending_context_edits(chat, rollback_len);
             } else {
                 chat.messages.push(response.clone());
                 // If finish_reason is "stop", the agent has naturally finished

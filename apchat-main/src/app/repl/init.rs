@@ -49,6 +49,7 @@ pub async fn initialize_repl(
             self_regulate: cli.self_regulate,
             learning_opportunities: cli.learning_opportunities,
             community_skills: cli.community_skills,
+            self_edit: cli.self_edit,
         },
     );
 
