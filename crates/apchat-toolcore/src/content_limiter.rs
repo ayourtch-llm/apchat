@@ -70,7 +70,7 @@ impl ContentLimiter {
         // Create truncated content with note
         let truncated_content = format!("🚨 LARGE OUTPUT TRUNCATED 🚨
 Output from '{}' exceeds maximum display length ({} chars). IMPORTANT: If a tool allows to limit the size of reply, like using max_read_lines parameter in read_file tool - do it.
-Full output saved to: {}",
+Full output saved to: {}, you can use llm_oneshot tool with appropriate file_path and instruction to extract the information.",
                                        tool_name,
                                        self.config.max_content_length,
                                        file_path.display());
