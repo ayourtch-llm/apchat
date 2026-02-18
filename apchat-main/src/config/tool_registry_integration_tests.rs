@@ -83,4 +83,17 @@ fn test_feature_flags_gate_tools() {
     });
     assert!(registry.has_tool("delete_items"), "delete_items should be registered when self_edit is true");
     assert!(registry.has_tool("edit_item"), "edit_item should be registered when self_edit is true");
+
+    // Default: scratchpad tools disabled
+    let registry = initialize_tool_registry(&FeatureFlags::default());
+    assert!(!registry.has_tool("scratchpad_read"), "scratchpad_read should not be registered by default");
+    assert!(!registry.has_tool("scratchpad_write"), "scratchpad_write should not be registered by default");
+
+    // Enable scratchpad
+    let registry = initialize_tool_registry(&FeatureFlags {
+        scratchpad: true,
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("scratchpad_read"), "scratchpad_read should be registered when scratchpad is true");
+    assert!(registry.has_tool("scratchpad_write"), "scratchpad_write should be registered when scratchpad is true");
 }

@@ -48,6 +48,7 @@ pub struct ToolContext {
     pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>, // Shared LLM request overrides (self-regulate)
     pub context_edits: Option<Arc<std::sync::Mutex<Vec<ContextEdit>>>>, // Pending context edits (self-edit tools)
     pub summarize_subagents: bool, // Whether to summarize subagent output via LLM (default: true)
+    pub scratchpad: Option<Arc<std::sync::Mutex<String>>>, // Shared scratchpad for persistent notes
 }
 
 impl Clone for ToolContext {
@@ -73,6 +74,7 @@ impl Clone for ToolContext {
             llm_overrides: self.llm_overrides.clone(),
             context_edits: self.context_edits.clone(),
             summarize_subagents: self.summarize_subagents,
+            scratchpad: self.scratchpad.clone(),
         }
     }
 }
@@ -98,6 +100,7 @@ impl std::fmt::Debug for ToolContext {
             .field("llm_overrides", &self.llm_overrides.is_some())
             .field("context_edits", &self.context_edits.is_some())
             .field("summarize_subagents", &self.summarize_subagents)
+            .field("scratchpad", &self.scratchpad.is_some())
             .finish()
     }
 }
@@ -124,6 +127,7 @@ impl ToolContext {
             llm_overrides: None,
             context_edits: None,
             summarize_subagents: true,
+            scratchpad: None,
         }
     }
 
@@ -204,6 +208,11 @@ impl ToolContext {
 
     pub fn with_summarize_subagents(mut self, summarize: bool) -> Self {
         self.summarize_subagents = summarize;
+        self
+    }
+
+    pub fn with_scratchpad(mut self, scratchpad: Arc<std::sync::Mutex<String>>) -> Self {
+        self.scratchpad = Some(scratchpad);
         self
     }
 

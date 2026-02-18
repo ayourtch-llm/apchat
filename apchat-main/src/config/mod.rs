@@ -21,6 +21,7 @@ pub struct FeatureFlags {
     pub learning_opportunities: bool,
     pub community_skills: bool,
     pub self_edit: bool,
+    pub scratchpad: bool,
 }
 
 /// Configuration for APChat client
@@ -211,6 +212,12 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     if flags.self_edit {
         registry.register_with_categories(DeleteItemsTool, vec!["self_edit".to_string()]);
         registry.register_with_categories(EditItemTool, vec!["self_edit".to_string()]);
+    }
+
+    // Register scratchpad tools (only if enabled via --scratchpad CLI flag)
+    if flags.scratchpad {
+        registry.register_with_categories(ScratchpadReadTool, vec!["scratchpad".to_string()]);
+        registry.register_with_categories(ScratchpadWriteTool, vec!["scratchpad".to_string()]);
     }
 
     registry

@@ -530,11 +530,18 @@ async fn handle_chat_with_broadcast(
                         context_with_receiver
                     };
 
+                    // Add scratchpad if available
+                    let context_with_scratchpad = if let Some(ref scratchpad) = apchat.scratchpad {
+                        context_with_confirmation.with_scratchpad(scratchpad.clone())
+                    } else {
+                        context_with_confirmation
+                    };
+
                     // Add validated parameters to context and execute
                     let tool_result = apchat.tool_registry.execute_tool(
                         &tool_call.function.name,
                         validated_params,
-                        &context_with_confirmation
+                        &context_with_scratchpad
                     ).await;
                     drop(apchat);
 

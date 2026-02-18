@@ -216,6 +216,11 @@ pub struct Cli {
     /// By default, subagent output is summarized to pass only the most critically important parts upward
     #[arg(long)]
     pub no_summarize_subagents: bool,
+
+    /// Enable the scratchpad feature
+    /// Provides scratchpad_read and scratchpad_write tools for the LLM to use as a persistent text buffer
+    #[arg(long)]
+    pub scratchpad: bool,
 }
 
 #[derive(Subcommand)]
