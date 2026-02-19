@@ -7,11 +7,11 @@ use colored::Colorize;
 use std::io::Write;
 use apchat_vty::print_heart_red;
 
-/// Maximum allowed timeout (300 seconds)
-const MAX_TIMEOUT: u64 = 300;
+/// Maximum allowed timeout (600 seconds)
+const MAX_TIMEOUT: u64 = 600000;
 
 /// Default timeout (30 seconds)
-const DEFAULT_TIMEOUT: u64 = 30;
+const DEFAULT_TIMEOUT: u64 = 30000;
 
 /// Tool for running shell commands
 pub struct RunCommandTool;
@@ -29,7 +29,7 @@ impl Tool for RunCommandTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("command", "string", "Shell command to execute", required),
-            param!("timeout", "number", "Request timeout in seconds (default: 30, max: 300)", optional),
+            param!("timeout", "number", "Request timeout in milliseconds (default: 30000, max: 600000)", optional),
         ])
     }
 
@@ -40,13 +40,13 @@ impl Tool for RunCommandTool {
         };
 
         // Parse optional timeout parameter
-        let timeout_secs = params.get_optional::<u64>("timeout")
+        let timeout_msecs = params.get_optional::<u64>("timeout")
             .ok()
             .flatten()
             .unwrap_or(DEFAULT_TIMEOUT);
 
-        if timeout_secs > MAX_TIMEOUT {
-            return ToolResult::error(format!("Timeout {} exceeds maximum of {} seconds", timeout_secs, MAX_TIMEOUT));
+        if timeout_msecs > MAX_TIMEOUT {
+            return ToolResult::error(format!("Timeout {} exceeds maximum of {} milliseconds", timeout_msecs, MAX_TIMEOUT));
         }
 
         // Basic security checks - prevent dangerous commands
@@ -88,7 +88,7 @@ impl Tool for RunCommandTool {
             return ToolResult::error("Command cancelled by user or policy".to_string());
         }
 
-        print_heart_red(&format!("{} {} {}ms", "Running:".green(), command.cyan(), timeout_secs * 1000), true);
+        print_heart_red(&format!("{} {} {}ms", "Running:".green(), command.cyan(), timeout_msecs), true);
 
         // Parse command and arguments
         let orig_command = command.clone();
@@ -100,7 +100,7 @@ impl Tool for RunCommandTool {
         let (cmd, args) = parts.split_first().unwrap();
 
         // Execute command in work directory with timeout
-        let timeout_duration = std::time::Duration::from_secs(timeout_secs);
+        let timeout_duration = std::time::Duration::from_millis(timeout_msecs);
         let (stdout, stderr, exit_code) = match tokio::time::timeout(timeout_duration, async {
             // Spawn the process
             let mut child = match AsyncCommand::new("bash")
@@ -175,7 +175,7 @@ impl Tool for RunCommandTool {
                 return ToolResult::error(e);
             }
             Err(_) => {
-                return ToolResult::error(format!("Command timed out after {} seconds", timeout_secs));
+                return ToolResult::error(format!("Command timed out after {} milliseconds", timeout_msecs));
             }
         };
 
