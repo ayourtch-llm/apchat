@@ -184,23 +184,23 @@ APChat is also available as a Docker container from GitHub Container Registry:
 
 ```bash
 # Pull the latest image
-docker pull ghcr.io/ayourtch/apchat:latest
+docker pull ghcr.io/ayourtch-llm/apchat:latest
 
 # Run in interactive mode
 docker run -it --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 
 # Run with your project directory mounted
 docker run -it --rm \
   -v $(pwd):/workspace \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 
 # Run with a one-shot task
 docker run --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest \
+  ghcr.io/ayourtch-llm/apchat:latest \
   --task "Your task here"
 ```
 

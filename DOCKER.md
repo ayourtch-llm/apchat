@@ -6,10 +6,10 @@ This document explains how to use the APChat Docker container published to GitHu
 
 ```bash
 # Pull the latest image
-docker pull ghcr.io/ayourtch/apchat:latest
+docker pull ghcr.io/ayourtch-llm/apchat:latest
 
 # Run with help to see available options
-docker run --rm ghcr.io/ayourtch/apchat:latest --help
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest --help
 ```
 
 ## Basic Usage
@@ -22,7 +22,7 @@ The Docker container uses the `apchat` binary as its entrypoint, so you can pass
 docker run -it --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
   -e ANTHROPIC_AUTH_TOKEN_BLU=$ANTHROPIC_AUTH_TOKEN_BLU \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 ```
 
 ### Multi-Agent Mode
@@ -30,7 +30,7 @@ docker run -it --rm \
 ```bash
 docker run -it --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest --agents -i
+  ghcr.io/ayourtch-llm/apchat:latest --agents -i
 ```
 
 ### One-Shot Task Mode
@@ -38,7 +38,7 @@ docker run -it --rm \
 ```bash
 docker run --rm \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest \
+  ghcr.io/ayourtch-llm/apchat:latest \
   --task "Explain the difference between Rust traits and interfaces"
 ```
 
@@ -47,7 +47,7 @@ docker run --rm \
 ```bash
 docker run -d -p 8080:8080 \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest \
+  ghcr.io/ayourtch-llm/apchat:latest \
   --web --bind 0.0.0.0:8080
 ```
 
@@ -85,7 +85,7 @@ Then run with `--env-file`:
 ```bash
 docker run -it --rm \
   --env-file .env \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 ```
 
 ## Volume Mounting
@@ -98,7 +98,7 @@ Mount a directory to persist configuration and session data:
 docker run -it --rm \
   -v $(pwd)/apchat-data:/home/apchat/.apchat \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 ```
 
 ### Working with Local Files
@@ -110,13 +110,13 @@ The container uses `/workspace` as the working directory. Mount your project dir
 docker run -it --rm \
   -v $(pwd):/workspace \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 
 # Or with a specific project directory
 docker run -it --rm \
   -v /path/to/your/project:/workspace \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest --task "Analyze the codebase"
+  ghcr.io/ayourtch-llm/apchat:latest --task "Analyze the codebase"
 ```
 
 All file operations (read_file, write_file, edit_file, etc.) will work relative to `/workspace`.
@@ -129,7 +129,7 @@ Mount a custom policy file:
 docker run -it --rm \
   -v $(pwd)/my-policy.json:/config/policy.json \
   -e GROQ_API_KEY=$GROQ_API_KEY \
-  ghcr.io/ayourtch/apchat:latest -i --policy-file /config/policy.json
+  ghcr.io/ayourtch-llm/apchat:latest -i --policy-file /config/policy.json
 ```
 
 ## Common CLI Options
@@ -138,21 +138,21 @@ All apchat CLI options can be passed to the container:
 
 ```bash
 # Streaming responses (default)
-docker run --rm ghcr.io/ayourtch/apchat:latest --stream
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest --stream
 
 # Auto-confirm all operations
-docker run --rm ghcr.io/ayourtch/apchat:latest -i --auto-confirm
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest -i --auto-confirm
 
 # Verbose output
-docker run --rm ghcr.io/ayourtch/apchat:latest -i --verbose
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest -i --verbose
 
 # Custom model configuration
-docker run --rm ghcr.io/ayourtch/apchat:latest \
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest \
   --model-blu-model llama3-70b-8192 \
   --task "Your task"
 
 # Using llama.cpp
-docker run --rm ghcr.io/ayourtch/apchat:latest \
+docker run --rm ghcr.io/ayourtch-llm/apchat:latest \
   --llama-cpp-url http://host.docker.internal:8080 \
   --task "Your task"
 ```
@@ -166,7 +166,7 @@ version: '3.8'
 
 services:
   apchat:
-    image: ghcr.io/ayourtch/apchat:latest
+    image: ghcr.io/ayourtch-llm/apchat:latest
     container_name: apchat
     stdin_open: true
     tty: true
@@ -180,7 +180,7 @@ services:
     command: ["--agents", "-i"]
 
   apchat-web:
-    image: ghcr.io/ayourtch/apchat:latest
+    image: ghcr.io/ayourtch-llm/apchat:latest
     container_name: apchat-web
     ports:
       - "8080:8080"
@@ -237,7 +237,7 @@ To pull private images from GitHub Container Registry:
 echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
 
 # Now you can pull the image
-docker pull ghcr.io/ayourtch/apchat:latest
+docker pull ghcr.io/ayourtch-llm/apchat:latest
 ```
 
 For public images, no authentication is required.
@@ -253,7 +253,7 @@ If you encounter permission issues with mounted volumes:
 docker run -it --rm \
   -u $(id -u):$(id -g) \
   -v $(pwd):/workspace \
-  ghcr.io/ayourtch/apchat:latest -i
+  ghcr.io/ayourtch-llm/apchat:latest -i
 ```
 
 ### Network Issues with Local Services
@@ -267,7 +267,7 @@ To access services running on your host machine from inside the container:
 # Example with llama.cpp running on host
 docker run --rm \
   --add-host=host.docker.internal:host-gateway \
-  ghcr.io/ayourtch/apchat:latest \
+  ghcr.io/ayourtch-llm/apchat:latest \
   --llama-cpp-url http://host.docker.internal:8080
 ```
 
@@ -278,7 +278,7 @@ Run with shell access to debug:
 ```bash
 docker run -it --rm \
   --entrypoint /bin/bash \
-  ghcr.io/ayourtch/apchat:latest
+  ghcr.io/ayourtch-llm/apchat:latest
 ```
 
 ## Image Tags
