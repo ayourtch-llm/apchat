@@ -28,6 +28,7 @@ pub mod long_wait;
 pub mod metacog;
 pub mod self_regulate;
 pub mod context_edit;
+pub mod diff_fuzz;
 
 pub use file_ops::*;
 pub use search::*;
@@ -47,5 +48,6 @@ pub use long_wait::*;
 pub use metacog::*;
 pub use self_regulate::*;
 pub use context_edit::*;
+pub use diff_fuzz::*;
 
 

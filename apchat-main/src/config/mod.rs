@@ -21,6 +21,7 @@ pub struct FeatureFlags {
     pub learning_opportunities: bool,
     pub community_skills: bool,
     pub self_edit: bool,
+    pub diff_fuzz: bool,
 }
 
 /// Configuration for APChat client
@@ -211,6 +212,11 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     if flags.self_edit {
         registry.register_with_categories(DeleteItemsTool, vec!["self_edit".to_string()]);
         registry.register_with_categories(EditItemTool, vec!["self_edit".to_string()]);
+    }
+
+    // Register differential fuzzing tool (only if enabled via --diff-fuzz CLI flag)
+    if flags.diff_fuzz {
+        registry.register_with_categories(DiffFuzzTool, vec!["diff_fuzz".to_string(), "testing".to_string()]);
     }
 
     registry
