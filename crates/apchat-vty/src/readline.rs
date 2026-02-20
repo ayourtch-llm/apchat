@@ -1613,25 +1613,56 @@ impl Readline {
             let before = &line[..final_split_idx];
             let after = &line[final_split_idx..];
 
-            // Update current line and insert new line
-            self.lines[self.cursor_line] = before.to_string();
-            self.lines.insert(self.cursor_line + 1, after.to_string());
+            // Check if we can merge the overflow text with the next line
+            let merged_with_next = if self.cursor_line + 1 < self.lines.len() {
+                let next_line = &self.lines[self.cursor_line + 1];
 
-            // Move cursor to appropriate position in the new line
-            self.cursor_line += 1;
+                // Concatenate directly - 'after' already starts with the word (no leading space)
+                // and next_line may have leading spaces from previous splits
+                let merged = format!("{}{}", after, next_line);
 
-            // Adjust cursor column: if cursor was after the split point,
-            // position it relative to where it was in the original line
-            if self.cursor_col >= split_char_pos {
-                self.cursor_col = self.cursor_col - split_char_pos;
+                // Check if merged line fits within available width
+                if display_width(&merged) <= available_width {
+                    // Merge with next line instead of creating a new line
+                    self.lines[self.cursor_line] = before.to_string();
+                    self.lines[self.cursor_line + 1] = merged;
+
+                    // Keep cursor on the same line
+                    // cursor_col stays the same since we're still in the "before" part
+
+                    // Update scroll offset to keep cursor visible
+                    self.update_scroll_offset();
+
+                    true
+                } else {
+                    false
+                }
             } else {
-                // Cursor was before the split point, keep it on the same line
-                self.cursor_line -= 1;
-                // cursor_col stays the same since we're still in the "before" part
-            }
+                false
+            };
 
-            // Update scroll offset to keep cursor visible
-            self.update_scroll_offset();
+            // If we couldn't merge with the next line, proceed with normal split
+            if !merged_with_next {
+                // Update current line and insert new line
+                self.lines[self.cursor_line] = before.to_string();
+                self.lines.insert(self.cursor_line + 1, after.to_string());
+
+                // Move cursor to appropriate position in the new line
+                self.cursor_line += 1;
+
+                // Adjust cursor column: if cursor was after the split point,
+                // position it relative to where it was in the original line
+                if self.cursor_col >= split_char_pos {
+                    self.cursor_col = self.cursor_col - split_char_pos;
+                } else {
+                    // Cursor was before the split point, keep it on the same line
+                    self.cursor_line -= 1;
+                    // cursor_col stays the same since we're still in the "before" part
+                }
+
+                // Update scroll offset to keep cursor visible
+                self.update_scroll_offset();
+            }
         }
     }
 
