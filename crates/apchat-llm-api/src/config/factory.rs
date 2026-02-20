@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::client::{
     anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient, LlmClient,
 };
-use crate::config::{BackendType, ANTHROPIC_API_URL, GROQ_API_URL, OPENAI_API_URL};
+use crate::config::{BackendType, ANTHROPIC_API_URL, GROQ_API_URL, OPENAI_API_URL, normalize_api_url};
 
 /// Client factory for creating LLM clients
 pub struct ClientFactory;
@@ -32,7 +32,7 @@ impl ClientFactory {
 
         match backend {
             BackendType::Anthropic => {
-                let url = api_url.unwrap_or_else(|| ANTHROPIC_API_URL.to_string());
+                let url = normalize_api_url(&api_url.unwrap_or_else(|| ANTHROPIC_API_URL.to_string()));
                 let key = api_key
                     .or_else(|| env::var("ANTHROPIC_API_KEY").ok())
                     .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
@@ -41,11 +41,11 @@ impl ClientFactory {
                 Arc::new(AnthropicLlmClient::new(key, model, url, agent_name))
             }
             BackendType::Llama => {
-                let url = api_url.expect("llama.cpp backend requires api_url to be specified");
+                let url = normalize_api_url(&api_url.expect("llama.cpp backend requires api_url to be specified"));
                 Arc::new(LlamaCppClient::new(url, model))
             }
             BackendType::Groq => {
-                let url = api_url.unwrap_or_else(|| GROQ_API_URL.to_string());
+                let url = normalize_api_url(&api_url.unwrap_or_else(|| GROQ_API_URL.to_string()));
                 let key = api_key
                     .or_else(|| env::var("GROQ_API_KEY").ok())
                     .unwrap_or_default();
@@ -53,9 +53,9 @@ impl ClientFactory {
                 Arc::new(GroqLlmClient::new(key, model, url, agent_name))
             }
             BackendType::OpenAI => {
-                let url = api_url
+                let url = normalize_api_url(&api_url
                     .or_else(|| env::var("OPENAI_API_URL").ok())
-                    .unwrap_or_else(|| OPENAI_API_URL.to_string());
+                    .unwrap_or_else(|| OPENAI_API_URL.to_string()));
                 let key = api_key
                     .or_else(|| env::var("OPENAI_API_KEY").ok())
                     .unwrap_or_default();

@@ -229,10 +229,10 @@ pub fn create_model_client(
 
     match detected_backend {
         BackendType::Anthropic => {
-            let url = api_url.unwrap_or_else(|| {
+            let url = normalize_api_url(&api_url.unwrap_or_else(|| {
                 // Check for the global ANTHROPIC_BASE_URL environment variable
                 env::var("ANTHROPIC_BASE_URL").unwrap_or_else(|_| "https://api.anthropic.com".to_string())
-            });
+            }));
             let key = api_key
                 .or_else(|| env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", model_name_upper)).ok())
                 .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
@@ -247,7 +247,7 @@ pub fn create_model_client(
             ))
         }
         BackendType::Llama => {
-            let url = api_url.expect(&format!("llama.cpp backend requires api_url_{}_model", model_name));
+            let url = normalize_api_url(&api_url.expect(&format!("llama.cpp backend requires api_url_{}_model", model_name)));
             print_heart_red(&format!("{} Using llama.cpp for '{}_model' at: {}", "🦙".cyan(), model_name, url), true);
             Arc::new(LlamaCppClient::new_with_verbose(
                 url,
@@ -256,7 +256,7 @@ pub fn create_model_client(
             ))
         }
         BackendType::Groq => {
-            let url = api_url.unwrap_or_else(|| GROQ_API_URL.to_string());
+            let url = normalize_api_url(&api_url.unwrap_or_else(|| GROQ_API_URL.to_string()));
             let key = api_key
                 .or_else(|| env::var(format!("GROQ_API_KEY_{}", model_name_upper)).ok())
                 .or_else(|| env::var("GROQ_API_KEY").ok())
@@ -270,7 +270,7 @@ pub fn create_model_client(
             ))
         }
         BackendType::OpenAI => {
-            let url = api_url.unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string());
+            let url = normalize_api_url(&api_url.unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string()));
             let key = api_key.unwrap_or_else(|| default_api_key.to_string());
             print_heart_red(&format!("{} Using OpenAI API for '{}_model' at: {}", "🤖".cyan(), model_name, url), true);
             // Use GroqLlmClient as it's OpenAI-compatible
