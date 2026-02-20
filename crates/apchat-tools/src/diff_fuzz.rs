@@ -216,7 +216,13 @@ impl Tool for DiffFuzzTool {
 
             // Generate test cases
             let previous_context = if iteration > 1 {
-                format!("\n\nPrevious findings from earlier iterations:\n{}", all_findings.join("\n"))
+                let summary: String = all_findings.iter()
+                    .map(|f: &String| {
+                        if f.len() > 500 { format!("{}...", &f[..500]) } else { f.clone() }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n---\n");
+                format!("\n\nPrevious findings from earlier iterations (summarized):\n{}", summary)
             } else {
                 String::new()
             };
