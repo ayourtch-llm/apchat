@@ -1749,8 +1749,9 @@ impl Readline {
             let matched_text = if self.search_matches.is_empty() {
                 ""
             } else {
-                // Use the multiline text joined with newlines
-                &self.text()
+                // Use only the first line for display in search mode
+                // Multi-line matches would corrupt the single-line search display
+                self.lines.get(0).map(|s| s.as_str()).unwrap_or("")
             };
             write!(stdout, "(reverse-i-search)`{}': {}", self.search_pattern, matched_text).ok();
 
