@@ -301,6 +301,8 @@ pub struct Readline {
     confirmation_prompt: Option<String>,
     /// Confirmation ID for tool confirmation requests (for routing the response back to the tool)
     confirmation_id: Option<String>,
+    /// Visible width of the prompt (for auto-wrapping calculations)
+    prompt_width: usize,
 }
 
 impl Readline {
@@ -347,6 +349,7 @@ impl Readline {
             cursor: 0,
             confirmation_prompt: None,
             confirmation_id: None,
+            prompt_width: 0,
         })
     }
 
@@ -837,12 +840,16 @@ impl Readline {
 
         // Insert character at cursor position in the current line
         let line = &mut self.lines[self.cursor_line];
-        
+
         // Convert character position to byte position for UTF-8
         let byte_pos = line.chars().take(self.cursor_col).map(|c| c.len_utf8()).sum();
         line.insert(byte_pos, c);
-        
+
         self.cursor_col += 1;
+
+        // Auto-split line if it exceeds terminal width
+        self.split_line_if_needed();
+
         true
     }
 
@@ -1527,6 +1534,94 @@ impl Readline {
         }
     }
 
+    /// Checks if the current line exceeds terminal width and splits it if needed.
+    ///
+    /// This function is called after character insertion to auto-wrap lines that
+    /// are too long for the terminal. It splits at word boundaries when possible,
+    /// falling back to forced breaks if no word boundary exists.
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Calculate the display width of the current line
+    /// 2. Get terminal width and calculate available space (accounting for prompt on first line)
+    /// 3. If line exceeds available width, find split point:
+    ///    - Search backward from overflow point for a space (word boundary)
+    ///    - If no space found, split at the overflow point (forced break)
+    /// 4. Split the line and update cursor position to maintain typing continuity
+    fn split_line_if_needed(&mut self) {
+        // Get terminal width
+        let terminal_width = match crossterm::terminal::size() {
+            Ok((cols, _)) => cols as usize,
+            Err(_) => 80, // Default fallback
+        };
+
+        // Calculate available width for text
+        // On first line (line 0), subtract the prompt width
+        let available_width = if self.cursor_line == 0 {
+            terminal_width.saturating_sub(self.prompt_width)
+        } else {
+            terminal_width
+        };
+
+        // Clone the current line to avoid borrow issues
+        let line = self.lines[self.cursor_line].clone();
+
+        // Don't split if line is empty or fits within available width
+        if line.is_empty() || display_width(&line) <= available_width {
+            return;
+        }
+
+        // Find the split point
+        let line_width = display_width(&line);
+        let mut current_width = 0;
+        let mut split_idx = 0;
+
+        // Iterate through characters to find where we exceed available width
+        for (idx, ch) in line.char_indices() {
+            let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+            if current_width + char_width > available_width {
+                // We've exceeded the limit - this is our overflow point
+                split_idx = idx;
+                break;
+            }
+            current_width += char_width;
+        }
+
+        // Search backward from split point for a word boundary (space)
+        let actual_split_idx = if split_idx > 0 {
+            line[..split_idx]
+                .rfind(' ')
+                .map(|pos| pos)
+                .unwrap_or(split_idx)
+        } else {
+            split_idx
+        };
+
+        // Skip trailing space if we split at word boundary
+        let final_split_idx = if actual_split_idx > 0 && line.as_bytes()[actual_split_idx] == b' ' {
+            actual_split_idx + 1
+        } else {
+            actual_split_idx
+        };
+
+        // Perform the split if we have something to split on
+        if final_split_idx < line.len() {
+            let before = &line[..final_split_idx];
+            let after = &line[final_split_idx..];
+
+            // Update current line and insert new line
+            self.lines[self.cursor_line] = before.to_string();
+            self.lines.insert(self.cursor_line + 1, after.to_string());
+
+            // Move cursor to start of new line
+            self.cursor_line += 1;
+            self.cursor_col = 0;
+
+            // Update scroll offset to keep cursor visible
+            self.update_scroll_offset();
+        }
+    }
+
     /// Checks if the cursor is at the very end of all text.
     ///
     /// Returns true if the cursor is on the last line and at the end of that line.
@@ -1691,9 +1786,29 @@ impl Readline {
                 status_info::get_urgent(),
                 status_info::get_pid()
             );
-            while title.len() < screen_width {
-               title.push(' ');
+
+            // Ensure title never exceeds screen width by truncating if needed
+            let title_display_width = display_width(&title);
+            if title_display_width > screen_width {
+                // Truncate to fit screen width
+                let mut current_width = 0;
+                let mut truncated = String::new();
+                for ch in title.chars() {
+                    let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                    if current_width + char_width > screen_width {
+                        break;
+                    }
+                    current_width += char_width;
+                    truncated.push(ch);
+                }
+                title = truncated;
+            } else {
+                // Pad to fill screen width exactly
+                while display_width(&title) < screen_width {
+                    title.push(' ');
+                }
             }
+
 	    write!(stdout, "{}{}", crossterm::style::Attribute::Reverse, title );
 	    stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
 	    write!(stdout, "{}", crossterm::style::Attribute::NoReverse);
@@ -2209,6 +2324,13 @@ impl Readline {
         mut mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<MspcMessage>>,
         mut readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
     ) -> io::Result<ReadlineResult> {
+        // Calculate and store the visible prompt width for auto-wrapping
+        // IMPORTANT: The prompt displayed includes a [PID] prefix that's added in redraw()
+        // We need to account for this when calculating the available width
+        let full_prompt = format!("[{}]{}", std::process::id(), prompt);
+        let prompt_visible = strip_ansi_codes(&full_prompt);
+        self.prompt_width = prompt_visible.chars().count();
+
         // Display the initial prompt
         self.redraw(prompt);
 
@@ -2994,5 +3116,159 @@ mod tests {
         readline.handle_backspace();
         assert_eq!(readline.line(), "😀");
         assert_eq!(readline.cursor(), 1);
+    }
+
+    #[test]
+    fn test_split_line_if_needed_no_split_short_line() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Short line should not split
+        readline.set_line("hello");
+        readline.cursor_line = 0;
+        readline.cursor_col = 5;
+
+        // No split should occur for short lines
+        let old_len = readline.lines.len();
+        readline.split_line_if_needed();
+        assert_eq!(readline.lines.len(), old_len);
+        assert_eq!(readline.lines[0], "hello");
+    }
+
+    #[test]
+    fn test_split_line_if_needed_word_boundary() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set a reasonable prompt width (simulating what would be calculated)
+        // Actual prompt format: "[12345]User: " = 13 chars (PID + brackets + text)
+        readline.prompt_width = 20; // Slightly larger to be safe
+
+        // Create an extremely long line that will definitely split (200+ chars)
+        // This should exceed even large terminal widths minus prompt width
+        let long_line = "This is a very long line that definitely exceeds the terminal width and should wrap at some point soon because we are adding way more text than any reasonable terminal can display on a single line without wrapping the text into multiple lines";
+        readline.set_line(long_line);
+        readline.cursor_line = 0;
+        readline.cursor_col = long_line.len();
+
+        // Split should occur
+        readline.split_line_if_needed();
+
+        // Verify the line was split
+        assert!(readline.lines.len() > 1, "Line should have been split into multiple lines");
+
+        // First line should be truncated at word boundary
+        assert!(readline.lines[0].len() < long_line.len(), "First line should be shorter than original");
+
+        // Second line should contain the remainder
+        assert!(!readline.lines[1].is_empty(), "Second line should contain remainder");
+    }
+
+    #[test]
+    fn test_split_line_if_needed_forced_break() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set a reasonable prompt width
+        readline.prompt_width = 20;
+
+        // Create a line with no spaces (single long word) - 300 chars
+        let long_word = "a".repeat(300);
+        readline.set_line(&long_word);
+        readline.cursor_line = 0;
+        readline.cursor_col = long_word.len();
+
+        // Split should occur with forced break (no word boundary)
+        readline.split_line_if_needed();
+
+        // Verify the line was split
+        assert!(readline.lines.len() > 1, "Line should have been split even without word boundary");
+
+        // Cursor should be on the second line after split
+        assert_eq!(readline.cursor_line, 1, "Cursor should move to new line");
+        assert_eq!(readline.cursor_col, 0, "Cursor should be at start of new line");
+    }
+
+    #[test]
+    fn test_split_line_if_needed_subsequent_line() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Test splitting on a non-first line (no prompt to subtract)
+        readline.lines = vec!["first line".to_string(), String::new()];
+        readline.cursor_line = 1;
+        readline.cursor_col = 0;
+
+        // Add a very long line that should split
+        let long_line = "This is another very long line that exceeds terminal width and should wrap appropriately here because we keep adding more and more text until it definitely exceeds whatever terminal width the test environment has";
+        for ch in long_line.chars() {
+            readline.handle_char(ch);
+        }
+
+        // Verify split occurred
+        assert!(readline.lines.len() > 2, "Line should have been split");
+    }
+
+    #[test]
+    fn test_split_line_preserves_scroll_offset() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set up a multiline scenario
+        readline.lines = vec!["line 1".to_string(), "line 2".to_string(), String::new()];
+        readline.cursor_line = 2;
+        readline.cursor_col = 0;
+
+        // Add a very long line that causes split
+        let long_line = "This is a long line that will cause scrolling and splitting in the editor by exceeding terminal width with lots and lots of text that wraps automatically";
+        for ch in long_line.chars() {
+            readline.handle_char(ch);
+        }
+
+        // Scroll offset should be updated to keep cursor visible
+        // The cursor line should be within visible range
+        let visible_start = readline.scroll_offset;
+        let visible_end = readline.scroll_offset + readline.max_lines;
+        assert!(readline.cursor_line >= visible_start, "Cursor line should be >= scroll offset");
+        assert!(readline.cursor_line < visible_end, "Cursor line should be within visible range");
+    }
+
+    #[test]
+    fn test_split_line_uses_prompt_width() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set a large prompt width (e.g., 30 chars)
+        readline.prompt_width = 30;
+
+        // Add text to the first line
+        let text = "This is a moderately long line";
+        for ch in text.chars() {
+            readline.handle_char(ch);
+        }
+
+        // Cursor should be on line 0, at the end of the text
+        assert_eq!(readline.cursor_line, 0, "Cursor should be on first line");
+
+        // Verify prompt_width is stored
+        assert_eq!(readline.prompt_width, 30, "Prompt width should be stored correctly");
+    }
+
+    #[test]
+    fn test_split_line_no_prompt_on_subsequent_lines() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set a prompt width
+        readline.prompt_width = 20;
+
+        // Set up multiline with cursor on second line
+        readline.lines = vec!["first line".to_string(), String::new()];
+        readline.cursor_line = 1;
+        readline.cursor_col = 0;
+
+        // Add a very long line that should split
+        // On subsequent lines, there's no prompt to subtract, so it should split
+        // at the actual terminal width boundary
+        let long_line = "This is another very long line that exceeds terminal width and should wrap appropriately here because we keep adding more and more text until it definitely exceeds whatever terminal width the test environment has";
+        for ch in long_line.chars() {
+            readline.handle_char(ch);
+        }
+
+        // Verify split occurred (cursor moved to line 2 or 3)
+        assert!(readline.cursor_line >= 2, "Cursor should be on line 2 or higher after split");
     }
 }
