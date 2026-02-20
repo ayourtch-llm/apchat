@@ -308,7 +308,7 @@ pub struct SearchFilesArgs {
 pub struct OpenFileArgs {
     pub file_path: String,
     #[serde(default)]
-    pub start_line: usize,
+    pub offset: usize,
     #[serde(default)]
     pub end_line: usize,
 }

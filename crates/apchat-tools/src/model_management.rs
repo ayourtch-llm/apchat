@@ -279,7 +279,7 @@ fn content_matches(haystack: &str, needle: &str, strategy: MatchStrategy) -> boo
 struct LevenshteinMatch {
     content: String,
     distance: usize,
-    start_line: usize,
+    offset: usize,
     end_line: usize,
 }
 
@@ -310,7 +310,7 @@ fn find_closest_by_levenshtein(file_content: &str, search_for: &str, max_results
         matches.push(LevenshteinMatch {
             content: window_content,
             distance,
-            start_line: start_idx + 1,  // 1-indexed for display
+            offset: start_idx + 1,  // 1-indexed for display
             end_line: end_idx,  // 1-indexed for display
         });
 
@@ -327,7 +327,7 @@ fn find_closest_by_levenshtein(file_content: &str, search_for: &str, max_results
                 matches.push(LevenshteinMatch {
                     content: small_window,
                     distance: small_distance,
-                    start_line: start_idx + 1,
+                    offset: start_idx + 1,
                     end_line: small_end,
                 });
             }
@@ -342,7 +342,7 @@ fn find_closest_by_levenshtein(file_content: &str, search_for: &str, max_results
                 matches.push(LevenshteinMatch {
                     content: large_window,
                     distance: large_distance,
-                    start_line: start_idx + 1,
+                    offset: start_idx + 1,
                     end_line: large_end,
                 });
             }
@@ -370,11 +370,11 @@ fn format_levenshtein_match(file_lines: &[&str], lev_match: &LevenshteinMatch, s
 
     output.push_str(&format!(
         "Lines {}-{} ({:.1}% similar, Levenshtein distance: {}):\n",
-        lev_match.start_line, lev_match.end_line, similarity, lev_match.distance
+        lev_match.offset, lev_match.end_line, similarity, lev_match.distance
     ));
 
     // Show the content with line numbers
-    let start_idx = lev_match.start_line.saturating_sub(1);
+    let start_idx = lev_match.offset.saturating_sub(1);
     let end_idx = lev_match.end_line.min(file_lines.len());
 
     for (i, line) in file_lines[start_idx..end_idx].iter().enumerate() {

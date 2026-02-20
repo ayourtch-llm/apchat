@@ -8,7 +8,7 @@
 read_file {
   "file_path": "src/main.rs",
   "limit": 20,
-  "start_line": 100  # Optional: start from specific line
+  "offset": 100  # Optional: start from specific line
 }
 ```
 
@@ -24,7 +24,7 @@ read_file {
 ```bash
 file_curly_glance {"file_path": "src/main.rs"}  # Get structure
 file_curly_glance {"file_path": "src/main.rs", "starting_line": 42}  # Drill down
-read_file {"file_path": "src/main.rs", "start_line": 42, "limit": 25}  # Read chunk
+read_file {"file_path": "src/main.rs", "offset": 42, "limit": 25}  # Read chunk
 ```
 
 ## ⚠️ Why This Matters

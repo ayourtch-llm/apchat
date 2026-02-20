@@ -113,12 +113,12 @@ pub fn analyze_file_content(content: &str, starting_line: Option<usize>) -> Vec<
         let line_num = line_idx + 1;
         
         // Skip lines before starting_line if specified
-        if let Some(start_line) = starting_line {
-            if line_num < start_line {
+        if let Some(offset) = starting_line {
+            if line_num < offset {
                 continue;
             }
             // When we reach starting_line, reset depth to 0 (start fresh)
-            if line_num == start_line {
+            if line_num == offset {
                 current_depth = 0;
             }
         }

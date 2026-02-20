@@ -167,7 +167,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -199,7 +199,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -207,7 +207,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 10}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());
@@ -226,7 +226,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -253,7 +253,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -267,7 +267,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Test with optional parameters
-        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": 10}"#);
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());
     }

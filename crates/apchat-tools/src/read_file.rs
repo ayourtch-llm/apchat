@@ -23,12 +23,12 @@ const MAX_FILE_SIZE: usize = 1024 * 1024; // 1 MiB
 ///
 /// * `work_dir` – The root workspace directory. The function ensures the resolved file stays inside this directory.
 /// * `file_path` – Path relative to the workspace.
-/// * `start_line` – Optional inclusive 1‑based start line. If `None`, assume line 1.
+/// * `offset` – Optional inclusive 1‑based start line. If `None`, assume line 1.
 /// * `limit` - Optional line count.
 pub async fn read_file(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
-    start_line: Option<usize>,
+    offset: Option<usize>,
     limit: Option<usize>,
 ) -> Result<String> {
     // Resolve the absolute path
@@ -108,7 +108,7 @@ pub async fn read_file(
          return Ok(String::new());
     }
 
-    let start = start_line.unwrap_or(1).max(1).min(total.max(1));
+    let start = offset.unwrap_or(1).max(1).min(total.max(1));
     let count = limit.unwrap_or(total);
 
     let end = start + count - 1;

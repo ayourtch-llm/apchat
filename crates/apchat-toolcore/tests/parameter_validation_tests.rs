@@ -78,7 +78,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -92,7 +92,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 10, "end_line": 20}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": 10, "end_line": 20}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -100,7 +100,7 @@ mod tests {
 
         let params = result.unwrap();
         assert_eq!(params.get_required::<String>("file_path").unwrap(), "test.txt");
-        assert_eq!(params.get_optional::<i64>("start_line").unwrap().unwrap(), 10);
+        assert_eq!(params.get_optional::<i64>("offset").unwrap().unwrap(), 10);
         assert_eq!(params.get_optional::<i64>("end_line").unwrap().unwrap(), 20);
     }
 
@@ -114,7 +114,7 @@ mod tests {
                 required: false,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -122,14 +122,14 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
         assert!(result.is_ok(), "Valid tool call with only optional parameters should pass validation");
 
         let params = result.unwrap();
-        assert_eq!(params.get_optional::<i64>("start_line").unwrap().unwrap(), 10);
+        assert_eq!(params.get_optional::<i64>("offset").unwrap().unwrap(), 10);
     }
 
     #[test]
@@ -142,7 +142,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -156,7 +156,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "start_line": 5, "end_line": 15}"#);
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": 5, "end_line": 15}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -164,7 +164,7 @@ mod tests {
 
         let params = result.unwrap();
         assert_eq!(params.get_required::<String>("file_path").unwrap(), "test.txt");
-        assert_eq!(params.get_optional::<i64>("start_line").unwrap().unwrap(), 5);
+        assert_eq!(params.get_optional::<i64>("offset").unwrap().unwrap(), 5);
         assert_eq!(params.get_optional::<i64>("end_line").unwrap().unwrap(), 15);
     }
 
@@ -181,7 +181,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -189,7 +189,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -205,7 +205,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -232,7 +232,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: true,
@@ -240,7 +240,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -281,7 +281,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: false,
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn test_wrong_data_type_for_integer() {
         let schema = create_tool_schema(vec![
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: true,
@@ -351,7 +351,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": "not_a_number"}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": "not_a_number"}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -669,7 +669,7 @@ mod tests {
     #[test]
     fn test_zero_values() {
         let schema = create_tool_schema(vec![
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: true,
@@ -677,7 +677,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 0}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 0}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -687,7 +687,7 @@ mod tests {
     #[test]
     fn test_negative_integer_values() {
         let schema = create_tool_schema(vec![
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: true,
@@ -695,7 +695,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": -10}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": -10}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn test_large_integer_values() {
         let schema = create_tool_schema(vec![
-            ("start_line".to_string(), ParameterDefinition {
+            ("offset".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Starting line number".to_string(),
                 required: true,
@@ -713,7 +713,7 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("read_file", r#"{"start_line": 999999999}"#);
+        let tool_call = create_tool_call("read_file", r#"{"offset": 999999999}"#);
 
         let definitions = get_param_definitions(&schema);
         let result = validate_tool_call(&tool_call, &schema, &definitions);

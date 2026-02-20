@@ -135,17 +135,17 @@ pub(crate) fn validate_and_fix_tool_calls_in_place(chat: &mut APChat) -> Result<
 
                         match tool_call.function.name.as_str() {
                             "read_file" | "peek_file_top_10_lines" => {
-                                // Check if start_line or end_line are strings instead of integers
+                                // Check if offset or end_line are strings instead of integers
                                 if let Some(obj) = json_args.as_object_mut() {
-                                    // Check start_line
-                                    let start_fix = obj.get("start_line")
+                                    // Check offset
+                                    let start_fix = obj.get("offset")
                                         .and_then(|v| v.as_str())
                                         .and_then(|s| s.parse::<i64>().ok());
 
                                     if let Some(num) = start_fix {
-                                        obj.insert("start_line".to_string(), serde_json::json!(num));
+                                        obj.insert("offset".to_string(), serde_json::json!(num));
                                         needs_fix = true;
-                                        print_heart_yellow(&format!("{} Fixed start_line: string → integer {}", "🔧".yellow(), num), true);
+                                        print_heart_yellow(&format!("{} Fixed offset: string → integer {}", "🔧".yellow(), num), true);
                                     }
 
                                     // Check end_line

@@ -295,7 +295,7 @@ pub enum Commands {
         file_path: String,
         /// Starting line number (1-based)
         #[arg(short = 's', long)]
-        start_line: Option<usize>,
+        offset: Option<usize>,
         /// Ending line number (1-based)
         #[arg(short = 'e', long)]
         end_line: Option<usize>,
@@ -531,16 +531,16 @@ impl Commands {
                     }
                 })
             }
-            Commands::Open { file_path, start_line, end_line } => {
+            Commands::Open { file_path, offset, end_line } => {
                 let work_dir = env::current_dir().unwrap();
                 let file_path = file_path.clone();
-                let start_line = *start_line;
+                let offset = *offset;
                 let end_line = *end_line;
                 Box::pin(async move {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
-                    if let Some(start) = start_line {
-                        params.set("start_line", start as i64);
+                    if let Some(start) = offset {
+                        params.set("offset", start as i64);
                     }
                     if let Some(end) = end_line {
                         params.set("end_line", end as i64);

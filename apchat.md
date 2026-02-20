@@ -62,7 +62,7 @@ read_file {
 // ✅ GOOD - Read specific range
 read_file {
   "file_path": "src/main.rs",
-  "start_line": 101,
+  "offset": 101,
   "limit": 30
 }
 ```
@@ -93,7 +93,7 @@ file_curly_glance {
 // Step 3: Read detailed content in chunks
 read_file {
   "file_path": "src/main.rs",
-  "start_line": 42,
+  "offset": 42,
   "limit": 25
 }
 ```

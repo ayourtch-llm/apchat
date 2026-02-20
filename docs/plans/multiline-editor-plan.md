@@ -132,8 +132,8 @@ pub fn redraw(&mut self, prompt: &str) {
     let mut stdout = std::io::stdout();
 
     // Calculate visible lines (with scrolling)
-    let start_line = self.scroll_offset;
-    let end_line = (start_line + self.max_lines).min(self.lines.len());
+    let offset = self.scroll_offset;
+    let end_line = (offset + self.max_lines).min(self.lines.len());
 
     // Move cursor to the start of our display area
     // We need to move up if we have multiple lines
@@ -145,7 +145,7 @@ pub fn redraw(&mut self, prompt: &str) {
     stdout.queue(MoveToColumn(0)).ok();
 
     // Display each visible line
-    for i in start_line..end_line {
+    for i in offset..end_line {
         // Clear the line
         stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
 

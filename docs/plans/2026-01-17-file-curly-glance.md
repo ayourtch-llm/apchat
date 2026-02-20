@@ -187,8 +187,8 @@ mod tests {
 }
 "#;
 
-        let start_line = find_starting_line(content, 1);
-        assert_eq!(start_line, 1, "Should start at line 1 (no preceding empty line)");
+        let offset = find_starting_line(content, 1);
+        assert_eq!(offset, 1, "Should start at line 1 (no preceding empty line)");
     }
 }
 ```
@@ -251,8 +251,8 @@ async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolRe
 
     for (line_idx, line) in lines.iter().enumerate() {
         // Skip if starting_line is specified and we haven't reached it
-        if let Some(start_line) = starting_line {
-            if line_idx < start_line - 1 {
+        if let Some(offset) = starting_line {
+            if line_idx < offset - 1 {
                 continue;
             }
         }
@@ -272,14 +272,14 @@ async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolRe
                     // Find matching closing bracket
                     if let Some(closing_line) = find_matching_closing_bracket(&content, line_idx) {
                         // Find starting line by searching backwards
-                        let token_start_line = find_starting_line(&content, line_idx);
+                        let token_offset = find_starting_line(&content, line_idx);
 
                         // Extract the token content
-                        let token_lines = lines[token_start_line..=closing_line].join("\n");
+                        let token_lines = lines[token_offset..=closing_line].join("\n");
 
                         results.push({
                             let mut result = serde_json::json!({
-                                "starting_line": token_start_line + 1,  // 1-based
+                                "starting_line": token_offset + 1,  // 1-based
                                 "ending_line": closing_line + 1,      // 1-based
                                 "tokens": token_lines
                             });
@@ -290,7 +290,7 @@ async fn execute(&self, params: ToolParameters, context: &ToolContext) -> ToolRe
                                 for (i, token_line) in token_lines.lines().enumerate() {
                                     with_line_numbers.push_str(&format!(
                                         "{:4} | {}\n",
-                                        token_start_line + 1 + i,
+                                        token_offset + 1 + i,
                                         token_line
                                     ));
                                 }
