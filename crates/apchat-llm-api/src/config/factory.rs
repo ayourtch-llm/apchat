@@ -1,8 +1,10 @@
 use std::env;
 use std::sync::Arc;
 
-use crate::client::{LlmClient, anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient};
-use crate::config::{BackendType, GROQ_API_URL, ANTHROPIC_API_URL, OPENAI_API_URL};
+use crate::client::{
+    anthropic::AnthropicLlmClient, groq::GroqLlmClient, llama_cpp::LlamaCppClient, LlmClient,
+};
+use crate::config::{BackendType, ANTHROPIC_API_URL, GROQ_API_URL, OPENAI_API_URL};
 
 /// Client factory for creating LLM clients
 pub struct ClientFactory;
@@ -51,7 +53,9 @@ impl ClientFactory {
                 Arc::new(GroqLlmClient::new(key, model, url, agent_name))
             }
             BackendType::OpenAI => {
-                let url = api_url.or_else(|| env::var("OPENAI_API_URL").ok()).unwrap_or_else(|| OPENAI_API_URL.to_string());
+                let url = api_url
+                    .or_else(|| env::var("OPENAI_API_URL").ok())
+                    .unwrap_or_else(|| OPENAI_API_URL.to_string());
                 let key = api_key
                     .or_else(|| env::var("OPENAI_API_KEY").ok())
                     .unwrap_or_default();
@@ -96,8 +100,8 @@ impl ClientFactory {
             } else {
                 BackendType::Llama
             }
-        } else if env::var("ANTHROPIC_AUTH_TOKEN").is_ok() ||
-                  env::var("ANTHROPIC_API_KEY").is_ok() {
+        } else if env::var("ANTHROPIC_AUTH_TOKEN").is_ok() || env::var("ANTHROPIC_API_KEY").is_ok()
+        {
             BackendType::Anthropic
         } else {
             BackendType::Groq

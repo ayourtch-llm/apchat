@@ -1,12 +1,15 @@
 #[cfg(test)]
 mod model_config_tests {
-    use crate::config::{parse_model_attings, get_default_url_for_backend, get_default_model_for_backend};
-use apchat_models::BackendType;
+    use crate::config::{
+        get_default_model_for_backend, get_default_url_for_backend, parse_model_attings,
+    };
+    use apchat_models::BackendType;
 
     #[test]
     fn test_parse_model_full_format() {
-        let (model, backend, url) = parse_model_attings("llama-3.1-70b@anthropic(https://api.anthropic.com)");
-        
+        let (model, backend, url) =
+            parse_model_attings("llama-3.1-70b@anthropic(https://api.anthropic.com)");
+
         assert_eq!(model, "llama-3.1-70b");
         assert_eq!(backend, Some(BackendType::Anthropic));
         assert_eq!(url, Some("https://api.anthropic.com".to_string()));
@@ -15,7 +18,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_backend_only() {
         let (model, backend, url) = parse_model_attings("gpt-4@openai");
-        
+
         assert_eq!(model, "gpt-4");
         assert_eq!(backend, Some(BackendType::OpenAI));
         assert_eq!(url, None); // URL should be None for backend-only format
@@ -24,7 +27,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_only() {
         let (model, backend, url) = parse_model_attings("llama-3.1-70b");
-        
+
         assert_eq!(model, "llama-3.1-70b");
         assert_eq!(backend, None);
         assert_eq!(url, None);
@@ -33,7 +36,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_groq_backend() {
         let (model, backend, url) = parse_model_attings("llama-3.1-70b@groq");
-        
+
         assert_eq!(model, "llama-3.1-70b");
         assert_eq!(backend, Some(BackendType::Groq));
         assert_eq!(url, None);
@@ -41,8 +44,9 @@ use apchat_models::BackendType;
 
     #[test]
     fn test_parse_model_with_custom_url() {
-        let (model, backend, url) = parse_model_attings("custom-model@llama(http://localhost:8080/completions)");
-        
+        let (model, backend, url) =
+            parse_model_attings("custom-model@llama(http://localhost:8080/completions)");
+
         assert_eq!(model, "custom-model");
         assert_eq!(backend, Some(BackendType::Llama));
         assert_eq!(url, Some("http://localhost:8080/completions".to_string()));
@@ -51,7 +55,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_empty_model() {
         let (model, backend, url) = parse_model_attings("@anthropic");
-        
+
         assert_eq!(model, "claude-3-5-sonnet-20241022"); // Should now return default model
         assert_eq!(backend, Some(BackendType::Anthropic));
         assert_eq!(url, Some("https://api.anthropic.com".to_string())); // Should now return default URL
@@ -60,7 +64,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_multiple_at_symbols() {
         let (model, backend, url) = parse_model_attings("model@with@multiple@anthropic");
-        
+
         // Should split on first @ only and treat "with@multiple@anthropic" as backend
         assert_eq!(model, "model");
         assert_eq!(backend, None); // "with@multiple@anthropic" is not a valid backend
@@ -70,7 +74,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_malformed_parentheses() {
         let (model, backend, url) = parse_model_attings("model@anthropic(https://example.com");
-        
+
         // Should handle malformed parentheses gracefully by parsing model part and ignoring backend
         // because parentheses are malformed (missing closing ')')
         assert_eq!(model, "model");
@@ -81,7 +85,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_case_insensitive_backend() {
         let (model, backend, url) = parse_model_attings("model@ANTHROPIC");
-        
+
         assert_eq!(model, "model");
         assert_eq!(backend, Some(BackendType::Anthropic));
         assert_eq!(url, None);
@@ -90,7 +94,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_claude_alias() {
         let (model, backend, url) = parse_model_attings("claude-3.5-sonnet@claude");
-        
+
         assert_eq!(model, "claude-3.5-sonnet");
         assert_eq!(backend, Some(BackendType::Anthropic));
         assert_eq!(url, None);
@@ -117,7 +121,7 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_unknown_backend() {
         let (model, backend, url) = parse_model_attings("model@unknown");
-        
+
         assert_eq!(model, "model");
         assert_eq!(backend, None); // Unknown backend should return None
         assert_eq!(url, None);
@@ -132,13 +136,19 @@ use apchat_models::BackendType;
     #[test]
     fn test_get_default_url_groq() {
         let url = get_default_url_for_backend(&BackendType::Groq);
-        assert_eq!(url, Some("https://api.groq.com/openai/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://api.groq.com/openai/v1/chat/completions".to_string())
+        );
     }
 
     #[test]
     fn test_get_default_url_openai() {
         let url = get_default_url_for_backend(&BackendType::OpenAI);
-        assert_eq!(url, Some("https://api.openai.com/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://api.openai.com/v1/chat/completions".to_string())
+        );
     }
 
     #[test]
@@ -150,40 +160,46 @@ use apchat_models::BackendType;
     #[test]
     fn test_parse_model_integration_with_default_urls() {
         // Test the complete flow: parse model config, then get default URL
-        
+
         // Case 1: model@anthropic should get Anthropic default URL
         let (model, backend, url) = parse_model_attings("foo@anthropic");
         assert_eq!(model, "foo");
         assert_eq!(backend, Some(BackendType::Anthropic));
         assert_eq!(url, None); // URL is None after parsing
-        
+
         let default_url = get_default_url_for_backend(&backend.unwrap());
         assert_eq!(default_url, Some("https://api.anthropic.com".to_string()));
-        
+
         // Case 2: model@groq should get Groq default URL
         let (model, backend, url) = parse_model_attings("bar@groq");
         assert_eq!(model, "bar");
         assert_eq!(backend, Some(BackendType::Groq));
         assert_eq!(url, None);
-        
+
         let default_url = get_default_url_for_backend(&backend.unwrap());
-        assert_eq!(default_url, Some("https://api.groq.com/openai/v1/chat/completions".to_string()));
-        
+        assert_eq!(
+            default_url,
+            Some("https://api.groq.com/openai/v1/chat/completions".to_string())
+        );
+
         // Case 3: model@openai should get OpenAI default URL
         let (model, backend, url) = parse_model_attings("baz@openai");
         assert_eq!(model, "baz");
         assert_eq!(backend, Some(BackendType::OpenAI));
         assert_eq!(url, None);
-        
+
         let default_url = get_default_url_for_backend(&backend.unwrap());
-        assert_eq!(default_url, Some("https://api.openai.com/v1/chat/completions".to_string()));
-        
+        assert_eq!(
+            default_url,
+            Some("https://api.openai.com/v1/chat/completions".to_string())
+        );
+
         // Case 4: model@llama should get no default URL
         let (model, backend, url) = parse_model_attings("qux@llama");
         assert_eq!(model, "qux");
         assert_eq!(backend, Some(BackendType::Llama));
         assert_eq!(url, None);
-        
+
         let default_url = get_default_url_for_backend(&backend.unwrap());
         assert_eq!(default_url, None);
     }
@@ -195,13 +211,13 @@ use apchat_models::BackendType;
         assert_eq!(model, "");
         assert_eq!(backend, None);
         assert_eq!(url, None);
-        
+
         // Just @ symbol (invalid backend)
         let (model, backend, url) = parse_model_attings("@");
         assert_eq!(model, "@"); // Should fallback to treating as model name
         assert_eq!(backend, None);
         assert_eq!(url, None);
-        
+
         // Multiple @ symbols with empty backend
         let (model, backend, url) = parse_model_attings("model@@");
         assert_eq!(model, "model");
@@ -223,13 +239,19 @@ use apchat_models::BackendType;
         let (model, backend, url) = parse_model_attings("@openai");
         assert_eq!(model, "gpt-4o-mini");
         assert_eq!(backend, Some(BackendType::OpenAI));
-        assert_eq!(url, Some("https://api.openai.com/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://api.openai.com/v1/chat/completions".to_string())
+        );
 
         // Test @groq
         let (model, backend, url) = parse_model_attings("@groq");
         assert_eq!(model, "llama-3.1-8b-instant");
         assert_eq!(backend, Some(BackendType::Groq));
-        assert_eq!(url, Some("https://api.groq.com/openai/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://api.groq.com/openai/v1/chat/completions".to_string())
+        );
 
         // Test @llama
         let (model, backend, url) = parse_model_attings("@llama");
@@ -247,13 +269,18 @@ use apchat_models::BackendType;
         assert_eq!(url, Some("https://custom.anthropic.com".to_string()));
 
         // Test @groq(custom_url)
-        let (model, backend, url) = parse_model_attings("@groq(https://custom.groq.com/v1/chat/completions)");
+        let (model, backend, url) =
+            parse_model_attings("@groq(https://custom.groq.com/v1/chat/completions)");
         assert_eq!(model, "llama-3.1-8b-instant");
         assert_eq!(backend, Some(BackendType::Groq));
-        assert_eq!(url, Some("https://custom.groq.com/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://custom.groq.com/v1/chat/completions".to_string())
+        );
 
         // Test @llama(custom_url)
-        let (model, backend, url) = parse_model_attings("@llama(http://localhost:8080/completions)");
+        let (model, backend, url) =
+            parse_model_attings("@llama(http://localhost:8080/completions)");
         assert_eq!(model, "llama3.1");
         assert_eq!(backend, Some(BackendType::Llama));
         assert_eq!(url, Some("http://localhost:8080/completions".to_string()));
@@ -276,10 +303,22 @@ use apchat_models::BackendType;
 
     #[test]
     fn test_get_default_model_for_backend() {
-        assert_eq!(get_default_model_for_backend(&BackendType::Anthropic), "claude-3-5-sonnet-20241022");
-        assert_eq!(get_default_model_for_backend(&BackendType::OpenAI), "gpt-4o-mini");
-        assert_eq!(get_default_model_for_backend(&BackendType::Groq), "llama-3.1-8b-instant");
-        assert_eq!(get_default_model_for_backend(&BackendType::Llama), "llama3.1");
+        assert_eq!(
+            get_default_model_for_backend(&BackendType::Anthropic),
+            "claude-3-5-sonnet-20241022"
+        );
+        assert_eq!(
+            get_default_model_for_backend(&BackendType::OpenAI),
+            "gpt-4o-mini"
+        );
+        assert_eq!(
+            get_default_model_for_backend(&BackendType::Groq),
+            "llama-3.1-8b-instant"
+        );
+        assert_eq!(
+            get_default_model_for_backend(&BackendType::Llama),
+            "llama3.1"
+        );
     }
 
     #[test]
@@ -293,7 +332,10 @@ use apchat_models::BackendType;
         let (model, backend, url) = parse_model_attings("@GROQ");
         assert_eq!(model, "llama-3.1-8b-instant");
         assert_eq!(backend, Some(BackendType::Groq));
-        assert_eq!(url, Some("https://api.groq.com/openai/v1/chat/completions".to_string()));
+        assert_eq!(
+            url,
+            Some("https://api.groq.com/openai/v1/chat/completions".to_string())
+        );
     }
 
     #[test]
@@ -318,5 +360,82 @@ use apchat_models::BackendType;
             assert_eq!(backend, Some(BackendType::Llama));
             assert_eq!(url, None);
         }
+    }
+
+    // ===== TESTS FOR normalize_api_url =====
+
+    #[test]
+    fn test_normalize_api_url_basic() {
+        use crate::config::normalize_api_url;
+
+        // URL already contains completions - should return as-is
+        assert_eq!(
+            normalize_api_url("https://api.openai.com/v1/chat/completions"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+
+        // URL already contains chat - should return as-is
+        assert_eq!(
+            normalize_api_url("https://api.openai.com/v1/chat"),
+            "https://api.openai.com/v1/chat"
+        );
+
+        // URL without path ending with slash - should append v1/chat/completions
+        assert_eq!(
+            normalize_api_url("https://api.openai.com"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+
+        // URL with trailing slash - should append v1/chat/completions
+        assert_eq!(
+            normalize_api_url("https://api.openai.com/"),
+            "https://api.openai.com/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_with_version_path() {
+        use crate::config::normalize_api_url;
+
+        // URL ending with /v4/ - should append chat/completions without version prefix
+        assert_eq!(
+            normalize_api_url("http://z.ai/foo/bar/v4/"),
+            "http://z.ai/foo/bar/v4/chat/completions"
+        );
+
+        // URL ending with /v1/ - should append chat/completions without version prefix
+        assert_eq!(
+            normalize_api_url("https://api.custom.com/v1/"),
+            "https://api.custom.com/v1/chat/completions"
+        );
+
+        // URL ending with /v2/ - should append chat/completions without version prefix
+        assert_eq!(
+            normalize_api_url("https://api.custom.com/v2/"),
+            "https://api.custom.com/v2/chat/completions"
+        );
+
+        // URL with version but no trailing slash - should append v1/chat/completions
+        assert_eq!(
+            normalize_api_url("https://api.custom.com/v4"),
+            "https://api.custom.com/v4/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn test_normalize_api_url_custom_base_path() {
+        use crate::config::normalize_api_url;
+
+        // URL with custom base path and version
+        assert_eq!(
+            normalize_api_url("http://example.com/api/ai/v3/"),
+            "http://example.com/api/ai/v3/chat/completions"
+        );
+
+        // URL with custom base path without version
+        assert_eq!(
+            normalize_api_url("http://example.com/api/ai/"),
+            "http://example.com/api/ai/v1/chat/completions"
+        );
     }
 }

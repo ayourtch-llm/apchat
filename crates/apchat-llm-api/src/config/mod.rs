@@ -53,26 +53,30 @@ pub fn parse_model_attings(atts: &str) -> (String, Option<BackendType>, Option<S
     // Handle @backend syntax (no model name specified)
     if atts.starts_with('@') {
         let backend_part = &atts[1..]; // Remove @
-        
+
         // Check if backend part contains parentheses for URL
         if let Some(pos) = backend_part.find('(') {
             // Format: @backend(url)
             let backend_name = &backend_part[..pos];
             let url_part = &backend_part[pos + 1..];
-            
+
             // Validate that URL is properly enclosed in parentheses
             if let Some(close_paren) = url_part.find(')') {
                 if close_paren == url_part.len() - 1 {
                     // Properly formatted: @backend(url)
                     let url = &url_part[..close_paren];
-                    
+
                     if let Some(backend) = BackendType::from_str(backend_name) {
                         let default_model = get_default_model_for_backend(&backend);
-                        return (default_model.to_string(), Some(backend), Some(url.to_string()));
+                        return (
+                            default_model.to_string(),
+                            Some(backend),
+                            Some(url.to_string()),
+                        );
                     }
                 }
             }
-            
+
             // If we reach here, parentheses are malformed - fallback to treating as model name
             return (atts.to_string(), None, None);
         } else {
@@ -83,17 +87,17 @@ pub fn parse_model_attings(atts: &str) -> (String, Option<BackendType>, Option<S
                 return (default_model.to_string(), Some(backend), default_url);
             }
         }
-        
+
         // If we reach here, @ syntax was invalid, fall back to treating as model name
         return (atts.to_string(), None, None);
     }
-    
+
     // Handle model@backend syntax
     let parts: Vec<&str> = atts.split('@').collect();
     let model = parts.first().copied().unwrap_or("");
     let mut backend = None;
     let mut api_url = None;
-    
+
     if parts.len() > 1 {
         let backend_part = parts[1];
         // Check if backend part contains parentheses for URL
@@ -101,7 +105,7 @@ pub fn parse_model_attings(atts: &str) -> (String, Option<BackendType>, Option<S
             // Format: model@backend(url)
             let backend_name = &backend_part[..pos];
             let url_part = &backend_part[pos + 1..];
-            
+
             // Validate that URL is properly enclosed in parentheses
             if let Some(close_paren) = url_part.find(')') {
                 if close_paren == url_part.len() - 1 {
@@ -118,7 +122,7 @@ pub fn parse_model_attings(atts: &str) -> (String, Option<BackendType>, Option<S
             // For default URLs, we'll determine them based on backend type
         }
     }
-    
+
     (model.to_string(), backend, api_url)
 }
 
@@ -129,11 +133,39 @@ pub fn normalize_api_url(url: &str) -> String {
         return url.to_string();
     }
 
-    // If URL ends with a slash, append path without leading slash
-    if url.ends_with('/') {
-        format!("{}v1/chat/completions", url)
+    // Check if URL already ends with a version path like /v1/, /v2/, /v3/, /v4/, etc.
+    // Parse the URL to extract the path portion
+    let path_part = if let Some(path_start) = url.find("://") {
+        &url[path_start + 3..]
     } else {
-        // Append the standard OpenAI-compatible path
+        url
+    };
+
+    // Find the path after the hostname
+    let path_after_host = if let Some(slash_pos) = path_part.find('/') {
+        &path_part[slash_pos..]
+    } else {
+        ""
+    };
+
+    // Check if path ends with /vX/ pattern (where X is one or more digits)
+    let has_version_path = path_after_host.ends_with('/')
+        && path_after_host[..path_after_host.len() - 1]
+            .rsplit('/')
+            .next()
+            .map(|s| s.starts_with('v') && s[1..].chars().all(|c| c.is_ascii_digit()))
+            .unwrap_or(false);
+
+    if url.ends_with('/') {
+        if has_version_path {
+            // URL already ends with version like /v4/, just append "chat/completions"
+            format!("{}chat/completions", url)
+        } else {
+            // Append standard v1/chat/completions
+            format!("{}v1/chat/completions", url)
+        }
+    } else {
+        // Append standard v1/chat/completions
         format!("{}/v1/chat/completions", url)
     }
 }
