@@ -1604,6 +1604,10 @@ impl Readline {
             actual_split_idx
         };
 
+        // Calculate the character position at the split point (not byte index)
+        // This is needed because cursor_col tracks character positions, not byte indices
+        let split_char_pos = line[..final_split_idx].chars().count();
+
         // Perform the split if we have something to split on
         if final_split_idx < line.len() {
             let before = &line[..final_split_idx];
@@ -1613,9 +1617,18 @@ impl Readline {
             self.lines[self.cursor_line] = before.to_string();
             self.lines.insert(self.cursor_line + 1, after.to_string());
 
-            // Move cursor to start of new line
+            // Move cursor to appropriate position in the new line
             self.cursor_line += 1;
-            self.cursor_col = 0;
+
+            // Adjust cursor column: if cursor was after the split point,
+            // position it relative to where it was in the original line
+            if self.cursor_col >= split_char_pos {
+                self.cursor_col = self.cursor_col - split_char_pos;
+            } else {
+                // Cursor was before the split point, keep it on the same line
+                self.cursor_line -= 1;
+                // cursor_col stays the same since we're still in the "before" part
+            }
 
             // Update scroll offset to keep cursor visible
             self.update_scroll_offset();
