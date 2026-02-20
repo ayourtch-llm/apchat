@@ -50,6 +50,7 @@ pub async fn initialize_repl(
             learning_opportunities: cli.learning_opportunities,
             community_skills: cli.community_skills,
             self_edit: cli.self_edit,
+            diff_fuzz: cli.diff_fuzz,
         },
     );
 

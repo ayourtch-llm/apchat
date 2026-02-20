@@ -83,4 +83,15 @@ fn test_feature_flags_gate_tools() {
     });
     assert!(registry.has_tool("delete_items"), "delete_items should be registered when self_edit is true");
     assert!(registry.has_tool("edit_item"), "edit_item should be registered when self_edit is true");
+
+    // Default: diff_fuzz tool disabled
+    let registry = initialize_tool_registry(&FeatureFlags::default());
+    assert!(!registry.has_tool("diff_fuzz"), "diff_fuzz should not be registered by default");
+
+    // Enable diff_fuzz
+    let registry = initialize_tool_registry(&FeatureFlags {
+        diff_fuzz: true,
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("diff_fuzz"), "diff_fuzz should be registered when diff_fuzz is true");
 }

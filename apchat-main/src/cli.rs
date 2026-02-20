@@ -212,6 +212,12 @@ pub struct Cli {
     #[arg(long)]
     pub community_skills: bool,
 
+    /// Enable differential fuzzing tool for AI-generated code verification
+    /// Inspired by https://codeberg.org/canoozie/ctrlcode - derives behavioral
+    /// invariants from specs, generates fuzz tests, and classifies divergences
+    #[arg(long)]
+    pub diff_fuzz: bool,
+
     /// Disable summarization of subagent output via LLM
     /// By default, subagent output is summarized to pass only the most critically important parts upward
     #[arg(long)]
