@@ -303,9 +303,41 @@ pub struct Readline {
     confirmation_id: Option<String>,
     /// Visible width of the prompt (for auto-wrapping calculations)
     prompt_width: usize,
+    /// Cached terminal screen width (cleared on startup and on SIGWINCH)
+    cached_screen_width: Option<u16>,
 }
 
 impl Readline {
+    /// Gets the terminal screen width, using cached value if available.
+    ///
+    /// This method caches the screen width to avoid calling `crossterm::terminal::size()`
+    /// on every character, which adds significant latency. The cache is cleared
+    /// on startup and when a window resize event (SIGWINCH) is detected.
+    ///
+    /// # Returns
+    ///
+    /// * `u16` - The terminal screen width in columns
+    fn get_screen_width(&mut self) -> u16 {
+        // Return cached value if available
+        if let Some(width) = self.cached_screen_width {
+            return width;
+        }
+
+        // Query terminal size and cache the result
+        let width = terminal_size().map(|(cols, _rows)| cols).unwrap_or(80);
+        self.cached_screen_width = Some(width);
+        width
+    }
+
+    /// Clears the cached screen width.
+    ///
+    /// This should be called when the terminal window is resized to ensure
+    /// the width cache is invalidated and will be refreshed on the next call
+    /// to `get_screen_width()`.
+    fn clear_screen_width_cache(&mut self) {
+        self.cached_screen_width = None;
+    }
+
     /// Creates a new `Readline` instance and enables raw mode.
     ///
     /// # Errors
@@ -350,6 +382,7 @@ impl Readline {
             confirmation_prompt: None,
             confirmation_id: None,
             prompt_width: 0,
+            cached_screen_width: None,
         })
     }
 
@@ -1565,11 +1598,8 @@ impl Readline {
     ///    - If no space found, split at the overflow point (forced break)
     /// 4. Split the line and update cursor position to maintain typing continuity
     fn split_line_if_needed(&mut self) {
-        // Get terminal width
-        let terminal_width = match crossterm::terminal::size() {
-            Ok((cols, _)) => cols as usize,
-            Err(_) => 80, // Default fallback
-        };
+        // Get terminal width from cache
+        let terminal_width = self.get_screen_width() as usize;
 
         // Calculate available width for text
         // On first line (line 0), subtract the prompt width
@@ -1734,8 +1764,7 @@ impl Readline {
     pub fn redraw(&mut self, prompt: &str) {
         let stdout = &mut std::io::stdout();
 
-        let terminal_size = crossterm::terminal::size().ok();
-        let screen_width = terminal_size.map_or(80, |s| s.0.into());
+        let screen_width: usize = self.get_screen_width() as usize;
 
         // In search mode, display the search interface with multiline support
         if self.mode == EditMode::Search {
@@ -2522,6 +2551,11 @@ impl Readline {
 
                 // Handle different event types
                 match event {
+                    Event::Resize(_width, _height) => {
+                        // Clear the screen width cache on terminal resize
+                        self.clear_screen_width_cache();
+                        self.redraw(prompt);
+                    }
                     Event::Key(key) => {
                         match self.handle_key_event(key) {
                             KeyResult::Continue => {}
@@ -2632,8 +2666,8 @@ impl Readline {
                     //stdout.queue(MoveToColumn(0)).ok();
                     //stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
 
-                    // Get terminal width (default to 80 if unavailable)
-                    let term_width = terminal_size().map(|(cols, _rows)| cols as usize).unwrap_or(80);
+                    // Get terminal width from cache (default to 80 if unavailable)
+                    let term_width = self.get_screen_width() as usize;
 
                     /* Split the output into lines, and scroll up as needed */
                     let lines: Vec<String> = content.split('\n').map(String::from).collect();
