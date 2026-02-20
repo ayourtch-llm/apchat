@@ -29,6 +29,7 @@ pub mod metacog;
 pub mod self_regulate;
 pub mod context_edit;
 pub mod diff_fuzz;
+pub mod citation;
 
 pub use file_ops::*;
 pub use search::*;
@@ -49,5 +50,6 @@ pub use metacog::*;
 pub use self_regulate::*;
 pub use context_edit::*;
 pub use diff_fuzz::*;
+pub use citation::*;
 
 

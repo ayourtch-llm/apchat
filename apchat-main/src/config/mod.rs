@@ -132,6 +132,7 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     registry.register_with_categories(ListFilesTool, vec!["file_ops".to_string()]);
     registry.register_with_categories(FileCurlyGlanceTool, vec!["file_ops".to_string()]);
     registry.register_with_categories(ReadPdfTool, vec!["file_ops".to_string()]);
+    registry.register_with_categories(AddCitationTool, vec!["file_ops".to_string()]);
 
     // Register search tools
     registry.register_with_categories(SearchFilesTool, vec!["search".to_string()]);
