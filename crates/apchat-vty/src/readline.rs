@@ -1737,29 +1737,116 @@ impl Readline {
         let terminal_size = crossterm::terminal::size().ok();
         let screen_width = terminal_size.map_or(80, |s| s.0.into());
 
-        // In search mode, display the search interface on a single line
+        // In search mode, display the search interface with multiline support
         if self.mode == EditMode::Search {
-            // Move cursor to start of line (column 0)
+            // Calculate visible range and expand editor height if needed (same as normal mode)
+            let start = self.scroll_offset;
+            let end = start + self.max_lines.min(self.lines.len());
+            let display_count = end - start;
+
+            // Expand editor height if needed
+            let mut lines_to_add = 0;
+            if display_count > self.editor_height {
+                lines_to_add = display_count - self.editor_height;
+                for _ in 0..lines_to_add {
+                    println!();
+                }
+                self.editor_height = display_count;
+            }
+
+            // Recalculate with actual editor height
+            let start = self.scroll_offset;
+            let end = start + self.editor_height;
+            let display_count = end - start;
+
+            // Move to the top of the editor area
+            let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
+            let lines_to_move = self.editor_height.saturating_sub(self.cursor_offset_from_bottom);
+
+            for _ in 0..lines_to_move {
+                stdout.queue(MoveUp(1)).ok();
+                self.cursor_offset_from_bottom += 1;
+            }
+
+            // Draw title bar with search info
+            stdout.queue(MoveUp(1)).ok();
+            self.cursor_offset_from_bottom += 1;
             stdout.queue(MoveToColumn(0)).ok();
 
-            // Clear the current line
-            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-
-            // Format: (reverse-i-search)`pattern': matched_command
-            let matched_text = if self.search_matches.is_empty() {
-                ""
+            // Build search title
+            let local_time = &Local::now().time().to_string()[0..8];
+            let search_status = if self.search_matches.is_empty() {
+                "(no match)".to_string()
             } else {
-                // Use only the first line for display in search mode
-                // Multi-line matches would corrupt the single-line search display
-                self.lines.get(0).map(|s| s.as_str()).unwrap_or("")
+                format!("{}/{}", self.search_match_index + 1, self.search_matches.len())
             };
-            write!(stdout, "(reverse-i-search)`{}': {}", self.search_pattern, matched_text).ok();
+            let mut title = format!(
+                "(reverse-i-search)`{}': {} | time: {} | req: {} | tok: {} | queued: {} | history: {} | ctx: {} | urgent: {} | pid: {}",
+                self.search_pattern,
+                search_status,
+                &local_time,
+                request_counter::get_count(),
+                token_counter::get_count(),
+                status_info::get_queued(),
+                status_info::get_history(),
+                status_info::get_context_bytes(),
+                status_info::get_urgent(),
+                status_info::get_pid()
+            );
 
-            // Move cursor to end of line (after the matched command)
-            let display_len = format!("(reverse-i-search)`{}': {}", self.search_pattern, matched_text);
-            stdout.queue(MoveToColumn(display_len.chars().count() as u16)).ok();
+            // Ensure title never exceeds screen width
+            let title_display_width = display_width(&title);
+            if title_display_width > screen_width {
+                let mut current_width = 0;
+                let mut truncated = String::new();
+                for ch in title.chars() {
+                    let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                    if current_width + char_width > screen_width {
+                        break;
+                    }
+                    current_width += char_width;
+                    truncated.push(ch);
+                }
+                title = truncated;
+            } else {
+                while display_width(&title) < screen_width {
+                    title.push(' ');
+                }
+            }
 
-            // Flush all queued commands
+            write!(stdout, "{}{}", crossterm::style::Attribute::Reverse, title);
+            stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
+            write!(stdout, "{}", crossterm::style::Attribute::NoReverse);
+            stdout.queue(MoveDown(1)).ok();
+            self.cursor_offset_from_bottom -= 1;
+
+            // Display the matched lines
+            for (idx, i) in (start..end).enumerate() {
+                stdout.queue(MoveToColumn(0)).ok();
+
+                let line = if i < self.lines.len() { &self.lines[i] } else { "" };
+                write!(stdout, "{}", line).ok();
+                stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
+
+                if idx < display_count - 1 {
+                    stdout.queue(MoveDown(1)).ok();
+                    self.cursor_offset_from_bottom -= 1;
+                }
+            }
+
+            // Position cursor at the end of the current line
+            let visual_line = self.cursor_line.saturating_sub(self.scroll_offset);
+            let lines_from_bottom = display_count.saturating_sub(visual_line + 1);
+            if lines_from_bottom > 0 {
+                for _ in 0..lines_from_bottom {
+                    stdout.queue(MoveUp(1)).ok();
+                    self.cursor_offset_from_bottom += 1;
+                }
+            }
+
+            let current_line = self.lines.get(self.cursor_line).map(|s| s.as_str()).unwrap_or("");
+            stdout.queue(MoveToColumn(current_line.chars().count() as u16)).ok();
+
             stdout.flush().ok();
             return;
         }
