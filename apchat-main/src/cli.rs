@@ -212,6 +212,11 @@ pub struct Cli {
     #[arg(long)]
     pub community_skills: bool,
 
+    /// Enable the writing-clearly-and-concisely skill (Elements of Style)
+    /// Based on https://github.com/obra/the-elements-of-style
+    #[arg(long)]
+    pub elements_of_style: bool,
+
     /// Enable differential fuzzing tool for AI-generated code verification
     /// Inspired by https://codeberg.org/canoozie/ctrlcode - derives behavioral
     /// invariants from specs, generates fuzz tests, and classifies divergences

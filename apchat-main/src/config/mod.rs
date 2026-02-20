@@ -20,6 +20,7 @@ pub struct FeatureFlags {
     pub self_regulate: bool,
     pub learning_opportunities: bool,
     pub community_skills: bool,
+    pub elements_of_style: bool,
     pub self_edit: bool,
     pub diff_fuzz: bool,
 }
