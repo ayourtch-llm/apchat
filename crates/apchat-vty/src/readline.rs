@@ -737,8 +737,16 @@ impl Readline {
         if !self.search_matches.is_empty() {
             self.search_match_index = 0;
             let match_idx = self.search_matches[0];
-            self.lines[self.cursor_line] = self.history[match_idx].clone();
-            self.cursor_col = self.lines[self.cursor_line].chars().count();
+            // Split on newlines in case the history entry has multiple lines
+            self.lines = self.history[match_idx].split('\n').map(String::from).collect();
+            // Position cursor at end of last line
+            self.cursor_line = self.lines.len().saturating_sub(1);
+            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+            // Sync deprecated fields
+            self.cursor = self.cursor_col;
+            if !self.lines.is_empty() {
+                self.line = self.lines[self.cursor_line].clone();
+            }
         } else {
             // No matches, clear the line
             self.lines[self.cursor_line].clear();
@@ -758,8 +766,16 @@ impl Readline {
         // Move to next match (with wraparound)
         self.search_match_index = (self.search_match_index + 1) % self.search_matches.len();
         let match_idx = self.search_matches[self.search_match_index];
-        self.lines[self.cursor_line] = self.history[match_idx].clone();
-        self.cursor_col = self.lines[self.cursor_line].chars().count();
+        // Split on newlines in case the history entry has multiple lines
+        self.lines = self.history[match_idx].split('\n').map(String::from).collect();
+        // Position cursor at end of last line
+        self.cursor_line = self.lines.len().saturating_sub(1);
+        self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+        // Sync deprecated fields
+        self.cursor = self.cursor_col;
+        if !self.lines.is_empty() {
+            self.line = self.lines[self.cursor_line].clone();
+        }
     }
 
     /// Enters confirmation mode with a prompt.
