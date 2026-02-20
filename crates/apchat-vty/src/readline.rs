@@ -1820,12 +1820,31 @@ impl Readline {
             stdout.queue(MoveDown(1)).ok();
             self.cursor_offset_from_bottom -= 1;
 
-            // Display the matched lines
+            // Display the matched lines (truncated to screen width)
             for (idx, i) in (start..end).enumerate() {
                 stdout.queue(MoveToColumn(0)).ok();
 
                 let line = if i < self.lines.len() { &self.lines[i] } else { "" };
-                write!(stdout, "{}", line).ok();
+
+                // Truncate line to screen width to prevent overflow
+                let line_display_width = display_width(line);
+                let truncated_line = if line_display_width > screen_width {
+                    let mut current_width = 0;
+                    let mut truncated = String::new();
+                    for ch in line.chars() {
+                        let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                        if current_width + char_width > screen_width {
+                            break;
+                        }
+                        current_width += char_width;
+                        truncated.push(ch);
+                    }
+                    truncated
+                } else {
+                    line.to_string()
+                };
+
+                write!(stdout, "{}", truncated_line).ok();
                 stdout.queue(Clear(crossterm::terminal::ClearType::UntilNewLine)).ok();
 
                 if idx < display_count - 1 {
@@ -1844,8 +1863,15 @@ impl Readline {
                 }
             }
 
+            // Position cursor at end of truncated line (or screen width if truncated)
             let current_line = self.lines.get(self.cursor_line).map(|s| s.as_str()).unwrap_or("");
-            stdout.queue(MoveToColumn(current_line.chars().count() as u16)).ok();
+            let line_display_width = display_width(current_line);
+            let cursor_col = if line_display_width > screen_width {
+                screen_width
+            } else {
+                current_line.chars().count()
+            };
+            stdout.queue(MoveToColumn(cursor_col as u16)).ok();
 
             stdout.flush().ok();
             return;
