@@ -173,6 +173,9 @@ impl APChat {
                     registry.remove_skill("coding-conventions");
                     registry.remove_skill("skill-creator");
                 }
+                if !flags.elements_of_style {
+                    registry.remove_skill("writing-clearly-and-concisely");
+                }
                 Some(Arc::new(registry))
             }
             Err(e) => {
