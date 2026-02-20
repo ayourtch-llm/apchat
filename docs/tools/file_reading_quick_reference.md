@@ -7,7 +7,7 @@
 # Always use chunked reading
 read_file {
   "file_path": "src/main.rs",
-  "max_line_count": 20,
+  "limit": 20,
   "start_line": 100  # Optional: start from specific line
 }
 ```
@@ -24,7 +24,7 @@ read_file {
 ```bash
 file_curly_glance {"file_path": "src/main.rs"}  # Get structure
 file_curly_glance {"file_path": "src/main.rs", "starting_line": 42}  # Drill down
-read_file {"file_path": "src/main.rs", "start_line": 42, "max_line_count": 25}  # Read chunk
+read_file {"file_path": "src/main.rs", "start_line": 42, "limit": 25}  # Read chunk
 ```
 
 ## ⚠️ Why This Matters

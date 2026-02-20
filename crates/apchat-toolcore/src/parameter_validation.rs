@@ -314,7 +314,7 @@ mod tests {
                 required: true,
                 default: None,
             }),
-            ("max_line_count".to_string(), ParameterDefinition {
+            ("limit".to_string(), ParameterDefinition {
                 param_type: "integer".to_string(),
                 description: "Maximum number of lines to read".to_string(),
                 required: false,
@@ -322,14 +322,14 @@ mod tests {
             }),
         ]);
 
-        let tool_call = create_tool_call("peek_file_top_10_lines", r#"{"file_path": "test.txt", "max_line_count": 100}"#);
+        let tool_call = create_tool_call("peek_file_top_10_lines", r#"{"file_path": "test.txt", "limit": 100}"#);
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_ok());
 
         let params = result.unwrap();
         assert_eq!(params.get_required::<String>("file_path").unwrap(), "test.txt");
-        assert_eq!(params.get_optional::<i64>("max_line_count").unwrap().unwrap(), 100);
+        assert_eq!(params.get_optional::<i64>("limit").unwrap().unwrap(), 100);
     }
 
     #[test]

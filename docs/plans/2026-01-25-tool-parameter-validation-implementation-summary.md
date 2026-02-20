@@ -69,7 +69,7 @@ Format: `"Tool '{tool_name}' has invalid parameter '{invalid_param}'. Available:
 
 Example:
 ```
-"Tool 'read_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, max_line_count. Missing required parameter: file_path"
+"Tool 'read_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, limit. Missing required parameter: file_path"
 ```
 
 ### Test Coverage

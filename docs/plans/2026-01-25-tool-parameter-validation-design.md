@@ -84,7 +84,7 @@ pub fn validate_tool_call(
 
 **Example:**
 ```
-"Tool 'read_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, max_line_count. Missing required parameter: file_path"
+"Tool 'read_file' has invalid parameter 'invalid_param'. Available: start_line, end_line, file_path, limit. Missing required parameter: file_path"
 ```
 
 ### Validation Algorithm
@@ -145,8 +145,8 @@ ToolCall → JSON validation (existing) → parameter name validation (new) → 
 ### Test Tools to Use
 
 Use real tool schemas for testing:
-- `read_file` tool (parameters: file_path, start_line, end_line, max_line_count)
-- `peek_file_top_10_lines` tool (parameters: file_path, max_line_count)
+- `read_file` tool (parameters: file_path, start_line, end_line, limit)
+- `peek_file_top_10_lines` tool (parameters: file_path, limit)
 - `search_files` tool (parameters: pattern, max_results)
 
 ---
