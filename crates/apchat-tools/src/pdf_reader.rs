@@ -156,7 +156,7 @@ fn extract_text_from_page(doc: &lopdf::Document, page_id: (u32, u16)) -> Result<
                     Ok(decompressed_bytes) => {
                         let page_text = extract_text_from_content_bytes(&decompressed_bytes, doc, &xobject_map);
                         text.push_str(&page_text);
-                        text.push(' ');
+                        // Don't add extra space here - TJ arrays and Tj operators handle spacing
                     }
                     Err(e) => {
                         eprintln!("Warning: Failed to decompress stream: {}", e);

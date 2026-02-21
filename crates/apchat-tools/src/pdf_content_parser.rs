@@ -21,10 +21,12 @@ pub fn extract_text_from_content_bytes(
         let abs_tj_start = pos + tj_start;
 
         // Add space between separate TJ arrays (not the first one)
+        // But NOT if there's only positioning data (numbers/whitespace) between them
         if tj_count > 0 && !text.is_empty() {
-            // Check if there's actual text between the TJ operators (not just whitespace)
+            // Check if there's actual text content between the TJ operators (not just positioning numbers)
             let between = &content[pos..abs_tj_start];
-            if between.chars().any(|c| !c.is_whitespace()) {
+            let has_text_content = between.chars().any(|c| !c.is_whitespace() && !c.is_ascii_digit() && c != '.' && c != '-');
+            if has_text_content {
                 text.push(' ');
             }
         }
@@ -92,9 +94,12 @@ pub fn extract_text_from_content_bytes(
             let abs_tj_start = pos + offset;
 
             // Add space between Tj operators if there was previous text
+            // But NOT if there's only positioning data (numbers/whitespace) between them
             if tj_count_inner > 0 && !text.is_empty() {
                 let between = &content[pos..abs_tj_start];
-                if between.chars().any(|c| !c.is_whitespace()) {
+                // Only add space if there's actual text content, not just positioning numbers
+                let has_text_content = between.chars().any(|c| !c.is_whitespace() && !c.is_ascii_digit() && c != '.' && c != '-');
+                if has_text_content {
                     text.push(' ');
                 }
             }
@@ -129,6 +134,7 @@ pub fn extract_text_from_content_bytes(
 /// Extract text from a TJ array format: [(...)(...)...] TJ
 /// Strings in PDF can use parentheses with escapes
 /// Negative numbers in TJ arrays indicate spacing adjustments (word breaks)
+/// Small negative values are kerning; large negative values are word breaks
 fn extract_text_from_tj_array(array_content: &str, output: &mut String) {
     // Skip the opening bracket
     let mut content = &array_content[1..];
@@ -142,14 +148,19 @@ fn extract_text_from_tj_array(array_content: &str, output: &mut String) {
         if let Some(string_start) = content.find('(') {
             // Check if there's a negative number before this string (word break indicator)
             let before_string = &content[..string_start];
-            let has_word_break = before_string.trim().starts_with('-');
+            let trimmed = before_string.trim();
+
+            // Try to parse the number - only add space if it's a significant negative value
+            // Small negatives (-30 to 0) are kerning, large negatives (< -50) are word breaks
+            let has_word_break = trimmed.starts_with('-') &&
+                trimmed.parse::<f32>().map_or(false, |n| n < -50.0);
 
             // Find matching closing paren
             if let Some(string_end) = find_matching_paren(&content[string_start..]) {
                 let pdf_string = &content[string_start + 1..string_start + string_end];
                 let decoded = decode_pdf_string(pdf_string);
 
-                // Add space before word if this was preceded by a negative number
+                // Add space before word if this was preceded by a significant negative number
                 if has_word_break && !output.is_empty() {
                     output.push(' ');
                 }
