@@ -53,7 +53,12 @@ impl AnthropicLlmClient {
     }
 
     fn get_messages_url(&self) -> String {
-        format!("{}/v1/messages", self.base_url)
+        // Don't append /v1/messages if URL already ends with it
+        if self.base_url.ends_with("/v1/messages") {
+            self.base_url.clone()
+        } else {
+            format!("{}/v1/messages", self.base_url)
+        }
     }
 
     fn convert_messages_to_anthropic_format(&self, messages: Vec<ChatMessage>) -> Vec<Value> {

@@ -45,7 +45,12 @@ impl LlamaCppClient {
     }
 
     fn get_chat_completions_url(&self) -> String {
-        format!("{}/v1/chat/completions", self.base_url)
+        // Don't append /v1/chat/completions if URL already ends with it
+        if self.base_url.ends_with("/v1/chat/completions") {
+            self.base_url.clone()
+        } else {
+            format!("{}/v1/chat/completions", self.base_url)
+        }
     }
 }
 
