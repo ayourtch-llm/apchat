@@ -28,7 +28,7 @@ pub fn validate_tool_call(
     param_definitions: &HashMap<String, Value>
 ) -> Result<ToolParameters, String> {
     // Parse the arguments JSON
-    let parsed_args: HashMap<String, Value> = serde_json::from_str(&tool_call.function.arguments)
+    let mut parsed_args: HashMap<String, Value> = serde_json::from_str(&tool_call.function.arguments)
         .map_err(|e| format!("Failed to parse tool arguments: {}", e))?;
 
     // Extract parameter names from parameter definitions
@@ -62,6 +62,15 @@ pub fn validate_tool_call(
         }
     }
 
+    // Coerce values to match expected types where possible (e.g., float 320.0 -> integer 320)
+    for (param_name, param_value) in parsed_args.iter_mut() {
+        if let Some(param_def) = param_definitions.get(param_name) {
+            if let Some(coerced) = coerce_value(param_value, &param_def.param_type) {
+                *param_value = coerced;
+            }
+        }
+    }
+
     // Check for type mismatches
     for (param_name, param_value) in &parsed_args {
         if let Some(param_def) = param_definitions.get(param_name) {
@@ -92,6 +101,41 @@ pub fn validate_tool_call(
     Ok(ToolParameters {
         data: parsed_args,
     })
+}
+
+/// Attempts to coerce a JSON value to match the expected parameter type.
+/// Returns Some(coerced_value) if coercion is possible, None otherwise.
+///
+/// This handles common LLM quirks like supplying float values (320.0) or
+/// string values ("320.0", "50") where integers are expected.
+fn coerce_value(value: &Value, expected_type: &str) -> Option<Value> {
+    match expected_type {
+        "integer" => {
+            match value {
+                Value::Number(n) if n.is_f64() && !n.is_i64() => {
+                    let f = n.as_f64()?;
+                    if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                        Some(Value::Number(serde_json::Number::from(f as i64)))
+                    } else {
+                        None
+                    }
+                }
+                Value::String(s) => {
+                    if let Ok(i) = s.parse::<i64>() {
+                        return Some(Value::Number(serde_json::Number::from(i)));
+                    }
+                    if let Ok(f) = s.parse::<f64>() {
+                        if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                            return Some(Value::Number(serde_json::Number::from(f as i64)));
+                        }
+                    }
+                    None
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Validates that a JSON value matches the expected type
@@ -391,5 +435,181 @@ mod tests {
 
         let result = validate_tool_call(&tool_call, &schema, &schema.data);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_float_to_integer_coercion() {
+        let schema = create_tool_schema(vec![
+            ("file_path".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Path to the file".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("offset".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Starting line number".to_string(),
+                required: false,
+                default: None,
+            }),
+            ("limit".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Max lines".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        // Float values like 320.0 should be coerced to integers
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": 320.0, "limit": 50.0}"#);
+        let result = validate_tool_call(&tool_call, &schema, &schema.data);
+        assert!(result.is_ok(), "Float 320.0 should be coerced to integer: {:?}", result);
+
+        let params = result.unwrap();
+        assert_eq!(params.get_required::<i64>("offset").unwrap(), 320);
+        assert_eq!(params.get_required::<i64>("limit").unwrap(), 50);
+    }
+
+    #[test]
+    fn test_string_integer_to_integer_coercion() {
+        let schema = create_tool_schema(vec![
+            ("file_path".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Path to the file".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("offset".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Starting line number".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        // String "320" should be coerced to integer
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": "320"}"#);
+        let result = validate_tool_call(&tool_call, &schema, &schema.data);
+        assert!(result.is_ok(), "String '320' should be coerced to integer: {:?}", result);
+
+        let params = result.unwrap();
+        assert_eq!(params.get_required::<i64>("offset").unwrap(), 320);
+    }
+
+    #[test]
+    fn test_string_float_to_integer_coercion() {
+        let schema = create_tool_schema(vec![
+            ("file_path".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Path to the file".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("offset".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Starting line number".to_string(),
+                required: false,
+                default: None,
+            }),
+            ("limit".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Max lines".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        // String "320.0" should be coerced to integer (matches the exact error from the issue)
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": "320.0", "limit": "50.0"}"#);
+        let result = validate_tool_call(&tool_call, &schema, &schema.data);
+        assert!(result.is_ok(), "String '320.0' should be coerced to integer: {:?}", result);
+
+        let params = result.unwrap();
+        assert_eq!(params.get_required::<i64>("offset").unwrap(), 320);
+        assert_eq!(params.get_required::<i64>("limit").unwrap(), 50);
+    }
+
+    #[test]
+    fn test_fractional_float_rejected() {
+        let schema = create_tool_schema(vec![
+            ("file_path".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Path to the file".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("offset".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Starting line number".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        // Float with fractional part should be rejected
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": 320.5}"#);
+        let result = validate_tool_call(&tool_call, &schema, &schema.data);
+        assert!(result.is_err(), "Float 320.5 should not be coerced to integer");
+    }
+
+    #[test]
+    fn test_non_numeric_string_rejected() {
+        let schema = create_tool_schema(vec![
+            ("file_path".to_string(), ParameterDefinition {
+                param_type: "string".to_string(),
+                description: "Path to the file".to_string(),
+                required: true,
+                default: None,
+            }),
+            ("offset".to_string(), ParameterDefinition {
+                param_type: "integer".to_string(),
+                description: "Starting line number".to_string(),
+                required: false,
+                default: None,
+            }),
+        ]);
+
+        // Non-numeric string should be rejected
+        let tool_call = create_tool_call("read_file", r#"{"file_path": "test.txt", "offset": "abc"}"#);
+        let result = validate_tool_call(&tool_call, &schema, &schema.data);
+        assert!(result.is_err(), "String 'abc' should not be coerced to integer");
+    }
+
+    #[test]
+    fn test_coerce_value_function() {
+        // Float without fraction -> integer
+        let v = serde_json::json!(320.0);
+        let coerced = coerce_value(&v, "integer");
+        assert_eq!(coerced, Some(serde_json::json!(320)));
+
+        // String integer -> integer
+        let v = serde_json::json!("50");
+        let coerced = coerce_value(&v, "integer");
+        assert_eq!(coerced, Some(serde_json::json!(50)));
+
+        // String float without fraction -> integer
+        let v = serde_json::json!("320.0");
+        let coerced = coerce_value(&v, "integer");
+        assert_eq!(coerced, Some(serde_json::json!(320)));
+
+        // Fractional float -> None (can't coerce)
+        let v = serde_json::json!(320.5);
+        let coerced = coerce_value(&v, "integer");
+        assert!(coerced.is_none());
+
+        // Non-numeric string -> None
+        let v = serde_json::json!("abc");
+        let coerced = coerce_value(&v, "integer");
+        assert!(coerced.is_none());
+
+        // Already an integer -> None (no coercion needed)
+        let v = serde_json::json!(320);
+        let coerced = coerce_value(&v, "integer");
+        assert!(coerced.is_none());
+
+        // Non-integer type -> None (no coercion for other types)
+        let v = serde_json::json!(320.0);
+        let coerced = coerce_value(&v, "string");
+        assert!(coerced.is_none());
     }
 }
