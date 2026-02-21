@@ -147,8 +147,14 @@ impl Tool for LaunchSubagentTool {
             stderr_content
         });
 
-        let stdout = stdout_handle.join().unwrap_or_default();
-        let stderr = stderr_handle.join().unwrap_or_default();
+        let stdout = stdout_handle.join().unwrap_or_else(|e| {
+            eprintln!("Subagent stdout reader thread panicked: {:?}", e);
+            String::new()
+        });
+        let stderr = stderr_handle.join().unwrap_or_else(|e| {
+            eprintln!("Subagent stderr reader thread panicked: {:?}", e);
+            String::new()
+        });
 
         // Wait for process to complete
         let status = match child.wait() {
@@ -304,8 +310,14 @@ impl Tool for LaunchSubagentPrettyTool {
             stderr_content
         });
 
-        let stdout = stdout_handle.join().unwrap_or_default();
-        let stderr = stderr_handle.join().unwrap_or_default();
+        let stdout = stdout_handle.join().unwrap_or_else(|e| {
+            eprintln!("Subagent stdout reader thread panicked: {:?}", e);
+            String::new()
+        });
+        let stderr = stderr_handle.join().unwrap_or_else(|e| {
+            eprintln!("Subagent stderr reader thread panicked: {:?}", e);
+            String::new()
+        });
 
         // Wait for process to complete
         let status = match child.wait() {
