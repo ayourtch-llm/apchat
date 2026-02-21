@@ -34,29 +34,40 @@ impl OutputRouter {
         let mut rx = TEXT_OUTPUT_TX.subscribe();
 
         tokio::spawn(async move {
-            while let Ok(text_output) = rx.recv().await {
-                let destinations_lock = destinations.read().await;
-                for dest in destinations_lock.iter() {
-                    let dest_id = dest.dest_id();
-                    let is_terminal = dest_id == "terminal";
-                    let is_readline = dest_id == "readline";
-                    
-                    // If readline is active, skip terminal destination to avoid duplicates
-                    if is_terminal && readline_active.load(Ordering::Relaxed) {
-                        continue;
-                    }
-                    
-                    // If terminal is active and we're sending to readline, skip
-                    // (this handles the reverse case - though readline shouldn't get terminal output)
-                    if is_readline && !readline_active.load(Ordering::Relaxed) {
-                        continue;
-                    }
-                    
-                    if dest.is_active() {
-                        let message = OutputMessage::TextOutput(text_output.clone());
-                        if let Err(e) = dest.send_output(&message).await {
-                            print_heart_yellow(&format!("OutputRouter: Failed to send to {}: {}", dest_id, e), true);
+            loop {
+                match rx.recv().await {
+                    Ok(text_output) => {
+                        let destinations_lock = destinations.read().await;
+                        for dest in destinations_lock.iter() {
+                            let dest_id = dest.dest_id();
+                            let is_terminal = dest_id == "terminal";
+                            let is_readline = dest_id == "readline";
+                            
+                            // If readline is active, skip terminal destination to avoid duplicates
+                            if is_terminal && readline_active.load(Ordering::Relaxed) {
+                                continue;
+                            }
+                            
+                            // If terminal is active and we're sending to readline, skip
+                            // (this handles the reverse case - though readline shouldn't get terminal output)
+                            if is_readline && !readline_active.load(Ordering::Relaxed) {
+                                continue;
+                            }
+                            
+                            if dest.is_active() {
+                                let message = OutputMessage::TextOutput(text_output.clone());
+                                if let Err(e) = dest.send_output(&message).await {
+                                    print_heart_yellow(&format!("OutputRouter: Failed to send to {}: {}", dest_id, e), true);
+                                }
+                            }
                         }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        eprintln!("OutputRouter: receiver lagged behind by {} messages, resuming", n);
+                        continue;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        break;
                     }
                 }
             }

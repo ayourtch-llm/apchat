@@ -71,5 +71,9 @@ pub async fn run_task_mode(
         print_heart_red(&response, true);
     }
 
+    if let Some(logger) = &mut chat.logger {
+        logger.shutdown().await;
+    }
+
     Ok(())
 }

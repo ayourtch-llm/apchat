@@ -114,40 +114,41 @@ impl Tool for LaunchSubagentTool {
         let pid = child.id();
         let pid_prefix = format!("[{}] ", pid);
 
-        // Read stdout and stderr in real-time and print with PID prefix
+        // Read stdout and stderr concurrently to avoid pipe deadlock.
+        // Reading them sequentially can deadlock if the child fills the stderr
+        // pipe buffer while we're still reading stdout.
         let stdout_reader = BufReader::new(child.stdout.take().unwrap());
         let stderr_reader = BufReader::new(child.stderr.take().unwrap());
 
-        // Use spawn_blocking to read output since we're in async context
-        let result = tokio::task::spawn_blocking(move || {
-            let mut stdout_content = String::new();
-            let mut stderr_content = String::new();
+        let stdout_pid_prefix = pid_prefix.clone();
+        let stderr_pid_prefix = pid_prefix.clone();
 
-            // Read stdout
+        let stdout_handle = std::thread::spawn(move || {
+            let mut stdout_content = String::new();
             for line_result in stdout_reader.lines() {
                 if let Ok(line) = line_result {
-                    print_heart_red(&format!("{}{}", pid_prefix, line), true);
+                    print_heart_red(&format!("{}{}", stdout_pid_prefix, line), true);
                     stdout_content.push_str(&line);
                     stdout_content.push('\n');
                 }
             }
+            stdout_content
+        });
 
-            // Read stderr
+        let stderr_handle = std::thread::spawn(move || {
+            let mut stderr_content = String::new();
             for line_result in stderr_reader.lines() {
                 if let Ok(line) = line_result {
-                    eprintln!("{}{}", pid_prefix, line);
+                    eprintln!("{}{}", stderr_pid_prefix, line);
                     stderr_content.push_str(&line);
                     stderr_content.push('\n');
                 }
             }
+            stderr_content
+        });
 
-            (stdout_content, stderr_content)
-        }).await;
-
-        let (stdout, stderr) = match result {
-            Ok(result) => result,
-            Err(e) => return ToolResult::error(format!("Failed to read subagent output: {}", e)),
-        };
+        let stdout = stdout_handle.join().unwrap_or_default();
+        let stderr = stderr_handle.join().unwrap_or_default();
 
         // Wait for process to complete
         let status = match child.wait() {
@@ -270,40 +271,41 @@ impl Tool for LaunchSubagentPrettyTool {
         let pid = child.id();
         let pid_prefix = format!("[{}] ", pid);
 
-        // Read stdout and stderr in real-time and print with PID prefix
+        // Read stdout and stderr concurrently to avoid pipe deadlock.
+        // Reading them sequentially can deadlock if the child fills the stderr
+        // pipe buffer while we're still reading stdout.
         let stdout_reader = BufReader::new(child.stdout.take().unwrap());
         let stderr_reader = BufReader::new(child.stderr.take().unwrap());
 
-        // Use spawn_blocking to read output since we're in async context
-        let result = tokio::task::spawn_blocking(move || {
-            let mut stdout_content = String::new();
-            let mut stderr_content = String::new();
+        let stdout_pid_prefix = pid_prefix.clone();
+        let stderr_pid_prefix = pid_prefix.clone();
 
-            // Read stdout
+        let stdout_handle = std::thread::spawn(move || {
+            let mut stdout_content = String::new();
             for line_result in stdout_reader.lines() {
                 if let Ok(line) = line_result {
-                    print_heart_red(&format!("{}{}", pid_prefix, line), true);
+                    print_heart_red(&format!("{}{}", stdout_pid_prefix, line), true);
                     stdout_content.push_str(&line);
                     stdout_content.push('\n');
                 }
             }
+            stdout_content
+        });
 
-            // Read stderr
+        let stderr_handle = std::thread::spawn(move || {
+            let mut stderr_content = String::new();
             for line_result in stderr_reader.lines() {
                 if let Ok(line) = line_result {
-                    eprintln!("{}{}", pid_prefix, line);
+                    eprintln!("{}{}", stderr_pid_prefix, line);
                     stderr_content.push_str(&line);
                     stderr_content.push('\n');
                 }
             }
+            stderr_content
+        });
 
-            (stdout_content, stderr_content)
-        }).await;
-
-        let (stdout, stderr) = match result {
-            Ok(result) => result,
-            Err(e) => return ToolResult::error(format!("Failed to read subagent output: {}", e)),
-        };
+        let stdout = stdout_handle.join().unwrap_or_default();
+        let stderr = stderr_handle.join().unwrap_or_default();
 
         // Wait for process to complete
         let status = match child.wait() {
