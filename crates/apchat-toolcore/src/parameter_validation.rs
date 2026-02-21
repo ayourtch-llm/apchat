@@ -114,20 +114,14 @@ fn coerce_value(value: &Value, expected_type: &str) -> Option<Value> {
             match value {
                 Value::Number(n) if n.is_f64() && !n.is_i64() => {
                     let f = n.as_f64()?;
-                    if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-                        Some(Value::Number(serde_json::Number::from(f as i64)))
-                    } else {
-                        None
-                    }
+                    f64_to_i64_value(f)
                 }
                 Value::String(s) => {
                     if let Ok(i) = s.parse::<i64>() {
                         return Some(Value::Number(serde_json::Number::from(i)));
                     }
                     if let Ok(f) = s.parse::<f64>() {
-                        if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-                            return Some(Value::Number(serde_json::Number::from(f as i64)));
-                        }
+                        return f64_to_i64_value(f);
                     }
                     None
                 }
@@ -135,6 +129,15 @@ fn coerce_value(value: &Value, expected_type: &str) -> Option<Value> {
             }
         }
         _ => None,
+    }
+}
+
+/// Converts an f64 to a JSON integer Value if it has no fractional part and is in i64 range.
+fn f64_to_i64_value(f: f64) -> Option<Value> {
+    if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+        Some(Value::Number(serde_json::Number::from(f as i64)))
+    } else {
+        None
     }
 }
 
