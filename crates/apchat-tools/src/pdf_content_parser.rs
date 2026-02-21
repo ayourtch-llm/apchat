@@ -73,31 +73,54 @@ pub fn extract_text_from_content_bytes(
         pos = abs_tj_start + 2;
     }
 
-    // Also look for Tj operators - pattern: (text) Tj
+    // Also look for Tj operators - pattern: (text) Tj or (text)Tj
     let mut tj_count_inner = 0;
     pos = 0;
-    while let Some(tj_start) = content[pos..].find(") Tj") {
-        let abs_tj_start = pos + tj_start;
+    while pos < content.len() {
+        // Find both ") Tj" (with space) and ")Tj" (without space)
+        let tj_start_with_space = content[pos..].find(") Tj");
+        let tj_start_without_space = content[pos..].find(")Tj");
 
-        // Add space between Tj operators if there was previous text
-        if tj_count_inner > 0 && !text.is_empty() {
-            let between = &content[pos..abs_tj_start];
-            if between.chars().any(|c| !c.is_whitespace()) {
-                text.push(' ');
-            }
-        }
+        let tj_start = match (tj_start_with_space, tj_start_without_space) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
 
-        // Look backwards for opening paren
-        if let Some(string_start) = content[..abs_tj_start].rfind('(') {
-            let pdf_string = &content[string_start + 1..abs_tj_start];
-            // Handle PDF string escapes
-            let decoded = decode_pdf_string(pdf_string);
-            if !decoded.is_empty() {
-                text.push_str(&decoded);
-                tj_count_inner += 1;
+        if let Some(offset) = tj_start {
+            let abs_tj_start = pos + offset;
+
+            // Add space between Tj operators if there was previous text
+            if tj_count_inner > 0 && !text.is_empty() {
+                let between = &content[pos..abs_tj_start];
+                if between.chars().any(|c| !c.is_whitespace()) {
+                    text.push(' ');
+                }
             }
+
+            // Look backwards for opening paren
+            if let Some(string_start) = content[..abs_tj_start].rfind('(') {
+                let pdf_string = &content[string_start + 1..abs_tj_start];
+                // Handle PDF string escapes
+                let decoded = decode_pdf_string(pdf_string);
+                if !decoded.is_empty() {
+                    text.push_str(&decoded);
+                    tj_count_inner += 1;
+                }
+            }
+
+            // Move past Tj - check if it was ") Tj" (4 chars) or ")Tj" (3 chars)
+            if abs_tj_start + 3 <= content.len() && &content[abs_tj_start..abs_tj_start + 3] == ")Tj" {
+                pos = abs_tj_start + 3;
+            } else if abs_tj_start + 4 <= content.len() && &content[abs_tj_start..abs_tj_start + 4] == ") Tj" {
+                pos = abs_tj_start + 4;
+            } else {
+                pos = abs_tj_start + 3; // Default to 3
+            }
+        } else {
+            break;
         }
-        pos = abs_tj_start + 4;
     }
 
     text
@@ -147,7 +170,7 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
     let mut depth = 0;
     let mut in_string = false;
     let mut escape_next = false;
-    let mut chars = s.chars().enumerate();
+    let mut chars = s.char_indices();
 
     while let Some((i, c)) = chars.next() {
         if escape_next {
@@ -163,7 +186,7 @@ fn find_matching_bracket(s: &str) -> Option<usize> {
             ']' if !in_string => {
                 depth -= 1;
                 if depth == 0 {
-                    return Some(i + 1);
+                    return Some(i + c.len_utf8());
                 }
             }
             _ => {}
@@ -177,7 +200,7 @@ fn find_matching_paren(s: &str) -> Option<usize> {
     let mut depth = 0;
     let mut escape_next = false;
 
-    for (i, c) in s.chars().enumerate() {
+    for (i, c) in s.char_indices() {
         if escape_next {
             escape_next = false;
             continue;
