@@ -212,6 +212,11 @@ pub struct Cli {
     #[arg(long)]
     pub community_skills: bool,
 
+    /// Enable the tiling-tree skill for exhaustive MECE problem space exploration
+    /// Based on https://github.com/oaustegard/claude-skills
+    #[arg(long)]
+    pub tiling_tree: bool,
+
     /// Enable the writing-clearly-and-concisely skill (Elements of Style)
     /// Based on https://github.com/obra/the-elements-of-style
     #[arg(long)]
