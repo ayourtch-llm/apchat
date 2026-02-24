@@ -6,8 +6,7 @@
 /// - Cross-attention decoder head
 ///
 /// Based on arXiv:2602.17634.
-/// Original Python implementation by @oaustegard:
-/// https://github.com/oaustegard/claude-skills/tree/main/forecasting-reverso
+/// Original code: https://github.com/shinfxh/reverso
 use candle_core::{Device, Result as CandleResult, Tensor};
 use std::collections::HashMap;
 

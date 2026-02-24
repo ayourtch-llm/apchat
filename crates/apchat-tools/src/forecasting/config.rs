@@ -22,7 +22,7 @@ impl ReversoConfig {
     pub fn nano() -> Self {
         Self {
             d_model: 32,
-            module_list: vec!["conv", "attn", "conv", "attn"]
+            module_list: vec!["conv", "attn"]
                 .into_iter()
                 .map(String::from)
                 .collect(),
@@ -53,7 +53,7 @@ impl ReversoConfig {
 
     pub fn full() -> Self {
         let mut module_list = Vec::new();
-        for _ in 0..8 {
+        for _ in 0..4 {
             module_list.push("conv".to_string());
             module_list.push("attn".to_string());
         }
