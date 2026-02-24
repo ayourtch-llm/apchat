@@ -37,6 +37,9 @@ pub fn get_embedded_skills() -> HashMap<&'static str, &'static str> {
     skills.insert("writing-plans", include_str!("../../../skills/writing-plans/SKILL.md"));
     skills.insert("writing-skills", include_str!("../../../skills/writing-skills/SKILL.md"));
 
+    // Tiling tree skill (from https://github.com/oaustegard/claude-skills) - behind --tiling-tree flag
+    skills.insert("tiling-tree", include_str!("../../../skills/tiling-tree/SKILL.md"));
+
     // Community skills (from https://github.com/roby2358/skills) - behind --community-skills flag
     skills.insert("socratic", include_str!("../../../skills/socratic/SKILL.md"));
     skills.insert("reverse-socratic-examination", include_str!("../../../skills/reverse-socratic-examination/SKILL.md"));
