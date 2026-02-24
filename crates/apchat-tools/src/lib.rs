@@ -30,6 +30,7 @@ pub mod self_regulate;
 pub mod context_edit;
 pub mod diff_fuzz;
 pub mod citation;
+pub mod rlm;
 
 pub use file_ops::*;
 pub use search::*;
@@ -51,5 +52,6 @@ pub use self_regulate::*;
 pub use context_edit::*;
 pub use diff_fuzz::*;
 pub use citation::*;
+pub use rlm::*;
 
 

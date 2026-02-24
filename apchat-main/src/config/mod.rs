@@ -195,6 +195,9 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     // Register wait/sleep tools
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
 
+    // Register RLM context chunking tool
+    registry.register_with_categories(RlmContextChunkTool, vec!["file_ops".to_string(), "rlm".to_string()]);
+
     // Register scheduled instruction tools (only if enabled via CLI flag)
     if flags.delayed_instructions {
         registry.register_with_categories(AddScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
