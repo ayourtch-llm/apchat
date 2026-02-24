@@ -37,5 +37,17 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 lopdf = "0.39"
 flate2 = "1.0"
 
+[features]
+default = []
+forecasting = ["dep:candle-core", "dep:rustfft"]
+
+[dependencies.candle-core]
+version = "0.8"
+optional = true
+
+[dependencies.rustfft]
+version = "6.2"
+optional = true
+
 [dev-dependencies]
 serial_test = "3.0"

@@ -31,6 +31,9 @@ pub mod context_edit;
 pub mod diff_fuzz;
 pub mod citation;
 
+#[cfg(feature = "forecasting")]
+pub mod forecasting;
+
 pub use file_ops::*;
 pub use search::*;
 pub use system::*;

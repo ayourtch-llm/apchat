@@ -104,6 +104,7 @@ version = "1.0"
 [features]
 default = []
 embeddings = ["fastembed"]
+forecasting = ["apchat-tools/forecasting"]
 
 [target."cfg(unix)".dependencies]
 libc = "0.2"
