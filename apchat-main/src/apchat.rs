@@ -176,6 +176,15 @@ impl APChat {
                 if !flags.tiling_tree {
                     registry.remove_skill("tiling-tree");
                 }
+                if !flags.convening_experts {
+                    registry.remove_skill("convening-experts");
+                }
+                if !flags.crafting_instructions {
+                    registry.remove_skill("crafting-instructions");
+                }
+                if !flags.reviewing_ai_papers {
+                    registry.remove_skill("reviewing-ai-papers");
+                }
                 if !flags.elements_of_style {
                     registry.remove_skill("writing-clearly-and-concisely");
                 }

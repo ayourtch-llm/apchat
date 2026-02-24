@@ -217,6 +217,21 @@ pub struct Cli {
     #[arg(long)]
     pub tiling_tree: bool,
 
+    /// Enable the convening-experts skill for multi-expert panel discussions
+    /// Based on https://github.com/oaustegard/claude-skills
+    #[arg(long)]
+    pub convening_experts: bool,
+
+    /// Enable the crafting-instructions skill for LLM prompt engineering
+    /// Based on https://github.com/oaustegard/claude-skills
+    #[arg(long)]
+    pub crafting_instructions: bool,
+
+    /// Enable the reviewing-ai-papers skill for structured AI/ML paper analysis
+    /// Based on https://github.com/oaustegard/claude-skills
+    #[arg(long)]
+    pub reviewing_ai_papers: bool,
+
     /// Enable the writing-clearly-and-concisely skill (Elements of Style)
     /// Based on https://github.com/obra/the-elements-of-style
     #[arg(long)]
