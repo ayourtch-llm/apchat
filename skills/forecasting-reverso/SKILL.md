@@ -9,11 +9,6 @@ description: >
   tabular data with a temporal dimension needs future-value estimation.
   Enable with `--forecasting` CLI flag and build with
   `cargo build --features forecasting`.
-attribution: >
-  Original Python/NumPy/Numba implementation by @oaustegard:
-  https://github.com/oaustegard/claude-skills/tree/main/forecasting-reverso.
-  Reverso model: arXiv:2602.17634. Model weights: https://huggingface.co/shinfxh/reverso.
-  Rust/candle port for apchat.
 ---
 
 # Reverso Time Series Forecasting (Rust/Candle Port)
@@ -22,14 +17,9 @@ Produce zero-shot univariate time series forecasts using the Reverso foundation
 model family (arXiv:2602.17634), ported to Rust using the **candle** tensor
 framework and **rustfft** for FFT convolutions.
 
-## Attribution
-
-This skill is a Rust port of the [forecasting-reverso](https://github.com/oaustegard/claude-skills/tree/main/forecasting-reverso)
-skill by **@oaustegard**, originally implemented in Python with NumPy/Numba.
-
 - **Reverso paper**: arXiv:2602.17634
+- **Original code**: [shinfxh/reverso](https://github.com/shinfxh/reverso)
 - **Model weights**: [shinfxh/reverso on HuggingFace](https://huggingface.co/shinfxh/reverso)
-- **Original skill**: [oaustegard/claude-skills](https://github.com/oaustegard/claude-skills)
 
 ## Prerequisites
 
@@ -107,9 +97,9 @@ The `forecast` tool accepts these parameters:
 
 | Variant | d_model | Layers | Params |
 |---|---|---|---|
-| Nano | 32 | conv,attn,conv,attn | ~150K |
+| Nano | 32 | conv,attn | ~200K |
 | **Small** | 64 | conv,attn,conv,attn | ~550K |
-| Full | 128 | (conv,attn) × 8 | ~4M |
+| Full | 128 | (conv,attn) × 4 | ~2.6M |
 
 ## Architecture
 

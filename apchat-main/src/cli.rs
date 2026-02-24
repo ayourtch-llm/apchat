@@ -244,7 +244,7 @@ pub struct Cli {
     pub diff_fuzz: bool,
 
     /// Enable Reverso time series forecasting tool (candle/Rust port)
-    /// Based on https://github.com/oaustegard/claude-skills forecasting-reverso skill
+    /// Based on arXiv:2602.17634 / https://github.com/shinfxh/reverso
     /// Requires build with --features forecasting
     #[arg(long)]
     pub forecasting: bool,

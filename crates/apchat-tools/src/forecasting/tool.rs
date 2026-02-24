@@ -4,9 +4,7 @@
 /// Reverso foundation model (arXiv:2602.17634), ported to Rust with the
 /// candle framework.
 ///
-/// Attribution:
-///   Original Python implementation by @oaustegard:
-///   https://github.com/oaustegard/claude-skills/tree/main/forecasting-reverso
+/// Original code: https://github.com/shinfxh/reverso
 use async_trait::async_trait;
 use candle_core::Device;
 use std::collections::HashMap;
@@ -28,7 +26,7 @@ impl Tool for ForecastTool {
     fn description(&self) -> &str {
         "Zero-shot univariate time series forecasting using the Reverso foundation model \
          (arXiv:2602.17634). Ported to Rust with candle framework. \
-         Based on https://github.com/oaustegard/claude-skills by @oaustegard."
+         Original code: https://github.com/shinfxh/reverso"
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
