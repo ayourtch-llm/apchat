@@ -56,6 +56,7 @@ pub async fn initialize_repl(
             elements_of_style: cli.elements_of_style,
             self_edit: cli.self_edit,
             diff_fuzz: cli.diff_fuzz,
+            forecasting: cli.forecasting,
         },
     );
 

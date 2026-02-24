@@ -243,6 +243,12 @@ pub struct Cli {
     #[arg(long)]
     pub diff_fuzz: bool,
 
+    /// Enable Reverso time series forecasting tool (candle/Rust port)
+    /// Based on https://github.com/oaustegard/claude-skills forecasting-reverso skill
+    /// Requires build with --features forecasting
+    #[arg(long)]
+    pub forecasting: bool,
+
     /// Disable summarization of subagent output via LLM
     /// By default, subagent output is summarized to pass only the most critically important parts upward
     #[arg(long)]

@@ -27,6 +27,7 @@ pub struct FeatureFlags {
     pub elements_of_style: bool,
     pub self_edit: bool,
     pub diff_fuzz: bool,
+    pub forecasting: bool,
 }
 
 /// Configuration for APChat client
@@ -226,6 +227,22 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     // Register differential fuzzing tool (only if enabled via --diff-fuzz CLI flag)
     if flags.diff_fuzz {
         registry.register_with_categories(DiffFuzzTool, vec!["diff_fuzz".to_string(), "testing".to_string()]);
+    }
+
+    // Register forecasting tool (only if enabled via --forecasting CLI flag AND compiled with feature)
+    #[cfg(feature = "forecasting")]
+    if flags.forecasting {
+        registry.register_with_categories(
+            apchat_tools::forecasting::ForecastTool,
+            vec!["forecasting".to_string()],
+        );
+    }
+    #[cfg(not(feature = "forecasting"))]
+    if flags.forecasting {
+        apchat_vty::print_heart_yellow(
+            "Warning: --forecasting flag requires the 'forecasting' feature. Build with `cargo build --features forecasting`",
+            true,
+        );
     }
 
     registry
