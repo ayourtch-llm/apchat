@@ -12,6 +12,7 @@
     "apply_edit_plan",
     "write_file",
     "list_files",
+    "rlm_context_chunk",
     "load_skill",
     "list_skills",
     "find_relevant_skills",
