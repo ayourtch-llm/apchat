@@ -305,7 +305,7 @@ fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
     None
 }
 
-/// Save conversation history to ~/.okaychat/histories/ before compaction
+/// Save conversation history to ~/.local/share/apchat/histories/ before compaction
 fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Result<()> {
     // Get history directory
     let histories_dir = ApChatPaths::histories_dir();
@@ -345,7 +345,7 @@ fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Resul
     Ok(())
 }
 
-/// Save conversation history to ~/.okaychat/histories/ after compaction
+/// Save conversation history to ~/.local/share/apchat/histories/ after compaction
 fn save_history_after_compaction(chat: &APChat, compaction_type: &str, original_size: usize) -> Result<()> {
     // Get history directory
     let histories_dir = ApChatPaths::histories_dir();

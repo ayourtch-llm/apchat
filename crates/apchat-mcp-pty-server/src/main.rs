@@ -162,7 +162,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool_def(
             "pty_send_credential_keys",
-            "Send credentials from ~/.okaychat/credentials.toml to a PTY terminal session. Reads the credentials file, matches device hostname using regex patterns, and types the credential (password or enable_secret) into the session. IMPORTANT: Verifies credentials don't echo back to the terminal.",
+            "Send credentials from ~/.config/apchat/credentials.toml to a PTY terminal session. Reads the credentials file, matches device hostname using regex patterns, and types the credential (password or enable_secret) into the session. IMPORTANT: Verifies credentials don't echo back to the terminal.",
             json!({
                 "session_id": prop("string", "PTY session ID to send credentials to"),
                 "device_hostname": prop("string", "Hostname of the device (matched against credential 'key' patterns as regex)"),

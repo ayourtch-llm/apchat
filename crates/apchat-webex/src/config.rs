@@ -7,11 +7,11 @@ use std::io::{BufRead, BufReader};
 
 use apchat_common::ApChatPaths;
 
-/// Load Webex access token from environment variable or ~/.okaychat/env file
+/// Load Webex access token from environment variable or ~/.config/apchat/env file
 ///
 /// Priority:
 /// 1. WEBEX_APCHAT_SECRET environment variable
-/// 2. WEBEX_APCHAT_SECRET in ~/.okaychat/env file
+/// 2. WEBEX_APCHAT_SECRET in ~/.config/apchat/env file
 ///
 /// Returns error if token not found in either location
 pub fn load_webex_secret() -> Result<String> {
@@ -22,29 +22,29 @@ pub fn load_webex_secret() -> Result<String> {
         }
     }
 
-    // Second, try ~/.okaychat/env file
+    // Second, try ~/.config/apchat/env file
     if let Ok(token) = load_from_okaychat_env() {
         return Ok(token);
     }
 
     // Not found in either location
     Err(anyhow::anyhow!(
-        "WEBEX_APCHAT_SECRET not found. Set it via environment variable or add it to ~/.okaychat/env:\n\
+        "WEBEX_APCHAT_SECRET not found. Set it via environment variable or add it to ~/.config/apchat/env:\n\
          \n\
          Option 1 - Environment variable:\n\
          export WEBEX_APCHAT_SECRET=\"your_webex_bot_token\"\n\
          \n\
-         Option 2 - Config file (~/.okaychat/env):\n\
+         Option 2 - Config file (~/.config/apchat/env):\n\
          WEBEX_APCHAT_SECRET=your_webex_bot_token"
     ))
 }
 
-/// Load Webex secret from ~/.okaychat/env file
+/// Load Webex secret from ~/.config/apchat/env file
 fn load_from_okaychat_env() -> Result<String> {
     let env_file = ApChatPaths::env_file();
 
     if !env_file.exists() {
-        return Err(anyhow::anyhow!("~/.okaychat/env file not found"));
+        return Err(anyhow::anyhow!("~/.config/apchat/env file not found"));
     }
 
     let file = File::open(&env_file)
@@ -67,7 +67,7 @@ fn load_from_okaychat_env() -> Result<String> {
         }
     }
 
-    Err(anyhow::anyhow!("WEBEX_APCHAT_SECRET not found in ~/.okaychat/env"))
+    Err(anyhow::anyhow!("WEBEX_APCHAT_SECRET not found in ~/.config/apchat/env"))
 }
 
 /// Parse a line from env file in format KEY=value

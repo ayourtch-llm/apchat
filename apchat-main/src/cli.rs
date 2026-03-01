@@ -178,7 +178,7 @@ pub struct Cli {
 
     /// Enable Webex bot and specify authorized user email
     /// The bot will monitor direct messages from this user and broadcast responses to Webex
-    /// Requires WEBEX_APCHAT_SECRET environment variable or ~/.okaychat/env config
+    /// Requires WEBEX_APCHAT_SECRET environment variable or ~/.config/apchat/env config
     #[arg(long, value_name = "USER_EMAIL")]
     pub webex_bot: Option<String>,
 
