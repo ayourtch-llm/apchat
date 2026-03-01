@@ -72,27 +72,37 @@ impl Tool for SearxngSearchTool {
             .unwrap_or(10)
             .min(50) as usize;
 
-        // Build the search URL
-        let mut url = format!("{}/search?q={}&format=json", self.base_url, urlencoded(&query));
+        // Build the search URL with proper parameter encoding
+        let mut search_url = match reqwest::Url::parse(&format!("{}/search", self.base_url)) {
+            Ok(u) => u,
+            Err(e) => return ToolResult::error(format!("Invalid SearXNG base URL: {}", e)),
+        };
 
-        if let Some(ref cats) = categories {
-            url.push_str(&format!("&categories={}", urlencoded(cats)));
-        }
-        if let Some(ref eng) = engines {
-            url.push_str(&format!("&engines={}", urlencoded(eng)));
-        }
-        if let Some(ref lang) = language {
-            url.push_str(&format!("&language={}", urlencoded(lang)));
-        }
-        if let Some(ref tr) = time_range {
-            if matches!(tr.as_str(), "day" | "week" | "month" | "year") {
-                url.push_str(&format!("&time_range={}", tr));
-            } else {
-                return ToolResult::error(format!(
-                    "Invalid time_range '{}'. Must be 'day', 'week', 'month', or 'year'", tr
-                ));
+        {
+            let mut params = search_url.query_pairs_mut();
+            params.append_pair("q", &query);
+            params.append_pair("format", "json");
+            if let Some(ref cats) = categories {
+                params.append_pair("categories", cats);
+            }
+            if let Some(ref eng) = engines {
+                params.append_pair("engines", eng);
+            }
+            if let Some(ref lang) = language {
+                params.append_pair("language", lang);
+            }
+            if let Some(ref tr) = time_range {
+                if matches!(tr.as_str(), "day" | "week" | "month" | "year") {
+                    params.append_pair("time_range", tr);
+                } else {
+                    return ToolResult::error(format!(
+                        "Invalid time_range '{}'. Must be 'day', 'week', 'month', or 'year'", tr
+                    ));
+                }
             }
         }
+
+        let url = search_url.as_str();
 
         // Check permission
         print_heart_red(&format!("{} {} ", "Web Search:".yellow(), query.cyan()), false);
@@ -126,7 +136,7 @@ impl Tool for SearxngSearchTool {
             Err(e) => return ToolResult::error(format!("Failed to create HTTP client: {}", e)),
         };
 
-        let response = match client.get(&url).send().await {
+        let response = match client.get(url).send().await {
             Ok(response) => response,
             Err(e) => {
                 if e.is_timeout() {
@@ -193,23 +203,6 @@ impl Tool for SearxngSearchTool {
     }
 }
 
-/// Simple URL encoding for query parameters
-fn urlencoded(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    for byte in s.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                result.push(byte as char);
-            }
-            b' ' => result.push('+'),
-            _ => {
-                result.push_str(&format!("%{:02X}", byte));
-            }
-        }
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,13 +231,5 @@ mod tests {
 
         let tool = SearxngSearchTool::new("http://example.com///".to_string());
         assert_eq!(tool.base_url, "http://example.com");
-    }
-
-    #[test]
-    fn test_urlencoded() {
-        assert_eq!(urlencoded("hello world"), "hello+world");
-        assert_eq!(urlencoded("rust lang"), "rust+lang");
-        assert_eq!(urlencoded("a&b=c"), "a%26b%3Dc");
-        assert_eq!(urlencoded("simple"), "simple");
     }
 }
