@@ -29,6 +29,7 @@ pub async fn run_task_mode(
         early_superpowers: cli.early_superpowers,
         context_mode: cli.context_mode,
         mcp_servers: cli.mcp_server.clone(),
+        searxng_url: cli.searxng.clone(),
         ..FeatureFlags::default()
     };
 

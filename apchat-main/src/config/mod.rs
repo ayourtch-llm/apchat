@@ -31,6 +31,7 @@ pub struct FeatureFlags {
     pub context_mode: bool,
     pub financial_services: bool,
     pub mcp_servers: Vec<String>,
+    pub searxng_url: Option<String>,
 }
 
 /// Configuration for APChat client
@@ -244,6 +245,18 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     if flags.forecasting {
         apchat_vty::print_heart_yellow(
             "Warning: --forecasting flag requires the 'forecasting' feature. Build with `cargo build --features forecasting`",
+            true,
+        );
+    }
+
+    // Register SearXNG web search tool (only if --searxng URL is provided)
+    if let Some(ref searxng_url) = flags.searxng_url {
+        registry.register_with_categories(
+            apchat_tools::searxng::SearxngSearchTool::new(searxng_url.clone()),
+            vec!["web".to_string(), "search".to_string()],
+        );
+        print_heart_red(
+            &format!("✓ SearXNG web search enabled ({})", searxng_url),
             true,
         );
     }
