@@ -11,7 +11,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0"
 apchat-terminal = { path = "../apchat-terminal" }
-regex = "*"
+regex = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.41", features = ["full"] }
