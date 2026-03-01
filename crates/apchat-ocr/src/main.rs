@@ -6,6 +6,9 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+#[cfg(feature = "candle")]
+mod local;
+
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
@@ -59,6 +62,33 @@ enum Commands {
         /// Model name served by the endpoint
         #[arg(long, default_value = "glm-ocr")]
         model: String,
+    },
+
+    /// Parse images locally using candle (requires build with --features candle)
+    LocalParse {
+        /// Image file paths to parse
+        #[arg(required = true)]
+        images: Vec<String>,
+
+        /// HuggingFace model ID to download
+        #[arg(long, default_value = "zai-org/GLM-OCR")]
+        model_id: String,
+
+        /// Path to a local model directory (skips download)
+        #[arg(long)]
+        model_path: Option<PathBuf>,
+
+        /// Device to use: cpu, cuda, or metal
+        #[arg(long, default_value = "cpu")]
+        device: String,
+
+        /// Output format: markdown, json, or text (raw response)
+        #[arg(long, default_value = "markdown")]
+        format: String,
+
+        /// Output directory (writes results to files instead of stdout)
+        #[arg(long, short)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -503,6 +533,27 @@ async fn main() -> Result<()> {
             api_key,
             model,
         } => run_serve(api_url, api_key, model).await,
+        Commands::LocalParse {
+            images,
+            model_id,
+            model_path,
+            device,
+            format,
+            output,
+        } => {
+            #[cfg(feature = "candle")]
+            {
+                local::run_local_parse(images, model_id, model_path, device, format, output).await
+            }
+            #[cfg(not(feature = "candle"))]
+            {
+                let _ = (images, model_id, model_path, device, format, output);
+                anyhow::bail!(
+                    "Local inference requires the 'candle' feature.\n\
+                     Rebuild with: cargo build -p apchat-ocr --features candle"
+                )
+            }
+        }
     }
 }
 

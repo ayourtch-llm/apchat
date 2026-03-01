@@ -8,6 +8,12 @@ description = "OCR tool using GLM-OCR with CLI and MCP server modes"
 name = "apchat-ocr"
 path = "src/main.rs"
 
+[features]
+default = []
+candle = ["dep:candle-core", "dep:candle-nn", "dep:tokenizers", "dep:hf-hub", "dep:image"]
+cuda = ["candle", "candle-core/cuda"]
+metal = ["candle", "candle-core/metal"]
+
 [dependencies]
 anyhow = "1.0"
 base64 = "0.22"
@@ -16,6 +22,13 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+
+# Optional candle dependencies for local inference
+candle-core = { version = "0.8", optional = true }
+candle-nn = { version = "0.8", optional = true }
+tokenizers = { version = "0.21", optional = true, default-features = false, features = ["fancy-regex"] }
+hf-hub = { version = "0.4", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
