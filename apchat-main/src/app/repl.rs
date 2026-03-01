@@ -255,7 +255,9 @@ pub async fn run_repl_mode(
 
         update_status_info(&chat, &queued_messages);
 
-        print_heart_yellow(&format!("Select start"), true);
+        if chat.debug_level > 0 {
+            print_heart_yellow(&format!("Select start"), true);
+        }
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
                 llm_running = false;
@@ -307,7 +309,9 @@ pub async fn run_repl_mode(
                         };
 
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
-                            print_heart_yellow(&format!("Started repeat inference"), true);
+                            if chat.debug_level > 0 {
+                                print_heart_yellow(&format!("Started repeat inference"), true);
+                            }
                             llm_running = true;
                             request_guard = Some(RequestGuard::new());
                         } else {
@@ -353,7 +357,9 @@ pub async fn run_repl_mode(
 
         update_status_info(&chat, &queued_messages);
 
-        print_heart_yellow(&format!("Select end"), true);
+        if chat.debug_level > 0 {
+            print_heart_yellow(&format!("Select end"), true);
+        }
     }
 
     // ── Cleanup ────────────────────────────────────────────────────────────
