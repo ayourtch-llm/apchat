@@ -402,10 +402,10 @@ impl CrossModalConnector {
 
 fn build_causal_mask(query_len: usize, seq_len: usize, device: &Device) -> candle_core::Result<Tensor> {
     let offset = seq_len - query_len;
-    let mask: Vec<f32> = (0..query_len)
+    let mask: Vec<u8> = (0..query_len)
         .flat_map(|i| {
             (0..seq_len).map(move |j| {
-                if j <= i + offset { 1.0f32 } else { 0.0f32 }
+                if j <= i + offset { 1u8 } else { 0u8 }
             })
         })
         .collect();
@@ -486,46 +486,33 @@ impl GlmAttention {
         let seq_len = attn.dim(D::Minus1)?;
         let query_len = attn.dim(D::Minus2)?;
         if query_len > 1 {
-            let mask = build_causal_mask(query_len, seq_len, attn.device())?;
-            let mask_bool = mask.ge(&Tensor::new(0.5f32, attn.device())?.broadcast_as(mask.shape())?)?;
+            let mask_bool = build_causal_mask(query_len, seq_len, attn.device())?;
             let mask_bool = mask_bool.unsqueeze(0)?.unsqueeze(0)?;
             let neg_inf = Tensor::new(f32::NEG_INFINITY, attn.device())?
                 .broadcast_as(attn.shape())?;
             let attn = mask_bool.where_cond(&attn.to_dtype(DType::F32)?, &neg_inf)?;
-            let attn = nn::ops::softmax_last_dim(&attn)?;
-            let attn = attn.to_dtype(v.dtype())?;
+            let attn = nn::ops::softmax_last_dim(&attn)?.to_dtype(v.dtype())?;
             let out = attn.matmul(&v)?;
             let out = out.transpose(1, 2)?.reshape((b, query_len, self.num_heads * self.head_dim))?;
             let out = self.o_proj.forward(&out)?;
-            // Return k, v without the GQA repeats for caching
-            let k_cache = if self.num_kv_heads < self.num_heads {
-                k.narrow(1, 0, self.num_kv_heads)?
-            } else {
-                k
-            };
-            let v_cache = if self.num_kv_heads < self.num_heads {
-                v.narrow(1, 0, self.num_kv_heads)?
-            } else {
-                v
-            };
-            return Ok((out, k_cache, v_cache));
+            let (kc, vc) = self.extract_kv_cache(k, v)?;
+            return Ok((out, kc, vc));
         }
 
         let attn = nn::ops::softmax_last_dim(&attn)?;
         let out = attn.matmul(&v)?;
         let out = out.transpose(1, 2)?.reshape((b, n, self.num_heads * self.head_dim))?;
         let out = self.o_proj.forward(&out)?;
-        let k_cache = if self.num_kv_heads < self.num_heads {
-            k.narrow(1, 0, self.num_kv_heads)?
+        let (kc, vc) = self.extract_kv_cache(k, v)?;
+        Ok((out, kc, vc))
+    }
+
+    fn extract_kv_cache(&self, k: Tensor, v: Tensor) -> candle_core::Result<(Tensor, Tensor)> {
+        if self.num_kv_heads < self.num_heads {
+            Ok((k.narrow(1, 0, self.num_kv_heads)?, v.narrow(1, 0, self.num_kv_heads)?))
         } else {
-            k
-        };
-        let v_cache = if self.num_kv_heads < self.num_heads {
-            v.narrow(1, 0, self.num_kv_heads)?
-        } else {
-            v
-        };
-        Ok((out, k_cache, v_cache))
+            Ok((k, v))
+        }
     }
 }
 
@@ -623,7 +610,10 @@ impl GlmDecoder {
     ) -> candle_core::Result<Tensor> {
         let mut x = self.embed_tokens.forward(input_ids)?;
 
-        // Prepend vision embeddings on first forward pass (no KV cache yet)
+        // Vision embeddings are prepended to the token embeddings only on the
+        // initial forward pass (offset == 0). In subsequent autoregressive steps
+        // the KV cache already contains the vision context, so we only feed new
+        // text tokens.
         if let Some(vis) = vision_embeds {
             if offset == 0 {
                 x = Tensor::cat(&[vis, &x], 1)?;
@@ -720,7 +710,9 @@ pub fn preprocess_image(
     // Convert to [1, 3, H, W] tensor
     let tensor = Tensor::from_vec(pixels, (h, w, 3), device)?;
     let tensor = tensor.permute((2, 0, 1))?.unsqueeze(0)?;
-    tensor.to_dtype(DType::BF16).map_err(Into::into)
+    // Use F32 on CPU for precision, BF16 on GPU for performance
+    let dtype = if device.is_cpu() { DType::F32 } else { DType::BF16 };
+    tensor.to_dtype(dtype).map_err(Into::into)
 }
 
 // ---------------------------------------------------------------------------
@@ -828,10 +820,8 @@ pub fn load_model_files(
     }
 
     // Download safetensors weight files
-    let model_info = api
-        .model(model_id.to_string());
     // Try to get the model index first
-    if let Ok(index_path) = model_info.get("model.safetensors.index.json") {
+    if let Ok(index_path) = repo.get("model.safetensors.index.json") {
         let index_str = std::fs::read_to_string(&index_path)
             .context("Failed to read model index")?;
         let index: serde_json::Value = serde_json::from_str(&index_str)
@@ -842,13 +832,13 @@ pub fn load_model_files(
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
             for filename in filenames {
-                model_info.get(&filename)
+                repo.get(&filename)
                     .with_context(|| format!("Failed to download {}", filename))?;
             }
         }
     } else {
         // Single safetensors file
-        model_info.get("model.safetensors")
+        repo.get("model.safetensors")
             .context("Failed to download model.safetensors")?;
     }
 
@@ -898,6 +888,7 @@ pub async fn run_local_parse(
     model_id: String,
     model_path: Option<PathBuf>,
     device_str: String,
+    max_tokens: usize,
     format: String,
     output: Option<PathBuf>,
 ) -> Result<()> {
@@ -911,12 +902,13 @@ pub async fn run_local_parse(
     let config = load_config(&model_dir)?;
     let tokenizer = load_tokenizer(&model_dir)?;
 
-    // Load model weights
+    // Load model weights (use F32 on CPU, BF16 on GPU)
     eprintln!("Loading model weights...");
     let safetensors_files = find_safetensors(&model_dir)?;
     let safetensors_refs: Vec<&PathBuf> = safetensors_files.iter().collect();
+    let dtype = if device.is_cpu() { DType::F32 } else { DType::BF16 };
     let vb = unsafe {
-        VarBuilder::from_mmaped_safetensors(&safetensors_refs, DType::BF16, &device)?
+        VarBuilder::from_mmaped_safetensors(&safetensors_refs, dtype, &device)?
     };
     let model = GlmOcrModel::load(config.clone(), vb, &device)?;
     eprintln!("Model loaded successfully.");
@@ -935,7 +927,7 @@ pub async fn run_local_parse(
         let path = PathBuf::from(image_source);
         let pixel_values = preprocess_image(&path, &config.vision_config, &device)?;
         let vision_embeds = model.encode_image(&pixel_values)?;
-        let raw = greedy_generate(&model, &tokenizer, &vision_embeds, prompt, 16384, &device)?;
+        let raw = greedy_generate(&model, &tokenizer, &vision_embeds, prompt, max_tokens, &device)?;
         let text = super::format_result(&raw, &format);
 
         if let Some(ref dir) = output {

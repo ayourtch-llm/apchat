@@ -82,6 +82,10 @@ enum Commands {
         #[arg(long, default_value = "cpu")]
         device: String,
 
+        /// Maximum number of tokens to generate
+        #[arg(long, default_value = "4096")]
+        max_tokens: usize,
+
         /// Output format: markdown, json, or text (raw response)
         #[arg(long, default_value = "markdown")]
         format: String,
@@ -538,16 +542,17 @@ async fn main() -> Result<()> {
             model_id,
             model_path,
             device,
+            max_tokens,
             format,
             output,
         } => {
             #[cfg(feature = "candle")]
             {
-                local::run_local_parse(images, model_id, model_path, device, format, output).await
+                local::run_local_parse(images, model_id, model_path, device, max_tokens, format, output).await
             }
             #[cfg(not(feature = "candle"))]
             {
-                let _ = (images, model_id, model_path, device, format, output);
+                let _ = (images, model_id, model_path, device, max_tokens, format, output);
                 anyhow::bail!(
                     "Local inference requires the 'candle' feature.\n\
                      Rebuild with: cargo build -p apchat-ocr --features candle"
