@@ -4,6 +4,7 @@ pub mod request_logger;
 
 use std::path::PathBuf;
 use anyhow::{Result, Context};
+use apchat_common::ApChatPaths;
 
 // Re-export ConversationLogger for backward compatibility
 pub use conversation_logger::ConversationLogger;
@@ -29,34 +30,13 @@ pub fn safe_truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
-/// Get or create the base okaychat directory (~/.okaychat)
-/// This is shared between logging and model caching
-pub fn get_okaychat_dir() -> Result<PathBuf> {
-    let home_dir = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .context("Failed to get home directory")?;
-
-    let okaychat_dir = PathBuf::from(home_dir)
-        .join(".okaychat");
-
-    // Create directory if it doesn't exist
-    if !okaychat_dir.exists() {
-        std::fs::create_dir_all(&okaychat_dir)
-            .context("Failed to create okaychat directory")?;
-    }
-
-    Ok(okaychat_dir)
-}
-
-/// Get or create the logs directory (~/.okaychat/logs)
+/// Get or create the logs directory (XDG-compliant: ~/.cache/apchat/logs)
 pub fn get_logs_dir() -> Result<PathBuf> {
-    let logs_dir = get_okaychat_dir()?.join("logs");
+    let logs_dir = ApChatPaths::logs_dir();
     
     // Create directory if it doesn't exist
-    if !logs_dir.exists() {
-        std::fs::create_dir_all(&logs_dir)
-            .context("Failed to create logs directory")?;
-    }
+    ApChatPaths::ensure_dir(&logs_dir)
+        .context("Failed to create logs directory")?;
 
     Ok(logs_dir)
 }
