@@ -5,6 +5,8 @@ use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
+use apchat_common::ApChatPaths;
+
 /// Load Webex access token from environment variable or ~/.okaychat/env file
 ///
 /// Priority:
@@ -39,10 +41,7 @@ pub fn load_webex_secret() -> Result<String> {
 
 /// Load Webex secret from ~/.okaychat/env file
 fn load_from_okaychat_env() -> Result<String> {
-    let okaychat_dir = apchat_logging::get_okaychat_dir()
-        .context("Failed to get okaychat directory")?;
-
-    let env_file = okaychat_dir.join("env");
+    let env_file = ApChatPaths::env_file();
 
     if !env_file.exists() {
         return Err(anyhow::anyhow!("~/.okaychat/env file not found"));
