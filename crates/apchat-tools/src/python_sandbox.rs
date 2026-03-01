@@ -6,6 +6,11 @@ use std::collections::HashMap;
 #[cfg(feature = "python-sandbox")]
 use ouros::{ReplSession, ReplProgress, Object, CollectStringPrint, ExternalResult, ExcType, Exception};
 
+const TOOL_NAME: &str = "python_sandbox";
+
+#[cfg(feature = "python-sandbox")]
+const MAX_SANDBOX_ITERATIONS: usize = 1000;
+
 /// Tool that provides a sandboxed Python execution environment via ouros.
 ///
 /// All registered tools from the agent's tool registry are automatically
@@ -32,7 +37,7 @@ fn generate_tool_help(registry: &apchat_toolcore::ToolRegistry) -> String {
     let mut tool_names: Vec<_> = registry.get_tool_names();
     tool_names.sort();
     for name in &tool_names {
-        if name == "python_sandbox" {
+        if name == TOOL_NAME {
             continue;
         }
         if let Some(tool) = registry.get_tool(name) {
@@ -58,7 +63,7 @@ fn generate_tool_help(registry: &apchat_toolcore::ToolRegistry) -> String {
 #[async_trait]
 impl Tool for PythonSandboxTool {
     fn name(&self) -> &str {
-        "python_sandbox"
+        TOOL_NAME
     }
 
     fn description(&self) -> &str {
@@ -99,7 +104,7 @@ impl PythonSandboxTool {
             None => return ToolResult::error("Tool registry not available in context".to_string()),
         };
 
-        let list_functions: bool = params.get_optional("list_functions").unwrap_or(None).unwrap_or(false);
+        let list_functions: bool = params.get_optional("list_functions").ok().flatten().unwrap_or(false);
         if list_functions {
             return ToolResult::success(generate_tool_help(&registry));
         }
@@ -113,7 +118,7 @@ impl PythonSandboxTool {
         let external_functions: Vec<String> = registry
             .get_tool_names()
             .into_iter()
-            .filter(|name| name != "python_sandbox")
+            .filter(|name| name != TOOL_NAME)
             .collect();
 
         // Run the ouros session in a blocking task since it's synchronous
@@ -145,15 +150,13 @@ fn run_sandbox_session(
         Err(e) => return ToolResult::error(format!("Python error: {e}")),
     };
 
-    // Iteration limit to prevent infinite loops
-    let max_iterations = 1000;
     let mut iterations = 0;
 
     loop {
         iterations += 1;
-        if iterations > max_iterations {
+        if iterations > MAX_SANDBOX_ITERATIONS {
             return ToolResult::error(format!(
-                "Sandbox exceeded maximum of {max_iterations} external function calls"
+                "Sandbox exceeded maximum of {MAX_SANDBOX_ITERATIONS} external function calls"
             ));
         }
 
@@ -244,8 +247,9 @@ fn execute_tool_sync(
         }
     }
 
-    // Execute the tool synchronously using a new tokio runtime
-    // We're already inside spawn_blocking, so we need a new runtime
+    // Execute the tool synchronously.
+    // We're inside spawn_blocking so there's no active Tokio runtime on this thread;
+    // create a lightweight current-thread runtime for the async tool execution.
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
