@@ -105,4 +105,18 @@ fn test_feature_flags_gate_tools() {
         ..FeatureFlags::default()
     });
     assert!(registry.has_tool("web_search"), "web_search should be registered when searxng_url is set");
+
+    // Default: python_sandbox tool disabled
+    let registry = initialize_tool_registry(&FeatureFlags::default());
+    assert!(!registry.has_tool("python_sandbox"), "python_sandbox should not be registered by default");
+
+    // Enable python_sandbox (only effective when compiled with python-sandbox feature)
+    #[cfg(feature = "python-sandbox")]
+    {
+        let registry = initialize_tool_registry(&FeatureFlags {
+            python_sandbox: true,
+            ..FeatureFlags::default()
+        });
+        assert!(registry.has_tool("python_sandbox"), "python_sandbox should be registered when python_sandbox is true");
+    }
 }
