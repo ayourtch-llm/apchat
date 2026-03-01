@@ -80,7 +80,7 @@ fn tool_definitions() -> Vec<Value> {
                 "keys": prop("string", "Keys to send to the terminal. Will be auto-terminated with 'Enter' key unless raw=true is supplied."),
                 "raw": prop("boolean", "Do not add 'Enter' key at the end of the series of keystrokes"),
             }),
-            vec!["session_id", "keys", "raw"],
+            vec!["session_id", "keys"],
         ),
         tool_def(
             "pty_get_screen",
