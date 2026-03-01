@@ -253,6 +253,19 @@ pub struct Cli {
     /// By default, subagent output is summarized to pass only the most critically important parts upward
     #[arg(long)]
     pub no_summarize_subagents: bool,
+
+    /// Enable context-mode MCP server (https://github.com/mksglu/claude-context-mode)
+    /// Provides sandboxed code execution and FTS5 knowledge base tools that save ~98% of context window.
+    /// Requires Node.js 18+ to be installed. Tools are registered with 'ctx_' prefix.
+    #[arg(long)]
+    pub context_mode: bool,
+
+    /// Add a generic MCP (Model Context Protocol) server by command.
+    /// The server process is started and its tools are discovered and registered automatically.
+    /// Can be specified multiple times for multiple servers. Tools are prefixed with 'mcp_'.
+    /// Example: --mcp-server "npx -y some-mcp-server"
+    #[arg(long, value_name = "CMD")]
+    pub mcp_server: Vec<String>,
 }
 
 #[derive(Subcommand)]

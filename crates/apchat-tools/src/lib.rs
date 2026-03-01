@@ -31,6 +31,7 @@ pub mod context_edit;
 pub mod diff_fuzz;
 pub mod citation;
 pub mod rlm;
+pub mod mcp_client;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;

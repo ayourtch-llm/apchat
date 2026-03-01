@@ -807,6 +807,7 @@ mod repl_compact_tests {
             llm_overrides: Arc::new(std::sync::Mutex::new(None)),
             context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
             summarize_subagents: true,
+            mcp_clients: Vec::new(),
         }
     }
 
