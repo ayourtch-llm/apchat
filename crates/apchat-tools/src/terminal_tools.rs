@@ -2,6 +2,7 @@
 
 use apchat_toolcore::{param, {Tool, ToolParameters, ToolResult, ParameterDefinition}};
 use apchat_toolcore::tool_context::ToolContext;
+use apchat_common::ApChatPaths;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use serde_json::json;
@@ -701,7 +702,7 @@ impl Tool for PtySendCredentialKeysTool {
             Err(_) => return ToolResult::error("HOME environment variable not set".to_string()),
         };
 
-        let credentials_path = home_dir.join(".okaychat").join("credentials.toml");
+        let credentials_path = ApChatPaths::credentials_file();
 
         if !credentials_path.exists() {
             return ToolResult::error(format!(

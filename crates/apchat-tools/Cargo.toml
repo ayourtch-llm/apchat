@@ -20,6 +20,7 @@ apchat-policy = { path = "../apchat-policy" }
 apchat-skills = { path = "../apchat-skills" }
 apchat-terminal = { path = "../apchat-terminal" }
 apchat-todo = { path = "../apchat-todo" }
+apchat-common = { path = "../apchat-common" }
 apchat-toolcore = { path = "../apchat-toolcore" }
 apchat-vty = { path = "../apchat-vty" }
 regex = "*"
