@@ -94,4 +94,15 @@ fn test_feature_flags_gate_tools() {
         ..FeatureFlags::default()
     });
     assert!(registry.has_tool("diff_fuzz"), "diff_fuzz should be registered when diff_fuzz is true");
+
+    // Default: web_search (searxng) tool disabled
+    let registry = initialize_tool_registry(&FeatureFlags::default());
+    assert!(!registry.has_tool("web_search"), "web_search should not be registered by default");
+
+    // Enable searxng
+    let registry = initialize_tool_registry(&FeatureFlags {
+        searxng_url: Some("http://localhost:8888".to_string()),
+        ..FeatureFlags::default()
+    });
+    assert!(registry.has_tool("web_search"), "web_search should be registered when searxng_url is set");
 }

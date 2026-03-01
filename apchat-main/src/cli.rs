@@ -271,6 +271,12 @@ pub struct Cli {
     /// Example: --mcp-server "npx -y some-mcp-server"
     #[arg(long, value_name = "CMD")]
     pub mcp_server: Vec<String>,
+
+    /// Use a SearXNG instance for web search (provide the base URL)
+    /// Registers a 'web_search' tool that queries the specified SearXNG instance.
+    /// Example: --searxng "https://searxng.example.com"
+    #[arg(long, value_name = "URL")]
+    pub searxng: Option<String>,
 }
 
 #[derive(Subcommand)]
