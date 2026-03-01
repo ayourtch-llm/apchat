@@ -18,6 +18,7 @@ members = [
     "crates/apchat-webex",
     "crates/apchat-mcp-pty-server",
     "crates/apchat-finserv",
+    "crates/apchat-ocr",
 ]
 resolver = "2"
 
