@@ -10,6 +10,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
+const MCP_RESPONSE_TIMEOUT_SECS: u64 = 30;
+
 /// An MCP (Model Context Protocol) client that communicates with an external
 /// MCP server process via JSON-RPC 2.0 over stdio.
 ///
@@ -75,7 +77,7 @@ impl McpClient {
         loop {
             let mut line = String::new();
             let bytes_read = tokio::time::timeout(
-                std::time::Duration::from_secs(30),
+                std::time::Duration::from_secs(MCP_RESPONSE_TIMEOUT_SECS),
                 reader.read_line(&mut line),
             )
             .await

@@ -44,6 +44,13 @@ pub async fn run_subagent_mode(
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
 
+    let flags = FeatureFlags {
+        early_superpowers: cli.early_superpowers,
+        context_mode: cli.context_mode,
+        mcp_servers: cli.mcp_server.clone(),
+        ..FeatureFlags::default()
+    };
+
     // Create a subagent instance - this runs without showing output to user
     let mut subagent = APChat::new_with_config(
         client_config.clone(),
@@ -52,21 +59,11 @@ pub async fn run_subagent_mode(
         false, // No streaming in subagent mode
         cli.verbose,
         backend_type,
-        FeatureFlags {
-            early_superpowers: cli.early_superpowers,
-            context_mode: cli.context_mode,
-            mcp_servers: cli.mcp_server.clone(),
-            ..FeatureFlags::default()
-        },
+        flags.clone(),
     );
 
     // Register MCP server tools (async initialization)
-    let mcp_flags = FeatureFlags {
-        context_mode: cli.context_mode,
-        mcp_servers: cli.mcp_server.clone(),
-        ..FeatureFlags::default()
-    };
-    subagent.register_mcp_tools(&mcp_flags).await;
+    subagent.register_mcp_tools(&flags).await;
 
     // Mark as non-interactive to prevent prompts
     subagent.non_interactive = true;

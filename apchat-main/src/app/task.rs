@@ -25,6 +25,13 @@ pub async fn run_task_mode(
     // Resolve terminal backend
     let backend_type = crate::resolve_terminal_backend(cli)?;
 
+    let flags = FeatureFlags {
+        early_superpowers: cli.early_superpowers,
+        context_mode: cli.context_mode,
+        mcp_servers: cli.mcp_server.clone(),
+        ..FeatureFlags::default()
+    };
+
     let mut chat = APChat::new_with_config(
         client_config.clone(),
         work_dir.clone(),
@@ -32,21 +39,11 @@ pub async fn run_task_mode(
         cli.stream,
         cli.verbose,
         backend_type,
-        FeatureFlags {
-            early_superpowers: cli.early_superpowers,
-            context_mode: cli.context_mode,
-            mcp_servers: cli.mcp_server.clone(),
-            ..FeatureFlags::default()
-        },
+        flags.clone(),
     );
 
     // Register MCP server tools (async initialization)
-    let mcp_flags = FeatureFlags {
-        context_mode: cli.context_mode,
-        mcp_servers: cli.mcp_server.clone(),
-        ..FeatureFlags::default()
-    };
-    chat.register_mcp_tools(&mcp_flags).await;
+    chat.register_mcp_tools(&flags).await;
 
     // Set summarize_subagents flag from CLI
     chat.summarize_subagents = !cli.no_summarize_subagents;
