@@ -159,8 +159,8 @@ pub struct Cli {
     pub web_attachable: bool,
 
     /// Directory for persistent web session storage
-    #[arg(long, default_value = "~/.okaychat/sessions", env = "OKAYCHAT_SESSIONS_DIR")]
-    pub sessions_dir: String,
+    #[arg(long, env = "APCHAT_SESSIONS_DIR")]
+    pub sessions_dir: Option<String>,
 
     /// Path to the memory database (SQLite file)
     /// Can be overridden by APCHAT_MEMORY_DB_PATH environment variable

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::cli::Cli;
 use apchat_vty::{print_heart_red};
+use apchat_common::ApChatPaths;
 use crate::config::ClientConfig;
 use apchat_policy::PolicyManager;
 use crate::mspc::MspcChannel;
@@ -42,8 +43,11 @@ pub async fn run_web_server(
     // Determine web directory (relative to work_dir)
     let web_dir = work_dir.join("web");
 
-    // Expand sessions directory path (handles ~ expansion)
-    let sessions_dir = expand_tilde(&cli.sessions_dir)?;
+    // Use provided sessions directory or default to ApChatPaths::sessions_dir()
+    let sessions_dir = match &cli.sessions_dir {
+        Some(path) => expand_tilde(path)?,
+        None => ApChatPaths::sessions_dir(),
+    };
 
     // Create web server config
     let config = WebServerConfig {
