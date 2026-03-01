@@ -29,6 +29,7 @@ pub struct FeatureFlags {
     pub diff_fuzz: bool,
     pub forecasting: bool,
     pub context_mode: bool,
+    pub financial_services: bool,
     pub mcp_servers: Vec<String>,
 }
 

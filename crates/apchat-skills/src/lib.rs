@@ -244,6 +244,20 @@ impl SkillRegistry {
         self.skills.remove(name).is_some()
     }
 
+    /// Add a skill from its raw SKILL.md content string.
+    /// Parses the YAML frontmatter and inserts it into the registry.
+    pub fn add_skill_from_content(&mut self, content: &str) -> Result<String> {
+        let (name, description) = self.parse_frontmatter(content)?;
+        let skill = Skill {
+            name: name.clone(),
+            description,
+            content: content.to_string(),
+            file_path: PathBuf::from(format!("<external:{}>", name)),
+        };
+        self.skills.insert(name.clone(), skill);
+        Ok(name)
+    }
+
     /// Get all skill names
     pub fn list_skills(&self) -> Vec<String> {
         let mut names: Vec<_> = self.skills.keys().cloned().collect();
@@ -545,5 +559,22 @@ This is the content.
         assert!(registry.get_skill("specification").is_none());
         assert!(registry.get_skill("coding-conventions").is_none());
         assert!(registry.get_skill("skill-creator").is_none());
+    }
+
+    #[test]
+    fn test_add_skill_from_content() {
+        let mut registry = SkillRegistry {
+            skills: HashMap::new(),
+            skills_dir: PathBuf::from("skills"),
+            embedding_backend: None,
+            skill_embeddings: HashMap::new(),
+        };
+
+        let content = "---\nname: test-external\ndescription: An externally added skill\n---\n\n# Test External\n\nContent here.\n";
+        let name = registry.add_skill_from_content(content).unwrap();
+        assert_eq!(name, "test-external");
+        let skill = registry.get_skill("test-external").unwrap();
+        assert_eq!(skill.description, "An externally added skill");
+        assert!(skill.content.contains("# Test External"));
     }
 }
