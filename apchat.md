@@ -36,6 +36,47 @@ give the start line inside the span - then you can recursively peek inside the s
 
 # Tool Usage Best Practices
 
+## 🚀 Subagents: Your Best Weapon Against Context Rot
+
+**Use `launch_subagent_pretty` liberally!** Subagents are independent workers that return clean, summarized JSON output. This dramatically reduces context window usage.
+
+### When to Use Subagents
+
+- **Investigating code**: "Find all usages of function X", "Describe the architecture of module Y"
+- **Independent subtasks**: Any self-contained task that doesn't require shared state
+- **Information gathering**: Research, documentation lookup, file analysis
+- **Parallel work**: Multiple independent investigations (one subagent at a time, wait for results)
+
+### Why Subagents Save Context
+
+- ✅ Return **summarized results** instead of raw tool output
+- ✅ Run **independently** - their internal conversation doesn't pollute your context
+- ✅ Provide **structured JSON** output that's easy to parse
+- ✅ Can be **launched with specific tasks** and return focused answers
+
+### Example Usage
+
+Instead of:
+1. Reading multiple files yourself (context bloat)
+2. Running multiple commands (more output)
+3. Trying to remember what you found
+
+**Launch a subagent**:
+```
+Task: "Find all functions in src/ that handle authentication and summarize their purpose"
+```
+
+The subagent will explore the codebase and return a clean summary like:
+```json
+{
+  "functions_found": 3,
+  "summary": "Auth handled by: auth::login(), auth::validate_token(), auth::logout()",
+  "files_modified": ["src/auth.rs"]
+}
+```
+
+**This is your primary defense against context rot!**
+
 ## read_file Tool
 
 ### IMPORTANT: Use 20-line chunks for large files!
