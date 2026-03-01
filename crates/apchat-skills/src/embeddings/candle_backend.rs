@@ -11,6 +11,7 @@ use super::EmbeddingBackend;
 ///
 /// Note: Enabling this feature requires the `embeddings` feature to be enabled as well.
 use anyhow::{Context, Result};
+use apchat_common::ApChatPaths;
 use candle_core::{DType, Device, Tensor};
 use candle_transformers::models::bert::{BertModel, Config};
 use std::sync::Arc;
@@ -27,16 +28,13 @@ pub struct CandleBackend {
 
 impl CandleBackend {
     /// Get or create the cache directory for Candle models
-    /// Returns ~/.okaychat/candle
+    /// Returns ~/.cache/apchat/candle
     fn get_cache_dir() -> Result<std::path::PathBuf> {
-        use apchat_logging::get_okaychat_dir;
-
-        let okaychat_dir = get_okaychat_dir()?;
-        let cache_dir = okaychat_dir.join("candle");
+        let cache_dir = ApChatPaths::candle_dir();
 
         // Create directory if it doesn't exist
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir).context("Failed to create cache directory")?;
+            ApChatPaths::ensure_dir(&cache_dir).context("Failed to create cache directory")?;
         }
 
         Ok(cache_dir)

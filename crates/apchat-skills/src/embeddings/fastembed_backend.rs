@@ -3,7 +3,7 @@ use anyhow::{Result, Context};
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
 use std::sync::Mutex;
 use std::path::PathBuf;
-use apchat_logging::get_okaychat_dir;
+use apchat_common::ApChatPaths;
 use apchat_vty::print_heart_yellow;
 use super::EmbeddingBackend;
 
@@ -17,15 +17,13 @@ pub struct FastEmbedBackend {
 
 impl FastEmbedBackend {
     /// Get or create the cache directory for FastEmbed models
-    /// Returns ~/.okaychat/fastembed
+    /// Returns ~/.cache/apchat/fastembed
     fn get_cache_dir() -> Result<PathBuf> {
-        // Use shared utility function to get base okaychat directory
-        let okaychat_dir = get_okaychat_dir()?;
-        let cache_dir = okaychat_dir.join("fastembed");
+        let cache_dir = ApChatPaths::fastembed_dir();
 
         // Create directory if it doesn't exist
         if !cache_dir.exists() {
-            std::fs::create_dir_all(&cache_dir)
+            ApChatPaths::ensure_dir(&cache_dir)
                 .context("Failed to create cache directory")?;
             print_heart_yellow(format!("Created FastEmbed cache directory: {:?}", cache_dir).as_str(), true);
         }
