@@ -101,6 +101,12 @@ impl McpClient {
                 continue;
             }
 
+            // Validate response ID matches our request ID
+            let response_id = response.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+            if response_id != id {
+                continue;
+            }
+
             if let Some(error) = response.get("error") {
                 let msg = error
                     .get("message")

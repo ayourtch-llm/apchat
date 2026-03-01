@@ -297,6 +297,9 @@ pub async fn register_mcp_tools(
     }
 
     // Register generic MCP servers
+    // Note: Command is split on whitespace. tokio::process::Command does NOT use a shell,
+    // so shell metacharacters (;, |, &&, $()) are NOT interpreted - they are passed
+    // literally as arguments. This is safe from shell injection.
     for (idx, cmd) in flags.mcp_servers.iter().enumerate() {
         let parts: Vec<&str> = cmd.split_whitespace().collect();
         if parts.is_empty() {
