@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
+apchat-common = { path = "../apchat-common" }
 apchat-terminal = { path = "../apchat-terminal" }
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }

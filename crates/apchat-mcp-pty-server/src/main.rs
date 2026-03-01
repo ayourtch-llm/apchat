@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 
+use apchat_common::ApChatPaths;
 use apchat_terminal::TerminalManager;
 
 // ---------------------------------------------------------------------------
@@ -494,11 +495,7 @@ async fn handle_pty_send_credential_keys(
         );
     }
 
-    let home_dir = std::env::var("HOME")
-        .map(PathBuf::from)
-        .map_err(|_| anyhow::anyhow!("HOME environment variable not set"))?;
-
-    let credentials_path = home_dir.join(".okaychat").join("credentials.toml");
+    let credentials_path = ApChatPaths::credentials_file();
 
     if !credentials_path.exists() {
         anyhow::bail!(
