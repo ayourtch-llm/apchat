@@ -7,6 +7,8 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
+use apchat_common::ApChatPaths;
+
 /// A single readline entry representing a command from the REPL
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadlineEntry {
@@ -77,32 +79,13 @@ impl ReadlineHistory {
     }
 }
 
-/// Get or create the base okaychat directory (~/.okaychat)
-fn get_okaychat_dir() -> Result<PathBuf> {
-    let home_dir = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .context("Failed to get home directory")?;
-
-    let okaychat_dir = PathBuf::from(home_dir).join(".okaychat");
-
-    // Create directory if it doesn't exist
-    if !okaychat_dir.exists() {
-        std::fs::create_dir_all(&okaychat_dir)
-            .context("Failed to create okaychat directory")?;
-    }
-
-    Ok(okaychat_dir)
-}
-
-/// Get or create the logs directory (~/.okaychat/logs)
+/// Get or create the logs directory using ApChatPaths
 fn get_logs_dir() -> Result<PathBuf> {
-    let logs_dir = get_okaychat_dir()?.join("logs");
+    let logs_dir = ApChatPaths::logs_dir();
     
     // Create directory if it doesn't exist
-    if !logs_dir.exists() {
-        std::fs::create_dir_all(&logs_dir)
-            .context("Failed to create logs directory")?;
-    }
+    ApChatPaths::ensure_dir(&logs_dir)
+        .context("Failed to create logs directory")?;
 
     Ok(logs_dir)
 }
@@ -488,7 +471,14 @@ mod tests {
         }
         
         // Verify the file was created at the expected location
-        let expected_path = temp_dir.path().join(".okaychat").join("logs").join("readline_history.jsonl");
+        // On macOS, dirs::cache_dir() returns ~/Library/Caches
+        // On Linux/Unix, it returns ~/.cache
+        let cache_dir = if cfg!(target_os = "macos") {
+            temp_dir.path().join("Library").join("Caches")
+        } else {
+            temp_dir.path().join(".cache")
+        };
+        let expected_path = cache_dir.join("apchat").join("logs").join("readline_history.jsonl");
         assert!(expected_path.exists(), "History file should exist at {}", expected_path.display());
         
         // Read and verify the content

@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+apchat-common = { path = "../apchat-common" }
 apchat-mspc = { path = "../apchat-mspc" }
 apchat-models = { path = "../apchat-models" }
 apchat-logging = { path = "../apchat-logging" }
