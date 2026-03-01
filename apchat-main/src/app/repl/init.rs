@@ -57,8 +57,18 @@ pub async fn initialize_repl(
             self_edit: cli.self_edit,
             diff_fuzz: cli.diff_fuzz,
             forecasting: cli.forecasting,
+            context_mode: cli.context_mode,
+            mcp_servers: cli.mcp_server.clone(),
         },
     );
+
+    // Register MCP server tools (async initialization)
+    let mcp_flags = FeatureFlags {
+        context_mode: cli.context_mode,
+        mcp_servers: cli.mcp_server.clone(),
+        ..FeatureFlags::default()
+    };
+    chat.register_mcp_tools(&mcp_flags).await;
 
     // Set summarize_subagents flag from CLI
     chat.summarize_subagents = !cli.no_summarize_subagents;

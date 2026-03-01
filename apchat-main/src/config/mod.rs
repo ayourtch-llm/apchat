@@ -28,6 +28,8 @@ pub struct FeatureFlags {
     pub self_edit: bool,
     pub diff_fuzz: bool,
     pub forecasting: bool,
+    pub context_mode: bool,
+    pub mcp_servers: Vec<String>,
 }
 
 /// Configuration for APChat client
@@ -246,4 +248,100 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     }
 
     registry
+}
+
+/// Register MCP server tools in the tool registry.
+///
+/// This function is async because it needs to spawn MCP server processes
+/// and perform JSON-RPC initialization. It should be called after the
+/// tool registry is created and before the first user interaction.
+///
+/// Returns the list of active MCP clients for lifecycle management.
+pub async fn register_mcp_tools(
+    registry: &mut ToolRegistry,
+    flags: &FeatureFlags,
+) -> Vec<std::sync::Arc<apchat_tools::mcp_client::McpClient>> {
+    let mut clients = Vec::new();
+
+    // Register context-mode MCP server if enabled
+    if flags.context_mode {
+        match apchat_tools::mcp_client::start_mcp_server(
+            "npx",
+            &["-y", "context-mode"],
+            "context-mode",
+            "ctx_",
+        )
+        .await
+        {
+            Ok((client, tools)) => {
+                let tool_count = tools.len();
+                for tool in tools {
+                    registry.register_with_categories(
+                        tool,
+                        vec!["mcp".to_string(), "context_mode".to_string()],
+                    );
+                }
+                print_heart_red(
+                    &format!("✓ context-mode MCP server started ({} tools registered with ctx_ prefix)", tool_count),
+                    true,
+                );
+                clients.push(client);
+            }
+            Err(e) => {
+                print_heart_yellow(
+                    &format!("⚠️  Failed to start context-mode MCP server: {}. Is Node.js 18+ installed?", e),
+                    true,
+                );
+            }
+        }
+    }
+
+    // Register generic MCP servers
+    for (idx, cmd) in flags.mcp_servers.iter().enumerate() {
+        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        if parts.is_empty() {
+            print_heart_yellow(
+                &format!("⚠️  Empty MCP server command, skipping"),
+                true,
+            );
+            continue;
+        }
+
+        let command = parts[0];
+        let args: Vec<&str> = parts[1..].to_vec();
+        let server_name = format!("mcp-{}", idx);
+        let prefix = format!("mcp{}_", idx);
+
+        match apchat_tools::mcp_client::start_mcp_server(
+            command,
+            &args,
+            &server_name,
+            &prefix,
+        )
+        .await
+        {
+            Ok((client, tools)) => {
+                let tool_count = tools.len();
+                for tool in tools {
+                    registry.register_with_categories(
+                        tool,
+                        vec!["mcp".to_string()],
+                    );
+                }
+                print_heart_red(
+                    &format!("✓ MCP server '{}' started ({} tools registered with {} prefix)", cmd, tool_count, prefix),
+                    true,
+                );
+                clients.push(client);
+            }
+            Err(e) => {
+                print_heart_yellow(
+                    &format!("⚠️  Failed to start MCP server '{}': {}", cmd, e),
+                    true,
+                );
+            }
+        }
+    }
+
+    clients
 }

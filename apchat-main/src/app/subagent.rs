@@ -54,9 +54,19 @@ pub async fn run_subagent_mode(
         backend_type,
         FeatureFlags {
             early_superpowers: cli.early_superpowers,
+            context_mode: cli.context_mode,
+            mcp_servers: cli.mcp_server.clone(),
             ..FeatureFlags::default()
         },
     );
+
+    // Register MCP server tools (async initialization)
+    let mcp_flags = FeatureFlags {
+        context_mode: cli.context_mode,
+        mcp_servers: cli.mcp_server.clone(),
+        ..FeatureFlags::default()
+    };
+    subagent.register_mcp_tools(&mcp_flags).await;
 
     // Mark as non-interactive to prevent prompts
     subagent.non_interactive = true;

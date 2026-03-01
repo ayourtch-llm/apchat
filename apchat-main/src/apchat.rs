@@ -75,6 +75,8 @@ pub struct APChat {
     pub(crate) context_edits: Arc<std::sync::Mutex<Vec<apchat_toolcore::ContextEdit>>>,
     // Whether to summarize subagent output via LLM (default: true)
     pub(crate) summarize_subagents: bool,
+    // Active MCP server clients (kept alive for the session lifetime)
+    pub(crate) mcp_clients: Vec<Arc<apchat_tools::mcp_client::McpClient>>,
 }
 
 impl APChat {
@@ -105,6 +107,13 @@ impl APChat {
     pub fn with_confirmation_registry(mut self, registry: Arc<apchat_toolcore::confirmation::ConfirmationRegistry>) -> Self {
         self.confirmation_registry = Some(registry);
         self
+    }
+
+    /// Initialize MCP server tools asynchronously.
+    /// Must be called after construction, before the first user interaction.
+    pub async fn register_mcp_tools(&mut self, flags: &FeatureFlags) {
+        let clients = crate::config::register_mcp_tools(&mut self.tool_registry, flags).await;
+        self.mcp_clients = clients;
     }
 
     pub fn new(api_key: String, work_dir: PathBuf) -> Self {
@@ -248,6 +257,7 @@ impl APChat {
             llm_overrides: Arc::new(std::sync::Mutex::new(None)),
             context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
             summarize_subagents: true,
+            mcp_clients: Vec::new(),
         };
 
         chat.messages.push(Message {
