@@ -32,6 +32,7 @@ pub mod diff_fuzz;
 pub mod citation;
 pub mod rlm;
 pub mod mcp_client;
+pub mod python_sandbox;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -57,5 +58,6 @@ pub use context_edit::*;
 pub use diff_fuzz::*;
 pub use citation::*;
 pub use rlm::*;
+pub use python_sandbox::*;
 
 

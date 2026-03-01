@@ -106,6 +106,7 @@ version = "1.0"
 default = []
 embeddings = ["fastembed"]
 forecasting = ["apchat-tools/forecasting"]
+python-sandbox = ["apchat-tools/python-sandbox"]
 
 [target."cfg(unix)".dependencies]
 libc = "0.2"

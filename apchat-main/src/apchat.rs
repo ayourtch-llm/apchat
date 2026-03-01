@@ -512,6 +512,9 @@ impl APChat {
                 // Add summarize_subagents flag
                 context = context.with_summarize_subagents(self.summarize_subagents);
 
+                // Add tool registry (for tools like python_sandbox that need to invoke other tools)
+                context = context.with_tool_registry(Arc::new(self.tool_registry.clone()));
+
                 let context = context;
 
                 let result = self.tool_registry.execute_tool(name, params, &context).await;

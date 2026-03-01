@@ -17,6 +17,7 @@ pub struct FeatureFlags {
     pub early_superpowers: bool,
     pub delayed_instructions: bool,
     pub metacog_tools: bool,
+    pub python_sandbox: bool,
     pub self_regulate: bool,
     pub learning_opportunities: bool,
     pub community_skills: bool,
@@ -214,6 +215,22 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
         registry.register_with_categories(BecomeTool, vec!["metacog".to_string()]);
         registry.register_with_categories(DrugsTool, vec!["metacog".to_string()]);
         registry.register_with_categories(RitualTool, vec!["metacog".to_string()]);
+    }
+
+    // Register Python sandbox tool (only if enabled via --python-sandbox CLI flag)
+    #[cfg(feature = "python-sandbox")]
+    if flags.python_sandbox {
+        registry.register_with_categories(
+            PythonSandboxTool,
+            vec!["python_sandbox".to_string(), "system".to_string()],
+        );
+    }
+    #[cfg(not(feature = "python-sandbox"))]
+    if flags.python_sandbox {
+        print_heart_yellow(
+            "Warning: --python-sandbox flag requires the 'python-sandbox' feature. Build with `cargo build --features python-sandbox`",
+            true,
+        );
     }
 
     // Register self-regulate tool (only if enabled via --self-regulate CLI flag)
