@@ -6,6 +6,7 @@ mod tests {
     use apchat_policy::PolicyManager;
     use apchat_main::config::ClientConfig;
     use apchat_main::cli::Cli;
+    use apchat_common::ApChatPaths;
 
     // Helper to create test CLI configuration
     fn create_test_cli(task: Option<String>) -> Cli {
@@ -43,7 +44,7 @@ mod tests {
             web_port: 8080,
             web_bind: "127.0.0.1".to_string(),
             web_attachable: false,
-            sessions_dir: "~/.okaychat/sessions".to_string(),
+            sessions_dir: ApChatPaths::sessions_dir().to_string_lossy().to_string(),
         }
     }
 
