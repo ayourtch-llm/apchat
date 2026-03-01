@@ -8,6 +8,13 @@
 //! - **Equity Research**: earnings analysis, initiating coverage, sector overviews
 //! - **Private Equity**: deal sourcing, due diligence, IC memos, portfolio monitoring
 //! - **Wealth Management**: client reports, financial plans, portfolio rebalancing
+//!
+//! ## Note on upstream references
+//!
+//! Some skills reference auxiliary files from the upstream repo (e.g., `references/`,
+//! `TROUBLESHOOTING.md`, `recalc.py`, example spreadsheets). These are not included
+//! in this adaptation. The skills still provide comprehensive guidance without them.
+//! For the full upstream resources, see the original repository.
 
 use std::collections::HashMap;
 
