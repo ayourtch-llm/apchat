@@ -197,6 +197,19 @@ impl APChat {
                 if !flags.elements_of_style {
                     registry.remove_skill("writing-clearly-and-concisely");
                 }
+                if flags.financial_services {
+                    let fsi_skills = apchat_finserv::get_financial_services_skills();
+                    let mut count = 0;
+                    for (_name, content) in &fsi_skills {
+                        match registry.add_skill_from_content(content) {
+                            Ok(_) => count += 1,
+                            Err(e) => {
+                                print_heart_yellow(&format!("⚠️  Failed to load FSI skill: {}", e), true);
+                            }
+                        }
+                    }
+                    print_heart_red(&format!("✓ Loaded {} financial services skills (--financial-services)", count), true);
+                }
                 Some(Arc::new(registry))
             }
             Err(e) => {

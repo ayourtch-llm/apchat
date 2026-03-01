@@ -51,6 +51,7 @@ pub async fn initialize_repl(
         diff_fuzz: cli.diff_fuzz,
         forecasting: cli.forecasting,
         context_mode: cli.context_mode,
+        financial_services: cli.financial_services,
         mcp_servers: cli.mcp_server.clone(),
     };
 

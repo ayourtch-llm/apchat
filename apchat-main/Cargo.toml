@@ -29,6 +29,7 @@ apchat-toolcore = { path = "../crates/apchat-toolcore" }
 apchat-tools = { path = "../crates/apchat-tools" }
 apchat-webex = { path = "../crates/apchat-webex" }
 apchat-vty = { path = "../crates/apchat-vty" }
+apchat-finserv = { path = "../crates/apchat-finserv" }
 lopdf = "0.39"
 once_cell = "1.18"
 flate2 = "1.0"

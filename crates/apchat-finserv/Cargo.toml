@@ -1,0 +1,7 @@
+[package]
+name = "apchat-finserv"
+version = "0.1.0"
+edition = "2021"
+description = "Financial services skills for APChat, adapted from https://github.com/anthropics/financial-services-plugins"
+
+[dependencies]

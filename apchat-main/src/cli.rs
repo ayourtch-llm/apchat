@@ -254,6 +254,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_summarize_subagents: bool,
 
+    /// Enable financial services skills (comps analysis, DCF models, equity research, private equity, etc.)
+    /// Adapted from https://github.com/anthropics/financial-services-plugins
+    #[arg(long)]
+    pub financial_services: bool,
+
     /// Enable context-mode MCP server (https://github.com/mksglu/claude-context-mode)
     /// Provides sandboxed code execution and FTS5 knowledge base tools that save ~98% of context window.
     /// Requires Node.js 18+ to be installed. Tools are registered with 'ctx_' prefix.
