@@ -3,6 +3,7 @@
 use apchat_toolcore::{Tool, ToolParameters, ToolContext, ToolRegistry};
 use apchat_policy::PolicyManager;
 use apchat_tools::PythonSandboxTool;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -191,4 +192,55 @@ async fn test_python_sandbox_list_comprehension() {
     let result = tool.execute(params, &context).await;
     assert!(result.success, "List comprehension should succeed: {:?}", result.error);
     assert!(result.content.contains("16"), "Result should contain 16, got: {}", result.content);
+}
+
+#[tokio::test]
+async fn test_python_sandbox_calls_mock_tool() {
+    use apchat_toolcore::ParameterDefinition;
+
+    struct MockGreetTool;
+
+    #[async_trait::async_trait]
+    impl Tool for MockGreetTool {
+        fn name(&self) -> &str { "greet" }
+        fn description(&self) -> &str { "Returns a greeting for the given name" }
+        fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+            HashMap::from([(
+                "name".to_string(),
+                ParameterDefinition {
+                    param_type: "string".to_string(),
+                    description: "Name to greet".to_string(),
+                    required: true,
+                    default: None,
+                },
+            )])
+        }
+        async fn execute(&self, params: ToolParameters, _context: &ToolContext) -> apchat_toolcore::ToolResult {
+            let name: String = params.get_required("name").unwrap_or_default();
+            apchat_toolcore::ToolResult::success(format!("Hello, {name}!"))
+        }
+    }
+
+    let mut registry = ToolRegistry::new();
+    registry.register(PythonSandboxTool);
+    registry.register(MockGreetTool);
+
+    let context = ToolContext::new(
+        PathBuf::from("/tmp"),
+        "test-session".to_string(),
+        PolicyManager::default(),
+    )
+    .with_tool_registry(Arc::new(registry));
+
+    let tool = PythonSandboxTool;
+    let mut params = ToolParameters::new();
+    params.set("code", "result = greet(name='World')\nresult");
+
+    let result = tool.execute(params, &context).await;
+    assert!(result.success, "Mock tool call should succeed: {:?}", result.error);
+    assert!(
+        result.content.contains("Hello, World!"),
+        "Should contain greeting, got: {}",
+        result.content
+    );
 }
