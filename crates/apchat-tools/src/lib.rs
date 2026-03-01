@@ -32,6 +32,7 @@ pub mod diff_fuzz;
 pub mod rlm;
 pub mod mcp_client;
 pub mod searxng;
+pub mod python_sandbox;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -56,5 +57,6 @@ pub use self_regulate::*;
 pub use context_edit::*;
 pub use diff_fuzz::*;
 pub use rlm::*;
+pub use python_sandbox::*;
 
 

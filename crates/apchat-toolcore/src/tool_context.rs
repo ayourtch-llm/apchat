@@ -8,6 +8,7 @@ use apchat_skills::SkillRegistry;
 use apchat_todo::TodoManager;
 use apchat_vty::print_heart_red;
 use crate::content_limiter::ContentLimiter;
+use crate::tool_registry::ToolRegistry;
 use apchat_models::types::ModelColor;
 use apchat_mspc::MspcMessage;
 use apchat_llm_api::LlmRequestOverrides;
@@ -48,6 +49,7 @@ pub struct ToolContext {
     pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>, // Shared LLM request overrides (self-regulate)
     pub context_edits: Option<Arc<std::sync::Mutex<Vec<ContextEdit>>>>, // Pending context edits (self-edit tools)
     pub summarize_subagents: bool, // Whether to summarize subagent output via LLM (default: true)
+    pub tool_registry: Option<Arc<ToolRegistry>>, // Tool registry for tools that need to invoke other tools (e.g., python_sandbox)
 }
 
 impl Clone for ToolContext {
@@ -73,6 +75,7 @@ impl Clone for ToolContext {
             llm_overrides: self.llm_overrides.clone(),
             context_edits: self.context_edits.clone(),
             summarize_subagents: self.summarize_subagents,
+            tool_registry: self.tool_registry.clone(),
         }
     }
 }
@@ -98,6 +101,7 @@ impl std::fmt::Debug for ToolContext {
             .field("llm_overrides", &self.llm_overrides.is_some())
             .field("context_edits", &self.context_edits.is_some())
             .field("summarize_subagents", &self.summarize_subagents)
+            .field("tool_registry", &self.tool_registry.is_some())
             .finish()
     }
 }
@@ -124,6 +128,7 @@ impl ToolContext {
             llm_overrides: None,
             context_edits: None,
             summarize_subagents: true,
+            tool_registry: None,
         }
     }
 
@@ -204,6 +209,11 @@ impl ToolContext {
 
     pub fn with_summarize_subagents(mut self, summarize: bool) -> Self {
         self.summarize_subagents = summarize;
+        self
+    }
+
+    pub fn with_tool_registry(mut self, registry: Arc<ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
         self
     }
 

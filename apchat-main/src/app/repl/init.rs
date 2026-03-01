@@ -39,6 +39,7 @@ pub async fn initialize_repl(
         early_superpowers: cli.early_superpowers,
         delayed_instructions: cli.delayed_instructions,
         metacog_tools: cli.metacog_tools,
+        python_sandbox: cli.python_sandbox,
         self_regulate: cli.self_regulate,
         learning_opportunities: cli.learning_opportunities,
         community_skills: cli.community_skills,

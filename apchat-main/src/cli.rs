@@ -192,6 +192,12 @@ pub struct Cli {
     #[arg(long)]
     pub metacog_tools: bool,
 
+    /// Enable sandboxed Python environment via ouros
+    /// Exposes agent tools as Python functions in a secure sandbox
+    /// Based on https://github.com/parcadei/ouros
+    #[arg(long)]
+    pub python_sandbox: bool,
+
     /// Enable self-regulate tool for LLM parameter self-adjustment
     /// Allows the LLM to alter temperature, top_p, max_tokens for the next N calls
     #[arg(long)]
