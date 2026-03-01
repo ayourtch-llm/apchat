@@ -4,6 +4,7 @@ use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use apchat_policy::PolicyManager;
 use apchat_tools::PtySendCredentialKeysTool;
 use apchat_terminal::TerminalManager;
+use apchat_common::ApChatPaths;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -38,10 +39,10 @@ async fn test_pty_send_credential_keys_reads_credentials_toml() {
     // Set HOME to temp_dir FIRST, before creating files
     std::env::set_var("HOME", temp_dir.path());
 
-    let credentials_path = temp_dir.path().join(".okaychat").join("credentials.toml");
+    let credentials_path = ApChatPaths::credentials_file();
 
-    // Create .okaychat directory
-    fs::create_dir_all(credentials_path.parent().unwrap()).unwrap();
+    // Ensure config directory exists
+    ApChatPaths::ensure_dir(credentials_path.parent().unwrap()).unwrap();
 
     // Create test credentials.toml
     let credentials_content = r#"
@@ -120,10 +121,10 @@ async fn test_pty_send_credential_keys_matches_regex() {
     // Set HOME to temp_dir FIRST
     std::env::set_var("HOME", temp_dir.path());
 
-    let credentials_path = temp_dir.path().join(".okaychat").join("credentials.toml");
+    let credentials_path = ApChatPaths::credentials_file();
 
-    // Create .okaychat directory
-    fs::create_dir_all(credentials_path.parent().unwrap()).unwrap();
+    // Ensure config directory exists
+    ApChatPaths::ensure_dir(credentials_path.parent().unwrap()).unwrap();
 
     // Create test credentials.toml with regex patterns
     let credentials_content = r#"
@@ -200,10 +201,10 @@ async fn test_pty_send_credential_keys_missing_session() {
     // Set HOME to temp_dir FIRST
     std::env::set_var("HOME", temp_dir.path());
 
-    let credentials_path = temp_dir.path().join(".okaychat").join("credentials.toml");
+    let credentials_path = ApChatPaths::credentials_file();
 
-    // Create .okaychat directory
-    fs::create_dir_all(credentials_path.parent().unwrap()).unwrap();
+    // Ensure config directory exists
+    ApChatPaths::ensure_dir(credentials_path.parent().unwrap()).unwrap();
 
     // Create minimal credentials.toml
     let credentials_content = r#"

@@ -61,7 +61,7 @@ impl ApChatPaths {
     }
 
     /// Ensure a directory exists, creating it if necessary
-    pub fn ensure_dir(path: &PathBuf) -> std::io::Result<()> {
+    pub fn ensure_dir(path: &std::path::Path) -> std::io::Result<()> {
         fs::create_dir_all(path)
     }
 
