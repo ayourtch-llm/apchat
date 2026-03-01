@@ -5,6 +5,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{SqlitePool, Row};
 use std::path::PathBuf;
 
+use apchat_common::ApChatPaths;
 use super::memory::{Memory, ScheduledInstruction};
 
 /// Get the default memory database path
@@ -14,14 +15,7 @@ pub fn get_memory_db_path() -> PathBuf {
         return PathBuf::from(custom_path);
     }
     
-    let path = if let Some(mut base) = dirs::home_dir() {
-        base.push(".okaychat");
-        base.push("memory.sqlite");
-        base
-    } else {
-        // Fallback to current directory
-        PathBuf::from("memory.sqlite")
-    };
+    let path = ApChatPaths::data_dir().join("memory.sqlite");
     
     // Ensure directory exists
     if let Some(parent) = path.parent() {
