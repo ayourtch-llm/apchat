@@ -35,6 +35,25 @@ pub async fn initialize_repl(
     // Resolve terminal backend and create APChat
     let backend_type = crate::resolve_terminal_backend(cli)?;
 
+    let flags = FeatureFlags {
+        early_superpowers: cli.early_superpowers,
+        delayed_instructions: cli.delayed_instructions,
+        metacog_tools: cli.metacog_tools,
+        self_regulate: cli.self_regulate,
+        learning_opportunities: cli.learning_opportunities,
+        community_skills: cli.community_skills,
+        tiling_tree: cli.tiling_tree,
+        convening_experts: cli.convening_experts,
+        crafting_instructions: cli.crafting_instructions,
+        reviewing_ai_papers: cli.reviewing_ai_papers,
+        elements_of_style: cli.elements_of_style,
+        self_edit: cli.self_edit,
+        diff_fuzz: cli.diff_fuzz,
+        forecasting: cli.forecasting,
+        context_mode: cli.context_mode,
+        mcp_servers: cli.mcp_server.clone(),
+    };
+
     let mut chat = APChat::new_with_config(
         client_config,
         work_dir,
@@ -42,33 +61,11 @@ pub async fn initialize_repl(
         cli.stream,
         cli.verbose,
         backend_type,
-        FeatureFlags {
-            early_superpowers: cli.early_superpowers,
-            delayed_instructions: cli.delayed_instructions,
-            metacog_tools: cli.metacog_tools,
-            self_regulate: cli.self_regulate,
-            learning_opportunities: cli.learning_opportunities,
-            community_skills: cli.community_skills,
-            tiling_tree: cli.tiling_tree,
-            convening_experts: cli.convening_experts,
-            crafting_instructions: cli.crafting_instructions,
-            reviewing_ai_papers: cli.reviewing_ai_papers,
-            elements_of_style: cli.elements_of_style,
-            self_edit: cli.self_edit,
-            diff_fuzz: cli.diff_fuzz,
-            forecasting: cli.forecasting,
-            context_mode: cli.context_mode,
-            mcp_servers: cli.mcp_server.clone(),
-        },
+        flags.clone(),
     );
 
     // Register MCP server tools (async initialization)
-    let mcp_flags = FeatureFlags {
-        context_mode: cli.context_mode,
-        mcp_servers: cli.mcp_server.clone(),
-        ..FeatureFlags::default()
-    };
-    chat.register_mcp_tools(&mcp_flags).await;
+    chat.register_mcp_tools(&flags).await;
 
     // Set summarize_subagents flag from CLI
     chat.summarize_subagents = !cli.no_summarize_subagents;
