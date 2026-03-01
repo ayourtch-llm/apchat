@@ -784,9 +784,8 @@ mod tests {
             );
 
             // Create a temp file with known content
-            let dir = std::env::temp_dir().join("apchat-ocr-test");
-            let _ = std::fs::create_dir_all(&dir);
-            let file = dir.join("test.png");
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("test.png");
             std::fs::write(&file, b"fake png data").unwrap();
 
             let resolved = client
@@ -801,8 +800,6 @@ mod tests {
                 .decode(b64_part)
                 .unwrap();
             assert_eq!(decoded, b"fake png data");
-
-            let _ = std::fs::remove_dir_all(&dir);
         });
     }
 }
