@@ -7,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::APChat;
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
-use apchat_logging::{log_request_to_file, safe_truncate, get_okaychat_dir};
+use apchat_logging::{log_request_to_file, safe_truncate};
+use apchat_common::ApChatPaths;
 use apchat_todo::{Task, TaskStatus};
 
 /// Calculate the current conversation size in bytes by serializing to JSON
@@ -307,8 +308,7 @@ fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
 /// Save conversation history to ~/.okaychat/histories/ before compaction
 fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Result<()> {
     // Get history directory
-    let okaychat_dir = get_okaychat_dir()?;
-    let histories_dir = okaychat_dir.join("histories");
+    let histories_dir = ApChatPaths::histories_dir();
     
     // Create histories directory if it doesn't exist
     if !histories_dir.exists() {
@@ -348,8 +348,7 @@ fn save_history_before_compaction(chat: &APChat, compaction_type: &str) -> Resul
 /// Save conversation history to ~/.okaychat/histories/ after compaction
 fn save_history_after_compaction(chat: &APChat, compaction_type: &str, original_size: usize) -> Result<()> {
     // Get history directory
-    let okaychat_dir = get_okaychat_dir()?;
-    let histories_dir = okaychat_dir.join("histories");
+    let histories_dir = ApChatPaths::histories_dir();
     
     // Create histories directory if it doesn't exist
     if !histories_dir.exists() {
