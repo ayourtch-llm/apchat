@@ -2,6 +2,8 @@ use anyhow::Result;
 use colored::Colorize;
 use std::time::{Instant, Duration};
 use tokio::sync::mpsc as tokio_mpsc;
+use uuid;
+use chrono;
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk, ToolCall, FunctionCall};
@@ -9,9 +11,39 @@ use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
 use apchat_toolcore::parse_xml_tool_calls;
+use apchat_toolcore::sql_logger;
 use apchat_vty::{print_heart_yellow, print_heart_red, print_heart_to_file, token_counter};
 
 use super::ApiCallParams;
+
+/// Detect provider from API URL
+fn detect_provider(api_url: &str) -> String {
+    if api_url.contains("api.anthropic.com") {
+        "anthropic".to_string()
+    } else if api_url.contains("api.openai.com") {
+        "openai".to_string()
+    } else if api_url.contains("api.groq.com") {
+        "groq".to_string()
+    } else if api_url.contains("localhost") || api_url.contains("127.0.0.1") {
+        "llama.cpp".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+/// Extract model from request
+fn extract_model(request: &ChatRequest) -> String {
+    request.model.clone()
+}
+
+/// Extract endpoint from API URL
+fn extract_endpoint(api_url: &str) -> String {
+    if let Some(pos) = api_url.find("/v1") {
+        api_url[pos..].to_string()
+    } else {
+        "/v1/chat/completions".to_string()
+    }
+}
 
 /// Simple chunk type for streaming output
 #[derive(Debug, Clone)]
@@ -177,6 +209,36 @@ pub(crate) async fn call_api_streaming_stateless(
     // Log request to file for persistent debugging
     let _ = log_request_to_file(&api_url, &request, &current_model, &params.api_key);
 
+    // Log to SQL database
+    let request_start = Instant::now();
+    let request_body_str = serde_json::to_string(&request).unwrap_or_default();
+    let call_id = uuid::Uuid::new_v4().to_string();
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    let _ = sql_logger::log_http(
+        call_id.clone(),
+        &timestamp,
+        &detect_provider(&api_url),
+        &extract_model(&request),
+        &extract_endpoint(&api_url),
+        0,
+        0,
+        None,
+        None,
+        None,
+        None,
+        Some(request_body_str.clone()),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ).await;
+
     let api_key = crate::config::get_api_key(&params.client_config, &params.api_key, &current_model);
 
     // Serialize request and apply LLM overrides if set (from self-regulate tool)
@@ -208,11 +270,38 @@ pub(crate) async fn call_api_streaming_stateless(
 
     if !status.is_success() {
         let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
+        let latency_ms = request_start.elapsed().as_millis() as u64;
 
         // Log error response
         log_response(&status, &headers, &error_body, params.verbose);
         let _ = log_response_to_file(&status, &headers, &error_body, request_timestamp, &current_model);
         let _ = log_raw_response_to_file(&error_body, request_timestamp, &current_model);
+
+        // Log to SQL database
+        let _ = sql_logger::log_http(
+            call_id.clone(),
+            &timestamp,
+            &detect_provider(&api_url),
+            &extract_model(&request),
+            &extract_endpoint(&api_url),
+            status.as_u16(),
+            latency_ms,
+            None,
+            None,
+            None,
+            None,
+            Some(request_body_str.clone()),
+            Some(error_body.clone()),
+            Some(format!("HTTP {}", status)),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ).await;
 
         return Err(anyhow::anyhow!("API request failed with status {}: {}", status, error_body));
     }
@@ -497,6 +586,36 @@ pub(crate) async fn call_api_streaming_stateless(
     
     // Also log the raw response body without any transformation
     let _ = log_raw_response_to_file(&raw_response_body, request_timestamp, &current_model);
+
+    // Log to SQL database
+    let latency_ms = request_start.elapsed().as_millis() as u64;
+    let input_tokens = metrics.prompt_tokens.map(|t| t as i64);
+    let output_tokens = Some(metrics.completion_tokens as i64);
+    
+    let _ = sql_logger::log_http(
+        call_id.clone(),
+        &timestamp,
+        &detect_provider(&api_url),
+        &extract_model(&request),
+        &extract_endpoint(&api_url),
+        status.as_u16(),
+        latency_ms,
+        None,  // ttft not tracked in metrics
+        input_tokens,
+        output_tokens,
+        None,
+        Some(request_body_str.clone()),
+        Some(response_body_for_logging.clone()),
+        None,
+        headers.get("x-request-id").and_then(|h| h.to_str().ok().map(|s| s.to_string())),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ).await;
 
     // Build the final message
     let mut message = Message {
