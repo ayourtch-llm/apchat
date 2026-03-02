@@ -16,19 +16,25 @@ This directory contains best practice guides for using the available tools effic
   - Best practices at a glance
   - Common usage patterns
 
+- **[python_sandbox_guide.md](python_sandbox_guide.md)** - Complete guide to the Python sandbox
+  - **All agent tools return strings** - learn parsing patterns
+  - Examples for file operations, search, subagents, and more
+  - Best practices for batching and complex workflows
+
 ## Why This Matters
 
-Reading files efficiently is crucial because:
+Using tools efficiently is crucial because:
 1. **Iteration cost** - Each tool call consumes your available interactions
 2. **Context limits** - Large outputs compete with conversation history
 3. **Precision** - Focused reading gets you answers faster
-4. **Reliability** - Chunked reading prevents truncation
+4. **Reliability** - Proper usage prevents truncation and errors
 
 ## Recommended Reading Order
 
 1. Start with **file_reading_quick_reference.md** for immediate guidance
 2. Read **read_file_usage.md** for detailed best practices
 3. Review **curly_glance_usage.md** for advanced exploration techniques
+4. Check **python_sandbox_guide.md** for batch operations and automation
 
 ## Need More Help?
 
