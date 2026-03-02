@@ -312,6 +312,12 @@ pub struct Readline {
     prompt_width: usize,
     /// Cached terminal screen width (cleared on startup and on SIGWINCH)
     cached_screen_width: Option<u16>,
+    /// Idle command to inject when timeout is reached
+    idle_command: Option<String>,
+    /// Seconds of inactivity before injecting idle_command (None = disabled)
+    idle_period_secs: Option<u32>,
+    /// Next time to inject idle command (Some = enabled)
+    idle_command_time: Option<chrono::DateTime<chrono::Local>>,
 }
 
 impl Readline {
@@ -390,6 +396,9 @@ impl Readline {
             confirmation_id: None,
             prompt_width: 0,
             cached_screen_width: None,
+            idle_command: None,
+            idle_period_secs: None,
+            idle_command_time: None,
         })
     }
 
