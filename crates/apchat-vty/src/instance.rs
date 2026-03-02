@@ -188,6 +188,7 @@ impl ReadlineInstance {
     /// * `prompt` - The prompt string to display
     /// * `mspc_receiver` - Optional mutable reference to the MSPC receiver
     /// * `readline_receiver` - Optional broadcast receiver for TextOutput messages from ReadlineDestination
+    /// * `idle_config` - Optional idle timeout configuration for automatic command injection
     ///
     /// # Returns
     ///
@@ -201,11 +202,12 @@ impl ReadlineInstance {
         prompt: &str,
         mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<apchat_mspc::MspcMessage>>,
         readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
+        idle_config: Option<crate::IdleConfig>,
     ) -> Result<Option<String>> {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt, mspc_receiver, readline_receiver, None)? {
+        match rl.readline(prompt, mspc_receiver, readline_receiver, idle_config)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)

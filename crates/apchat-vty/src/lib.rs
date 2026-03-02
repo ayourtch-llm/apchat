@@ -7,7 +7,7 @@ pub mod readline;
 pub mod history;
 pub mod instance;
 
-pub use readline::{Readline, ReadlineResult};
+pub use readline::{Readline, ReadlineResult, IdleConfig};
 pub use history::{ReadlineEntry, ReadlineHistory, load_history, save_history, load_and_add_to_editor, save_to_file};
 pub use instance::ReadlineInstance;
 use std::io::BufWriter;

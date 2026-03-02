@@ -19,6 +19,7 @@ pub struct RouterConfig {
     pub confirmation_registry: Arc<ConfirmationRegistry>,
     pub signal_receiver: tokio::sync::mpsc::Receiver<MspcMessage>,
     pub interrupt_sender: tokio::sync::mpsc::Sender<MspcMessage>,
+    pub idle_config: Option<apchat_vty::IdleConfig>,
 }
 
 /// Spawn the background terminal input router task.
@@ -37,6 +38,7 @@ pub fn spawn_input_router(config: RouterConfig) -> JoinHandle<()> {
         confirmation_registry,
         signal_receiver,
         interrupt_sender: _interrupt_sender,
+        idle_config,
     } = config;
 
     let mut terminal_router = TerminalInputRouter::new(mspc_channel);
@@ -64,13 +66,14 @@ pub fn spawn_input_router(config: RouterConfig) -> JoinHandle<()> {
             // Clone the Arc for use in spawn_blocking
             let receiver_mutex_clone = signal_receiver_mutex.clone();
             let mut readline_receiver = get_readline_receiver();
+            let idle_config_clone = idle_config.clone();
 
             // Use spawn_blocking for readline (it's a blocking operation)
             let line_result = tokio::task::spawn_blocking(move || {
                 let mut receiver_guard = receiver_mutex_clone.blocking_lock();
                 let receiver_ref = &mut *receiver_guard;
 
-                apchat_vty::ReadlineInstance::readline_with_mspc(&prompt_string, Some(receiver_ref), Some(&mut readline_receiver))
+                apchat_vty::ReadlineInstance::readline_with_mspc(&prompt_string, Some(receiver_ref), Some(&mut readline_receiver), idle_config_clone)
             }).await;
 
             match line_result {

@@ -132,7 +132,7 @@ pub async fn run_repl_mode(
     mspc_channel_opt: Option<Arc<MspcChannel>>,
 ) -> Result<()> {
     // ── Initialization ─────────────────────────────────────────────────────
-    let (mut chat, _idle_config) =
+    let (mut chat, idle_config) =
         init::initialize_repl(cli, client_config, work_dir, policy_manager).await?;
 
     // ── Persistent Ctrl-C handler ──────────────────────────────────────────
@@ -182,6 +182,7 @@ pub async fn run_repl_mode(
         confirmation_registry: confirmation_registry.clone(),
         signal_receiver,
         interrupt_sender:     interrupt_sender.clone(),
+        idle_config,
     });
 
     let interrupt_sender_for_main = interrupt_sender;

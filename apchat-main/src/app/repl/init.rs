@@ -2,7 +2,7 @@ use anyhow::Result;
 use colored::Colorize;
 use std::path::PathBuf;
 
-use apchat_vty::{print_heart_yellow, print_heart_red, status_info};
+use apchat_vty::{print_heart_yellow, print_heart_red, status_info, IdleConfig};
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
 use apchat_policy::PolicyManager;
@@ -10,12 +10,6 @@ use apchat_policy::PolicyManager;
 use crate::APChat;
 use crate::cli::Cli;
 use crate::config::{ClientConfig, FeatureFlags};
-
-/// Idle timeout configuration, present only when both --idle-timeout and --idle-input are set.
-pub struct IdleConfig {
-    pub timeout_secs: u32,
-    pub input_text: String,
-}
 
 /// Initialize the REPL session.
 ///
