@@ -416,8 +416,26 @@ impl APChat {
             }
             _ => {
                 // Use the tool registry for all tools (including plan_edits and apply_edit_plan)
-                let params = ToolParameters::from_json(arguments)
-                    .with_context(|| format!("Failed to parse tool arguments for '{}'.", name))?;
+                let params = match ToolParameters::from_json(arguments) {
+                    Ok(params) => params,
+                    Err(e) => {
+                        // Log the parse failure
+                        let error_msg = format!("Failed to parse tool arguments for '{}': {}", name, e);
+                        let _ = apchat_toolcore::sql_logger::log_tool_parse(
+                            None,
+                            Some(name.to_string()),
+                            None,
+                            None,
+                            Some(arguments.to_string()),  // Log the raw arguments that failed
+                            Some(error_msg.clone()),
+                            false,
+                            None,
+                            None,
+                            None,
+                        ).await;
+                        return Err(anyhow::anyhow!("{}", error_msg));
+                    }
+                };
 
                 // Get tool schema for validation
                 let tool = self.tool_registry.get_tool(name)

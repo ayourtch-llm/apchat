@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use apchat_models::Message as ChatMessage;
-use apchat_vty::{print_heart_red, print_heart_yellow};
+use apchat_vty::{print_heart_red, print_heart_yellow, tool_counter::ToolGuard};
 use apchat_toolcore::ToolParameters;
 use serde_json::Value;
 use crate::{
@@ -529,6 +529,7 @@ async fn handle_chat_with_broadcast(
                     };
 
                     // Add validated parameters to context and execute
+                    let _tool_guard = ToolGuard::new();
                     let tool_result = apchat.tool_registry.execute_tool(
                         &tool_call.function.name,
                         validated_params,
