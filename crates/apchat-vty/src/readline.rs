@@ -402,6 +402,19 @@ impl Readline {
         })
     }
 
+    /// Get the number of seconds until the next idle command injection
+    /// Returns None if idle timeout is not configured
+    fn get_idle_time_remaining(&self) -> Option<i64> {
+        match (&self.idle_command_time, &self.idle_period_secs) {
+            (Some(time), Some(_period)) => {
+                let now = chrono::Local::now();
+                let diff = *time - now;
+                Some(diff.num_seconds())
+            }
+            _ => None,
+        }
+    }
+
     /// Returns the current input line.
     ///
     /// # Example
