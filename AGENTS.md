@@ -447,8 +447,35 @@ cargo +nightly udeps
 
 - Policy system restricts file access and command execution
 - File edits always show diffs before execution
-- Gitignore-aware file operations
-- No secrets should be committed (check .gitignore)
+## Git Operations
+
+### Rebasing and Cherry-Picking
+
+When using `git rebase --continue` or `git cherry-pick --continue`, set `GIT_EDITOR=true` to avoid interactive editor prompts:
+
+```bash
+GIT_EDITOR=true git rebase --continue
+GIT_EDITOR=true git cherry-pick --continue
+```
+
+This accepts the default commit message without opening vim/nano.
+
+### Pushing After Rebase
+
+After rebasing, always try a normal push first:
+
+```bash
+git push origin main
+```
+
+If it fails with "non-fast-forward", **ask the user** before using `--force-with-lease`. Force pushing rewrites history and should only be done with explicit confirmation.
+
+### Commit Best Practices
+
+- **Double-check directories** before committing - verify `git status` shows only intended files
+- **Group logically related files** together in single commits for cleaner history
+- **Avoid committing large directories/files** without explicit user confirmation
+- **Check file sizes** with `git add --dry-run` before staging
 - Use environment variables for sensitive configuration
 
 ## Documentation
