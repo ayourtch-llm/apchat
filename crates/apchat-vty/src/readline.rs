@@ -21,6 +21,13 @@ use crate::status_info;
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
 
+/// Idle timeout configuration
+#[derive(Clone, Debug)]
+pub struct IdleConfig {
+    pub timeout_secs: u32,
+    pub input_text: String,
+}
+
 /// Strips ANSI escape codes from a string to get the visible character count.
 ///
 /// ANSI escape codes are sequences like `\x1b[31m` (red) or `\x1b[1m` (bold).
