@@ -459,7 +459,7 @@ impl WebexWebSocketRouter {
         // Timers for ping and connection age
         let ping_interval = Duration::from_secs(PING_INTERVAL_SECS);
         let mut ping_timer = tokio::time::interval(ping_interval);
-        ping_timer.tick().await; // Consume the immediate first tick
+        ping_timer.tick().await; // First tick completes immediately, consume it to start the interval timer
 
         let mut last_data_received = Instant::now();
         let mut pings_sent: u64 = 0;
@@ -561,8 +561,8 @@ impl WebexWebSocketRouter {
                         }
                     }
 
-                    // Check for missing pongs (if we've sent pings but not received pongs)
-                    if pings_sent > 0 && pongs_received == 0 && pings_sent >= 3 {
+                    // Check for missing pongs (if we've sent pings but many go unanswered)
+                    if pings_sent > 0 && pings_sent - pongs_received >= 3 {
                         print_heart_yellow(&format!(
                             "⚠️ No pongs received after {} pings ({}s silent), connection may be dead",
                             pings_sent, silent_secs
