@@ -101,6 +101,57 @@ pub mod token_counter {
 
 pub use request_counter::{RequestGuard, get_count};
 
+/// Atomic counter for tracking active tool executions
+/// This module provides thread-safe tracking of ongoing tool operations
+pub mod tool_counter {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    /// Global atomic counter for active tool executions
+    static ACTIVE_TOOLS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Get the current count of active tools
+    ///
+    /// # Returns
+    /// * `usize` - The number of currently active tool executions
+    pub fn get_count() -> usize {
+        ACTIVE_TOOLS.load(Ordering::Relaxed)
+    }
+
+    /// Increment the tool counter
+    fn increment() {
+        ACTIVE_TOOLS.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Decrement the tool counter
+    fn decrement() {
+        ACTIVE_TOOLS.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    /// RAII guard that automatically increments the counter on creation
+    /// and decrements it on drop
+    #[derive(Debug)]
+    pub struct ToolGuard {
+        _marker: (),
+    }
+
+    impl ToolGuard {
+        /// Create a new ToolGuard, incrementing the active tool counter
+        pub fn new() -> Self {
+            increment();
+            ToolGuard { _marker: () }
+        }
+    }
+
+    impl Drop for ToolGuard {
+        fn drop(&mut self) {
+            decrement();
+        }
+    }
+}
+
+pub use tool_counter::{ToolGuard, get_count as get_tool_count};
+
 /// Status information module
 /// Provides atomic singletons for status-related values that appear in the title bar
 pub mod status_info {

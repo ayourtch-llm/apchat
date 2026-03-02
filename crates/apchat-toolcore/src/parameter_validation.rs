@@ -47,19 +47,12 @@ pub async fn validate_tool_call_with_logging(
                 Err(e) => (false, Some(e.clone())),
             };
             
-            // Skip JSON serialization for logging - just log success/failure
-            let parsed_json = if success {
-                args_str.to_string()
-            } else {
-                "N/A".to_string()
-            };
-            
             sql_logger::log_tool_parse(
                 None,
                 Some(tool_name.clone()),
                 None,
                 None,
-                Some(parsed_json),
+                Some(args_str.to_string()),  // Always log raw args
                 error.clone(),
                 success,
                 None,
@@ -72,7 +65,7 @@ pub async fn validate_tool_call_with_logging(
             result
         }
         Err(e) => {
-            // Log the parse error
+            // Log the parse error - this ensures we capture even if JSON parsing fails
             let error_msg = format!("Failed to parse tool arguments: {}", e);
             
             sql_logger::log_tool_parse(
@@ -80,12 +73,12 @@ pub async fn validate_tool_call_with_logging(
                 Some(tool_name.clone()),
                 None,
                 None,
-                None,
+                Some(args_str.to_string()),  // Log the raw args that failed to parse
                 Some(error_msg.clone()),
                 false,
                 None,
                 None,
-                raw_llm_output,
+                raw_llm_output.clone(),
             )
             .await
             .ok();

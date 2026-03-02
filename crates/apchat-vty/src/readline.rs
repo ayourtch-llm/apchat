@@ -15,6 +15,8 @@ use apchat_mspc::MspcMessage;
 use apchat_mspc::output::TextOutput;
 use crate::scroll_insert_up;
 use crate::request_counter;
+use crate::tool_counter;
+use crate::tool_counter::ToolGuard;
 use crate::token_counter;
 use crate::status_info;
 
