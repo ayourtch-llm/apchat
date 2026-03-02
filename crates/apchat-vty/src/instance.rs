@@ -160,7 +160,7 @@ impl ReadlineInstance {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt, None, None)? {
+        match rl.readline(prompt, None, None, None)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)
@@ -205,7 +205,7 @@ impl ReadlineInstance {
         let mut guard = Self::get()?;
         let rl = &mut *guard;
 
-        match rl.readline(prompt, mspc_receiver, readline_receiver)? {
+        match rl.readline(prompt, mspc_receiver, readline_receiver, None)? {
             ReadlineResult::Input(line) => {
                 if line.is_empty() {
                     Ok(None)

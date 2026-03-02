@@ -2550,11 +2550,13 @@ impl Readline {
     /// * `prompt` - The prompt string to display
     /// * `mspc_receiver` - Optional mutable reference to tokio MPSC receiver
     /// * `readline_receiver` - Optional broadcast receiver for TextOutput messages from ReadlineDestination
+    /// * `idle_config` - Optional idle timeout configuration
     pub fn readline(
         &mut self,
         prompt: &str,
         mut mspc_receiver: Option<&mut tokio::sync::mpsc::Receiver<MspcMessage>>,
         mut readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
+        idle_config: Option<IdleConfig>,
     ) -> io::Result<ReadlineResult> {
         // Calculate and store the visible prompt width for auto-wrapping
         // IMPORTANT: The prompt displayed includes a [PID] prefix that's added in redraw()
@@ -2565,6 +2567,13 @@ impl Readline {
 
         // Display the initial prompt
         self.redraw(prompt);
+
+        // Initialize idle timeout state
+        self.idle_command = idle_config.as_ref().map(|c| c.input_text.clone());
+        self.idle_period_secs = idle_config.as_ref().map(|c| c.timeout_secs);
+        self.idle_command_time = idle_config.map(|c| {
+            chrono::Local::now() + chrono::Duration::seconds(c.timeout_secs as i64)
+        });
 
         let mut curr_output_data = format!("");
         let COUNTDOWN = 20;
