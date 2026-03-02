@@ -283,6 +283,25 @@ pub struct Cli {
     /// Example: --searxng "https://searxng.example.com"
     #[arg(long, value_name = "URL")]
     pub searxng: Option<String>,
+
+    /// Input file for reflexion: its content is sent along with the task output
+    /// to the reflexion model for evaluation and self-reflection.
+    /// Example: --reflexion-in previous_reflexion.txt
+    #[arg(long, value_name = "FILE")]
+    pub reflexion_in: Option<String>,
+
+    /// Output file for reflexion: the reflexion model's response is written here.
+    /// When specified, a reflexion call is made asking the model to evaluate the
+    /// provided content and provide feedback. Can be combined with --task to reflect
+    /// on task output, or used standalone with --reflexion-in.
+    /// Example: --reflexion-out reflexion.txt
+    #[arg(long, value_name = "FILE")]
+    pub reflexion_out: Option<String>,
+
+    /// Model color to use for the reflexion call (red, grn, blu). Defaults to red.
+    /// Example: --reflexion-model grn
+    #[arg(long, value_name = "COLOR", default_value = "red")]
+    pub reflexion_model: String,
 }
 
 #[derive(Subcommand)]
