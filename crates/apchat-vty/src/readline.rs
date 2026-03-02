@@ -2595,6 +2595,15 @@ impl Readline {
                         self.redraw(prompt);
                     }
                     Event::Key(key) => {
+                        // Reset idle timer on any key press
+                        if let Some(period) = self.idle_period_secs {
+                            if period > 0 {
+                                self.idle_command_time = Some(
+                                    chrono::Local::now() + chrono::Duration::seconds(period as i64)
+                                );
+                            }
+                        }
+                        
                         match self.handle_key_event(key) {
                             KeyResult::Continue => {}
                             KeyResult::Redraw => {
