@@ -20,6 +20,10 @@ async fn main() -> Result<()> {
     // Load environment variables from .env file if it exists
     dotenvy::dotenv().ok();
 
+    // Initialize all directories and print their locations
+    apchat_common::ApChatPaths::init_all()
+        .expect("Failed to initialize APChat directories");
+
     // Parse CLI arguments
     let cli = Cli::parse();
 

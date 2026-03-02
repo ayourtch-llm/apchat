@@ -65,11 +65,26 @@ impl ApChatPaths {
         fs::create_dir_all(path)
     }
 
-    /// Initialize all base directories
+    /// Initialize all base directories and print their locations
     pub fn init_all() -> std::io::Result<()> {
-        Self::ensure_dir(&Self::config_dir())?;
-        Self::ensure_dir(&Self::data_dir())?;
-        Self::ensure_dir(&Self::cache_dir())?;
+        let config_dir = Self::config_dir();
+        let data_dir = Self::data_dir();
+        let cache_dir = Self::cache_dir();
+        
+        Self::ensure_dir(&config_dir)?;
+        Self::ensure_dir(&data_dir)?;
+        Self::ensure_dir(&cache_dir)?;
+        
+        // Print directory locations at startup
+        println!("\n📁 APChat Directories:");
+        println!("   Config:  {}", config_dir.display());
+        println!("   Data:    {}", data_dir.display());
+        println!("   Cache:   {}", cache_dir.display());
+        println!("   Logs:    {}", Self::logs_dir().display());
+        println!("   Histories: {}", Self::histories_dir().display());
+        println!("   Sessions: {}", Self::sessions_dir().display());
+        println!();
+        
         Ok(())
     }
 }
