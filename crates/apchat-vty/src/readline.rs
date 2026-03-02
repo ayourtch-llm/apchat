@@ -2657,7 +2657,18 @@ impl Readline {
                     && status_info::get_queued() == 0 {
                     // Inject the idle command
                     if let Some(ref cmd) = self.idle_command {
-                        return Ok(ReadlineResult::Input(cmd.clone()));
+                        // If command starts with "@", treat remainder as filename to read
+                        let input_to_inject = if cmd.starts_with('@') {
+                            let filename = &cmd[1..];
+                            if let Ok(contents) = std::fs::read_to_string(filename) {
+                                contents
+                            } else {
+                                format!("Error: Could not read file '{}'", filename)
+                            }
+                        } else {
+                            cmd.clone()
+                        };
+                        return Ok(ReadlineResult::Input(input_to_inject));
                     }
                 }
             }
