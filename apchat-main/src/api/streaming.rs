@@ -542,6 +542,23 @@ pub(crate) async fn call_api_streaming_stateless(
 
     print_heart_red("", true); // New line after streaming complete
 
+    // Log accumulated tool call arguments before returning
+    // This captures the full concatenated string we're attempting to parse as JSON
+    for (i, tool_call) in accumulated_tool_calls.iter().enumerate() {
+        let _ = sql_logger::log_tool_parse(
+            None,
+            Some(format!("{}_streaming_accumulated", tool_call.function.name)),
+            None,
+            None,
+            Some(tool_call.function.arguments.clone()),  // Full concatenated arguments
+            None,
+            true,  // Mark as success - we'll update if parsing fails later
+            Some("llama.cpp".to_string()),
+            Some(extract_model(&request)),
+            Some(format!("Streaming accumulated tool call {}: {}", i, tool_call.function.name)),
+        ).await;
+    }
+
     // Finish metrics collection
     metrics.finish();
 
