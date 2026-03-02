@@ -122,10 +122,16 @@ async fn main() -> Result<()> {
                     print_heart_red(&format!("{} Initializing Webex WebSocket bot for {}", "🌐".bright_cyan(), user_email), true);
 
                     // Initialize Webex WebSocket router
+                    let reconnect_hours = if cli.webex_reconnect_hours == 0 {
+                        None
+                    } else {
+                        Some(cli.webex_reconnect_hours)
+                    };
                     match apchat_webex::WebexWebSocketRouter::new(
                         token,
                         user_email.clone(),
                         mspc_channel.clone(),
+                        reconnect_hours,
                     ).await {
                         Ok(router) => {
                             let room_id = router.room_id().to_string();

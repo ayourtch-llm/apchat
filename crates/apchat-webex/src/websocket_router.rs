@@ -3,13 +3,50 @@ use anyhow::{Context, Result};
 use std::sync::Arc;
 use std::collections::HashSet;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Instant};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
 use apchat_mspc::{MspcChannel, MspcMessage};
 use apchat_vty::print_heart_yellow;
 use crate::client::WebexClient;
 use crate::types::{MercuryEvent};
+
+/// Reason why a WebSocket connection ended and needs reconnection
+#[derive(Debug)]
+enum ReconnectReason {
+    /// First connection attempt
+    Initial,
+    /// Connection closed cleanly by the server
+    ServerClose,
+    /// Connection error (network, protocol, etc.)
+    Error(String),
+    /// Connection exceeded the configured maximum age
+    MaxAgeExceeded { age_secs: u64 },
+    /// No data received within the activity timeout
+    ActivityTimeout { silent_secs: u64 },
+}
+
+impl std::fmt::Display for ReconnectReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReconnectReason::Initial => write!(f, "initial connection"),
+            ReconnectReason::ServerClose => write!(f, "server closed connection"),
+            ReconnectReason::Error(e) => write!(f, "error: {}", e),
+            ReconnectReason::MaxAgeExceeded { age_secs } => {
+                write!(f, "connection age {}s exceeded max", age_secs)
+            }
+            ReconnectReason::ActivityTimeout { silent_secs } => {
+                write!(f, "no activity for {}s", silent_secs)
+            }
+        }
+    }
+}
+
+/// Interval between client-initiated WebSocket pings (seconds)
+const PING_INTERVAL_SECS: u64 = 60;
+
+/// Default proactive reconnection interval (hours)
+pub const DEFAULT_RECONNECT_HOURS: u64 = 12;
 
 pub struct WebexWebSocketRouter {
     client: Arc<WebexClient>,
@@ -18,18 +55,27 @@ pub struct WebexWebSocketRouter {
     bot_email: String,
     mspc_channel: Arc<MspcChannel>,
     device_id: String,
-    websocket_url: String,
+    websocket_url: Arc<Mutex<String>>,
     room_id: String,
     seen_message_ids: Arc<Mutex<HashSet<String>>>,
     last_user_message_id: Arc<Mutex<Option<String>>>,
+    /// Maximum connection age before proactive reconnect (None = disabled)
+    reconnect_interval: Option<Duration>,
+    /// Total number of connections made (for diagnostics)
+    connection_count: Arc<Mutex<u64>>,
 }
 
 impl WebexWebSocketRouter {
     /// Create a new WebexWebSocketRouter
+    ///
+    /// `reconnect_hours` controls proactive reconnection interval:
+    /// - `Some(hours)` - reconnect every N hours to prevent stale connections
+    /// - `None` - disable proactive reconnection (only reconnect on errors)
     pub async fn new(
         access_token: String,
         user_email: String,
         mspc_channel: Arc<MspcChannel>,
+        reconnect_hours: Option<u64>,
     ) -> Result<Self> {
         let token = access_token.clone();
         let client = WebexClient::new(access_token);
@@ -70,7 +116,17 @@ impl WebexWebSocketRouter {
             .map(|msg| msg.id)
             .collect();
 
-        print_heart_yellow(&format!("🔍 WebSocket router initialized with {} seen messages", seen_ids.len()), true);
+        let reconnect_interval = reconnect_hours.map(|h| Duration::from_secs(h * 3600));
+        let reconnect_desc = match reconnect_interval {
+            Some(d) => format!("every {}h", d.as_secs() / 3600),
+            None => "disabled".to_string(),
+        };
+
+        print_heart_yellow(&format!(
+            "🔍 WebSocket router initialized with {} seen messages, proactive reconnect: {}",
+            seen_ids.len(),
+            reconnect_desc,
+        ), true);
 
         Ok(Self {
             client: Arc::new(client),
@@ -79,10 +135,12 @@ impl WebexWebSocketRouter {
             bot_email,
             mspc_channel,
             device_id: format!("webex-{}", &user_email),
-            websocket_url: registration.web_socket_url,
+            websocket_url: Arc::new(Mutex::new(registration.web_socket_url)),
             room_id,
             seen_message_ids: Arc::new(Mutex::new(seen_ids)),
             last_user_message_id: Arc::new(Mutex::new(None)),
+            reconnect_interval,
+            connection_count: Arc::new(Mutex::new(0)),
         })
     }
 
@@ -257,18 +315,44 @@ impl WebexWebSocketRouter {
         Ok(())
     }
 
+    /// Re-register device to get a fresh Mercury WebSocket URL
+    async fn refresh_websocket_url(&self) -> Result<()> {
+        print_heart_yellow("🔍 Re-registering device for fresh WebSocket URL...", true);
+        let registration = self.client
+            .register_device()
+            .await
+            .context("Failed to re-register device")?;
+        let mut url = self.websocket_url.lock().await;
+        *url = registration.web_socket_url;
+        print_heart_yellow("🔍 Device re-registered, got fresh WebSocket URL", true);
+        Ok(())
+    }
+
     /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
         print_heart_yellow(&format!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email), true);
         print_heart_yellow(&format!("🔍 Device ID: {}", self.device_id), true);
+        if let Some(interval) = self.reconnect_interval {
+            print_heart_yellow(&format!("🔍 Proactive reconnect every {}h", interval.as_secs() / 3600), true);
+        }
+        print_heart_yellow(&format!("🔍 Client ping interval: {}s", PING_INTERVAL_SECS), true);
 
         let mut reconnect_delay = 0u64; // 0 = immediate first connect
+        let mut last_reason = ReconnectReason::Initial;
 
         loop {
             // Reconnection backoff delay
             if reconnect_delay > 0 {
-                print_heart_yellow(&format!("🔍 Reconnecting in {}s...", reconnect_delay), true);
+                print_heart_yellow(&format!(
+                    "🔍 Reconnecting in {}s (reason: {})...",
+                    reconnect_delay, last_reason
+                ), true);
                 sleep(Duration::from_secs(reconnect_delay)).await;
+
+                // Re-register device to get a fresh WebSocket URL before reconnecting
+                if let Err(e) = self.refresh_websocket_url().await {
+                    print_heart_yellow(&format!("⚠️ Failed to refresh WebSocket URL: {} (will try with existing URL)", e), true);
+                }
 
                 // Recover any messages missed during disconnect
                 if let Err(e) = self.recover_message_gap().await {
@@ -276,14 +360,38 @@ impl WebexWebSocketRouter {
                 }
             }
 
+            // Track connection count
+            {
+                let mut count = self.connection_count.lock().await;
+                *count += 1;
+                print_heart_yellow(&format!(
+                    "🔍 Starting connection #{} (reason: {})",
+                    *count, last_reason
+                ), true);
+            }
+
             // Try to connect
             match self.run_connection().await {
-                Ok(_) => {
-                    print_heart_yellow("🔍 WebSocket connection ended cleanly", true);
-                    reconnect_delay = 1; // Start backoff on clean close
+                Ok(reason) => {
+                    last_reason = reason;
+                    match &last_reason {
+                        ReconnectReason::MaxAgeExceeded { .. } | ReconnectReason::ActivityTimeout { .. } => {
+                            // Proactive reconnect - use minimal delay
+                            print_heart_yellow(&format!(
+                                "🔍 Proactive reconnect triggered ({})", last_reason
+                            ), true);
+                            reconnect_delay = 1;
+                        }
+                        _ => {
+                            print_heart_yellow("🔍 WebSocket connection ended cleanly", true);
+                            reconnect_delay = 1;
+                        }
+                    }
                 }
                 Err(e) => {
-                    print_heart_yellow(&format!("⚠️ WebSocket error: {}", e), true);
+                    let err_str = format!("{}", e);
+                    print_heart_yellow(&format!("⚠️ WebSocket error: {}", err_str), true);
+                    last_reason = ReconnectReason::Error(err_str);
                     // Exponential backoff: 1s, 2s, 4s, 8s, max 30s
                     reconnect_delay = if reconnect_delay == 0 {
                         1
@@ -317,13 +425,19 @@ impl WebexWebSocketRouter {
         }
     }
 
-    /// Run a single WebSocket connection (extracted for reconnection logic)
-    async fn run_connection(&self) -> Result<()> {
+    /// Run a single WebSocket connection with keepalive pings and age tracking
+    ///
+    /// Returns `Ok(reason)` with the reason for disconnection when the connection
+    /// should be retried, or `Err` for connection-level failures.
+    async fn run_connection(&self) -> Result<ReconnectReason> {
+        let ws_url = self.websocket_url.lock().await.clone();
+
         // Connect to Mercury WebSocket
-        let (ws_stream, _) = connect_async(&self.websocket_url)
+        let (ws_stream, _) = connect_async(&ws_url)
             .await
             .context("Failed to connect to Mercury WebSocket")?;
 
+        let connected_at = Instant::now();
         print_heart_yellow("🔍 WebSocket connected", true);
 
         let (mut write, mut read) = ws_stream.split();
@@ -342,45 +456,141 @@ impl WebexWebSocketRouter {
         write.send(Message::Text(auth_text)).await
             .context("Failed to send authorization message")?;
 
-        // Listen for messages
-        while let Some(msg_result) = read.next().await {
-            match msg_result {
-                Ok(Message::Text(text)) => {
-                    print_heart_yellow(&format!("🔍 Received WebSocket text message ({} bytes)", text.len()), true);
-                    self.handle_mercury_message(&text).await;
-                }
-                Ok(Message::Binary(data)) => {
-                    print_heart_yellow(&format!("🔍 Received binary message ({} bytes)", data.len()), true);
-                    // Mercury sends messages as UTF-8 encoded binary
-                    match String::from_utf8(data) {
-                        Ok(text) => {
+        // Timers for ping and connection age
+        let ping_interval = Duration::from_secs(PING_INTERVAL_SECS);
+        let mut ping_timer = tokio::time::interval(ping_interval);
+        ping_timer.tick().await; // Consume the immediate first tick
+
+        let mut last_data_received = Instant::now();
+        let mut pings_sent: u64 = 0;
+        let mut pongs_received: u64 = 0;
+        let mut messages_received: u64 = 0;
+
+        // Listen for messages with periodic ping and age checks
+        loop {
+            tokio::select! {
+                // Incoming WebSocket message
+                msg_opt = read.next() => {
+                    match msg_opt {
+                        Some(Ok(Message::Text(text))) => {
+                            last_data_received = Instant::now();
+                            messages_received += 1;
+                            let age = connected_at.elapsed().as_secs();
+                            print_heart_yellow(&format!(
+                                "🔍 Received WebSocket text message ({} bytes, conn age {}s, msg #{})",
+                                text.len(), age, messages_received
+                            ), true);
                             self.handle_mercury_message(&text).await;
                         }
-                        Err(e) => {
-                            print_heart_yellow(&format!("⚠️ Failed to decode binary message as UTF-8: {}", e), true);
+                        Some(Ok(Message::Binary(data))) => {
+                            last_data_received = Instant::now();
+                            messages_received += 1;
+                            let age = connected_at.elapsed().as_secs();
+                            print_heart_yellow(&format!(
+                                "🔍 Received binary message ({} bytes, conn age {}s, msg #{})",
+                                data.len(), age, messages_received
+                            ), true);
+                            // Mercury sends messages as UTF-8 encoded binary
+                            match String::from_utf8(data) {
+                                Ok(text) => {
+                                    self.handle_mercury_message(&text).await;
+                                }
+                                Err(e) => {
+                                    print_heart_yellow(&format!("⚠️ Failed to decode binary message as UTF-8: {}", e), true);
+                                }
+                            }
+                        }
+                        Some(Ok(Message::Close(frame))) => {
+                            let age = connected_at.elapsed().as_secs();
+                            print_heart_yellow(&format!(
+                                "🔍 WebSocket closed by server (age {}s, msgs {}, pings {}/{}) frame: {:?}",
+                                age, messages_received, pings_sent, pongs_received, frame
+                            ), true);
+                            return Ok(ReconnectReason::ServerClose);
+                        }
+                        Some(Ok(Message::Ping(data))) => {
+                            last_data_received = Instant::now();
+                            print_heart_yellow(&format!("🔍 Received ping ({} bytes), sending pong", data.len()), true);
+                            if let Err(e) = write.send(Message::Pong(data)).await {
+                                print_heart_yellow(&format!("⚠️ Failed to send pong: {}", e), true);
+                            }
+                        }
+                        Some(Ok(Message::Pong(data))) => {
+                            last_data_received = Instant::now();
+                            pongs_received += 1;
+                            print_heart_yellow(&format!(
+                                "🔍 Received pong ({} bytes, {}/{})",
+                                data.len(), pongs_received, pings_sent
+                            ), true);
+                        }
+                        Some(Ok(msg)) => {
+                            last_data_received = Instant::now();
+                            print_heart_yellow(&format!("🔍 Received other message type: {:?}", msg), true);
+                        }
+                        Some(Err(e)) => {
+                            let age = connected_at.elapsed().as_secs();
+                            return Err(anyhow::anyhow!(
+                                "WebSocket error after {}s (msgs {}, pings {}/{}): {}",
+                                age, messages_received, pings_sent, pongs_received, e
+                            ));
+                        }
+                        None => {
+                            let age = connected_at.elapsed().as_secs();
+                            print_heart_yellow(&format!(
+                                "🔍 WebSocket stream ended (age {}s, msgs {})",
+                                age, messages_received
+                            ), true);
+                            return Ok(ReconnectReason::ServerClose);
                         }
                     }
                 }
-                Ok(Message::Close(_)) => {
-                    print_heart_yellow("🔍 WebSocket closed by server", true);
-                    break;
-                }
-                Ok(Message::Ping(data)) => {
-                    print_heart_yellow(&format!("🔍 Received ping ({} bytes)", data.len()), true);
-                }
-                Ok(Message::Pong(data)) => {
-                    print_heart_yellow(&format!("🔍 Received pong ({} bytes)", data.len()), true);
-                }
-                Ok(msg) => {
-                    print_heart_yellow(&format!("🔍 Received other message type: {:?}", msg), true);
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!("WebSocket error: {}", e));
+
+                // Periodic ping and health check
+                _ = ping_timer.tick() => {
+                    let age = connected_at.elapsed().as_secs();
+                    let silent_secs = last_data_received.elapsed().as_secs();
+
+                    // Check connection age for proactive reconnect
+                    if let Some(max_age) = self.reconnect_interval {
+                        if connected_at.elapsed() >= max_age {
+                            print_heart_yellow(&format!(
+                                "🔍 Connection age {}s >= max {}s, triggering proactive reconnect (msgs {}, pings {}/{})",
+                                age, max_age.as_secs(), messages_received, pings_sent, pongs_received
+                            ), true);
+                            return Ok(ReconnectReason::MaxAgeExceeded { age_secs: age });
+                        }
+                    }
+
+                    // Check for missing pongs (if we've sent pings but not received pongs)
+                    if pings_sent > 0 && pongs_received == 0 && pings_sent >= 3 {
+                        print_heart_yellow(&format!(
+                            "⚠️ No pongs received after {} pings ({}s silent), connection may be dead",
+                            pings_sent, silent_secs
+                        ), true);
+                        return Ok(ReconnectReason::ActivityTimeout { silent_secs });
+                    }
+
+                    // Send keepalive ping
+                    pings_sent += 1;
+                    let ping_data = format!("apchat-ping-{}", pings_sent);
+                    match write.send(Message::Ping(ping_data.into_bytes())).await {
+                        Ok(_) => {
+                            print_heart_yellow(&format!(
+                                "🔍 Sent ping #{} (conn age {}s, last data {}s ago)",
+                                pings_sent, age, silent_secs
+                            ), true);
+                        }
+                        Err(e) => {
+                            print_heart_yellow(&format!(
+                                "⚠️ Failed to send ping #{}: {} (conn age {}s)",
+                                pings_sent, e, age
+                            ), true);
+                            return Err(anyhow::anyhow!("Failed to send keepalive ping: {}", e));
+                        }
+                    }
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Get the Webex client (for sharing with output sink)

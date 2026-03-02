@@ -192,6 +192,13 @@ pub struct Cli {
     #[arg(long)]
     pub webex_websocket: bool,
 
+    /// Proactive WebSocket reconnection interval in hours
+    /// Reconnects the Mercury WebSocket periodically to prevent stale connections
+    /// Set to 0 to disable proactive reconnection (only reconnect on errors)
+    /// Requires --webex-websocket to be set
+    #[arg(long, value_name = "HOURS", default_value_t = apchat_webex::DEFAULT_RECONNECT_HOURS)]
+    pub webex_reconnect_hours: u64,
+
     /// Enable metacognitive tools (become, drugs, ritual)
     /// Based on https://github.com/inanna-malick/metacog
     #[arg(long)]
