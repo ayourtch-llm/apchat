@@ -2006,8 +2006,17 @@ impl Readline {
 	    self.cursor_offset_from_bottom += 1;
 	    stdout.queue(MoveToColumn(0)).ok();
             let local_time = &Local::now().time().to_string()[0..8];
+	    let idle_remaining = self.idle_command_time.map(|t| {
+		let diff = t.signed_duration_since(chrono::Local::now());
+		if diff.num_seconds() > 0 {
+		    diff.num_seconds() as u32
+		} else {
+		    0
+		}
+	    }).unwrap_or(0);
+
             let mut title = format!(
-                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {}",
+                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {} rem: {}",
                 self.lines.len(),
                 &local_time,
                 request_counter::get_count(),
@@ -2016,7 +2025,8 @@ impl Readline {
                 status_info::get_history(),
                 status_info::get_context_bytes(),
                 status_info::get_urgent(),
-                status_info::get_pid()
+                status_info::get_pid(),
+                idle_remaining,
             );
 
             // Ensure title never exceeds screen width by truncating if needed
