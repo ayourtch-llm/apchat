@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 // Import from library
 use apchat::{APChat, resolve_terminal_backend};
 use apchat::cli::{Cli, Commands};
-use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode};
+use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode, run_reflexion};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
 use apchat_vty::{print_heart_red, print_heart_yellow};
@@ -65,12 +65,39 @@ async fn main() -> Result<()> {
 
     // Handle task mode if requested
     if let Some(task_text) = cli.task.clone() {
-        return run_subagent_mode(
+        let result = run_subagent_mode(
             &cli,
             task_text,
-            app_config.client_config,
+            app_config.client_config.clone(),
             app_config.work_dir,
             app_config.policy_manager,
+        )
+        .await;
+
+        // Run reflexion step if --reflexion-out is specified
+        if let Some(ref reflexion_out) = cli.reflexion_out {
+            if let Err(e) = run_reflexion(
+                cli.reflexion_in.as_deref(),
+                reflexion_out,
+                &cli.reflexion_model,
+                &app_config.client_config,
+            )
+            .await
+            {
+                print_heart_yellow(&format!("⚠️ Reflexion step failed: {}", e), true);
+            }
+        }
+
+        return result;
+    }
+
+    // Handle standalone reflexion mode (without --task)
+    if let Some(ref reflexion_out) = cli.reflexion_out {
+        return run_reflexion(
+            cli.reflexion_in.as_deref(),
+            reflexion_out,
+            &cli.reflexion_model,
+            &app_config.client_config,
         )
         .await;
     }
