@@ -2631,6 +2631,18 @@ impl Readline {
                 counter = COUNTDOWN;
             }
 
+            // Check idle timeout (only if no active requests or queued tools)
+            if let Some(injection_time) = self.idle_command_time {
+                if chrono::Local::now() >= injection_time 
+                    && request_counter::get_count() == 0 
+                    && status_info::get_queued() == 0 {
+                    // Inject the idle command
+                    if let Some(ref cmd) = self.idle_command {
+                        return Ok(ReadlineResult::Input(cmd.clone()));
+                    }
+                }
+            }
+
             // Timeout occurred - check MPSC signals if receiver provided
             if let Some(ref mut receiver) = mspc_receiver {
                 // Drain all queued messages without blocking
