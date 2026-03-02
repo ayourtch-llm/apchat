@@ -2714,6 +2714,15 @@ impl Readline {
             if let Some(ref mut receiver) = readline_receiver {
                 // Drain all queued messages without blocking
                 while let Ok(text_output) = receiver.try_recv() {
+                    // Reset idle timer on any output
+                    if let Some(period) = self.idle_period_secs {
+                        if period > 0 {
+                            self.idle_command_time = Some(
+                                chrono::Local::now() + chrono::Duration::seconds(period as i64)
+                            );
+                        }
+                    }
+                    
                     // Print emoji text directly to stdout
                     let emoji = &text_output.emoji;
                     let content = &text_output.content;
