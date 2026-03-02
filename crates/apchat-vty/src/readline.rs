@@ -2018,7 +2018,7 @@ impl Readline {
 	    }).unwrap_or(0);
 
             let mut title = format!(
-                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {} rem: {}",
+                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {} rem: {} tool: {}",
                 self.lines.len(),
                 &local_time,
                 request_counter::get_count(),
@@ -2029,6 +2029,7 @@ impl Readline {
                 status_info::get_urgent(),
                 status_info::get_pid(),
                 idle_remaining,
+                tool_counter::get_count(),
             );
 
             // Ensure title never exceeds screen width by truncating if needed

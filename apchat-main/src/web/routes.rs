@@ -567,6 +567,7 @@ async fn handle_chat_with_broadcast(
                     }
                 } else {
                     // Tool doesn't exist in registry - execute without validation
+                    let _tool_guard = ToolGuard::new();
                     let result = apchat
                         .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
                         .await;

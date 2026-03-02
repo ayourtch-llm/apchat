@@ -696,16 +696,19 @@ async fn process_llm_response(
                     // Execute each tool call
                     for tool_call in &calls {
                         print_heart_red(&format!("TOOL: {} {}", &tool_call.function.name, &tool_call.function.arguments), true);
-                        let tool_result = match chat.execute_tool(
+                        let tool_result = {
+                          let _tool_guard = apchat_vty::ToolGuard::new();
+                          match chat.execute_tool(
                             &tool_call.function.name,
                             &tool_call.function.arguments,
-                        ).await {
+                          ).await {
                             Ok(r) => r,
                             Err(e) => {
                                 let error_msg = format!("Error executing tool {}: {}", &tool_call.function.name, e);
                                 print_heart_yellow(&format!("{} {}", "❌".bright_red(), &error_msg), true);
                                 error_msg
                             }
+                          }
                         };
                         print_heart_red(&format!("TOOL-RESULT: {}", &tool_result), true);
 
