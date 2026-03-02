@@ -14,6 +14,7 @@ use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
 use apchat_vty::{print_heart_red, print_heart_yellow};
+use apchat_toolcore;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -66,6 +67,17 @@ async fn main() -> Result<()> {
     // Initialize OutputRouter for emoji-prefixed text routing
     // This connects print_with_emoji to the router via vty's TEXT_OUTPUT_TX
     let router = apchat::mspc::initialize_output_router().await;
+
+    // Initialize SQL logger for tool parsing debugging
+    let db_path = cli.sql_log_path
+        .clone()
+        .unwrap_or_else(|| "/tmp/tool_debug.db".to_string());
+    
+    if let Err(e) = apchat_toolcore::init_sql_logger(&db_path).await {
+        eprintln!("Warning: Failed to initialize SQL logger: {}", e);
+    } else {
+        eprintln!("SQL logger initialized at: {}", db_path);
+    }
 
     // Handle task mode if requested
     if let Some(task_text) = cli.task.clone() {

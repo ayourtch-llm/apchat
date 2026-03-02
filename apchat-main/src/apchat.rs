@@ -14,7 +14,7 @@ use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_logging::ConversationLogger;
 use apchat_policy::PolicyManager;
 use apchat_terminal::{TerminalManager, TerminalBackendType, MAX_CONCURRENT_SESSIONS};
-use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext, parameter_validation::validate_tool_call};
+use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext, parameter_validation::validate_tool_call_with_logging};
 use crate::cli::Cli;
 use crate::config::{ClientConfig, FeatureFlags, initialize_tool_registry};
 use crate::chat::{save_state, load_state};
@@ -442,7 +442,7 @@ impl APChat {
                 };
 
                 // Validate the tool call against the schema
-                let params = match validate_tool_call(&tool_call, &params, &param_definitions) {
+                let params = match validate_tool_call_with_logging(&tool_call, &params, &param_definitions, None).await {
                     Ok(params) => params,
                     Err(e) => return Err(anyhow::anyhow!("Parameter validation failed for '{}': {}", name, e)),
                 };

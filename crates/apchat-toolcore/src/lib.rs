@@ -11,6 +11,7 @@ pub mod content_limiter;
 pub mod confirmation;
 pub mod parameter_validation;
 pub mod context_edit;
+pub mod sql_logger;
 
 pub use tool::*;
 pub use tool_registry::*;
@@ -18,3 +19,4 @@ pub use tool_context::*;
 pub use tool_parsing::*;
 pub use parameter_validation::*;
 pub use context_edit::*;
+pub use sql_logger::*;

@@ -6,6 +6,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use crate::tool::{ToolParameters, ParameterDefinition};
+use crate::sql_logger;
 use apchat_models::{ToolCall, FunctionCall};
 
 /// Validates a tool call's parameters against the tool schema
@@ -14,6 +15,7 @@ use apchat_models::{ToolCall, FunctionCall};
 /// * `tool_call` - The tool call received from LLM
 /// * `tool_schema` - The tool's parameter schema from ToolRegistry
 /// * `param_definitions` - The parameter definitions from tool.parameters() as JSON values
+/// * `raw_llm_output` - Optional raw LLM output for debugging
 ///
 /// # Returns
 /// * `Ok(tool_params)` - Validation passed, return parsed parameters ready for execution
@@ -22,15 +24,84 @@ use apchat_models::{ToolCall, FunctionCall};
 /// # Error Format
 /// Error messages follow the format:
 /// "Tool '{tool_name}' has invalid parameter '{invalid_param}'. Available: {valid_params}. Missing required parameter: {missing_param}"
-pub fn validate_tool_call(
+pub async fn validate_tool_call_with_logging(
     tool_call: &ToolCall,
     tool_schema: &ToolParameters,
-    param_definitions: &HashMap<String, Value>
+    param_definitions: &HashMap<String, Value>,
+    raw_llm_output: Option<String>,
 ) -> Result<ToolParameters, String> {
-    // Parse the arguments JSON
-    let mut parsed_args: HashMap<String, Value> = serde_json::from_str(&tool_call.function.arguments)
-        .map_err(|e| format!("Failed to parse tool arguments: {}", e))?;
+    let tool_name = &tool_call.function.name;
+    let args_str = &tool_call.function.arguments;
+    
+    // Try to parse the arguments JSON
+    let parsed_args_result: Result<HashMap<String, Value>, _> = serde_json::from_str(args_str);
+    
+    match parsed_args_result {
+        Ok(mut parsed_args) => {
+            // Continue with validation...
+            let result = validate_tool_call_internal(tool_call, tool_schema, param_definitions, parsed_args);
+            
+            // Log the result
+            let (success, error) = match &result {
+                Ok(_) => (true, None),
+                Err(e) => (false, Some(e.clone())),
+            };
+            
+            // Skip JSON serialization for logging - just log success/failure
+            let parsed_json = if success {
+                args_str.to_string()
+            } else {
+                "N/A".to_string()
+            };
+            
+            sql_logger::log_tool_parse(
+                None,
+                Some(tool_name.clone()),
+                None,
+                None,
+                Some(parsed_json),
+                error.clone(),
+                success,
+                None,
+                None,
+                raw_llm_output.clone(),
+            )
+            .await
+            .ok();
+            
+            result
+        }
+        Err(e) => {
+            // Log the parse error
+            let error_msg = format!("Failed to parse tool arguments: {}", e);
+            
+            sql_logger::log_tool_parse(
+                None,
+                Some(tool_name.clone()),
+                None,
+                None,
+                None,
+                Some(error_msg.clone()),
+                false,
+                None,
+                None,
+                raw_llm_output,
+            )
+            .await
+            .ok();
+            
+            Err(error_msg)
+        }
+    }
+}
 
+/// Internal validation logic (extracted for reuse)
+fn validate_tool_call_internal(
+    tool_call: &ToolCall,
+    _tool_schema: &ToolParameters,
+    param_definitions: &HashMap<String, Value>,
+    parsed_args: HashMap<String, Value>,
+) -> Result<ToolParameters, String> {
     // Extract parameter names from parameter definitions
     let valid_params: Vec<String> = param_definitions.keys().cloned().collect();
 
@@ -63,6 +134,7 @@ pub fn validate_tool_call(
     }
 
     // Coerce values to match expected types where possible (e.g., float 320.0 -> integer 320)
+    let mut parsed_args = parsed_args;
     for (param_name, param_value) in parsed_args.iter_mut() {
         if let Some(param_def) = param_definitions.get(param_name) {
             if let Some(coerced) = coerce_value(param_value, &param_def.param_type) {
@@ -101,6 +173,19 @@ pub fn validate_tool_call(
     Ok(ToolParameters {
         data: parsed_args,
     })
+}
+
+/// Original validate_tool_call function (kept for backward compatibility)
+pub fn validate_tool_call(
+    tool_call: &ToolCall,
+    tool_schema: &ToolParameters,
+    param_definitions: &HashMap<String, Value>
+) -> Result<ToolParameters, String> {
+    // Parse the arguments JSON
+    let parsed_args: HashMap<String, Value> = serde_json::from_str(&tool_call.function.arguments)
+        .map_err(|e| format!("Failed to parse tool arguments: {}", e))?;
+    
+    validate_tool_call_internal(tool_call, tool_schema, param_definitions, parsed_args)
 }
 
 /// Attempts to coerce a JSON value to match the expected parameter type.

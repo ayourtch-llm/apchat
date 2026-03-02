@@ -16,7 +16,6 @@ use uuid::Uuid;
 
 use apchat_models::Message as ChatMessage;
 use apchat_vty::{print_heart_red, print_heart_yellow};
-use apchat_toolcore::parameter_validation::validate_tool_call;
 use apchat_toolcore::ToolParameters;
 use serde_json::Value;
 use crate::{
@@ -431,15 +430,19 @@ async fn handle_chat_with_broadcast(
                         })
                         .collect();
 
-                    // Parse the arguments JSON
-                    let parsed_args: HashMap<String, Value> = match serde_json::from_str(&tool_call.function.arguments) {
-                        Ok(args) => args,
+                    // Validate the tool call with SQL logging
+                    let validated_params = match apchat_toolcore::parameter_validation::validate_tool_call_with_logging(
+                        &tool_call, 
+                        &ToolParameters { data: HashMap::new() }, 
+                        &param_definitions,
+                        None,
+                    ).await {
+                        Ok(params) => params,
                         Err(e) => {
-                            let error_msg = format!("Failed to parse tool arguments: {}", e);
-                            print_heart_red(&format!("⚠️  {}", error_msg), true);
+                            print_heart_red(&format!("⚠️  {}", e), true);
 
                             let error_msg_msg = ServerMessage::Error {
-                                message: error_msg.clone(),
+                                message: e.clone(),
                                 recoverable: true,
                             };
                             session.broadcast(error_msg_msg).await;
@@ -447,7 +450,7 @@ async fn handle_chat_with_broadcast(
                             // Add error to history
                             session.apchat.lock().await.messages.push(ChatMessage {
                                 role: "tool".to_string(),
-                                content: error_msg.clone(),
+                                content: e.clone(),
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_call.function.name.clone()),
@@ -456,11 +459,6 @@ async fn handle_chat_with_broadcast(
 
                             continue;
                         }
-                    };
-
-                    // Build ToolParameters from parsed arguments
-                    let validated_params = ToolParameters {
-                        data: parsed_args,
                     };
 
                     // Create tool context

@@ -168,6 +168,11 @@ pub struct Cli {
     #[arg(long, value_name = "PATH", env = "APCHAT_MEMORY_DB_PATH")]
     pub memory_db_path: Option<String>,
 
+    /// Path to SQL log database for debugging tool argument parsing
+    /// Stores HTTP requests/responses and parse results for debugging
+    #[arg(long, value_name = "PATH")]
+    pub sql_log_path: Option<String>,
+
     /// Idle timeout in seconds (1-86400). If no keystrokes for this duration, inject idle_input string
     #[arg(long, value_name = "SECONDS")]
     pub idle_timeout: Option<u32>,
