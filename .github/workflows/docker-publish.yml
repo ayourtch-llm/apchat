@@ -48,8 +48,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest-${{ matrix.arch }}
-            type=sha,prefix={{branch}}-${{ matrix.arch }}-
+            type=raw,value=build-${{ matrix.arch }}
             type=raw,value=${{ inputs.tag }}-${{ matrix.arch }},enable=${{ inputs.tag != '' }}
 
       - name: Build and push Docker image
@@ -95,10 +94,14 @@ jobs:
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           
-          # Create manifest for 'latest' tag
+          # Get digests for each architecture
+          AMD64_DIGEST=$(docker manifest inspect $IMAGE:build-amd64 | jq -r '.manifests[0].digest')
+          ARM64_DIGEST=$(docker manifest inspect $IMAGE:build-arm64 | jq -r '.manifests[0].digest')
+          
+          # Create manifest for 'latest' tag from build-* images using digests
           docker manifest create $IMAGE:latest \
-            $IMAGE:latest-amd64 \
-            $IMAGE:latest-arm64
+            $IMAGE@sha256:${AMD64_DIGEST#sha256:} \
+            $IMAGE@sha256:${ARM64_DIGEST#sha256:}
           
           docker manifest push $IMAGE:latest
           echo "Created manifest: $IMAGE:latest"
@@ -108,11 +111,16 @@ jobs:
           IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           SHA=${{ github.sha }}
           BRANCH=${{ github.ref_name }}
+          MANIFEST_TAG="${BRANCH}-${SHA}"
           
-          # Create manifest for branch-SHA tag
-          docker manifest create $IMAGE:${BRANCH}-${SHA}: \
-            $IMAGE:${BRANCH}-amd64-${SHA} \
-            $IMAGE:${BRANCH}-arm64-${SHA}
+          # Get digests for each architecture
+          AMD64_DIGEST=$(docker manifest inspect $IMAGE:build-amd64 | jq -r '.manifests[0].digest')
+          ARM64_DIGEST=$(docker manifest inspect $IMAGE:build-arm64 | jq -r '.manifests[0].digest')
           
-          docker manifest push $IMAGE:${BRANCH}-${SHA}:
-          echo "Created manifest: $IMAGE:${BRANCH}-${SHA}:"
+          # Create manifest for branch-SHA tag using digests
+          docker manifest create $IMAGE:${MANIFEST_TAG} \
+            $IMAGE@sha256:${AMD64_DIGEST#sha256:} \
+            $IMAGE@sha256:${ARM64_DIGEST#sha256:}
+          
+          docker manifest push $IMAGE:${MANIFEST_TAG}
+          echo "Created manifest: $IMAGE:${MANIFEST_TAG}"
