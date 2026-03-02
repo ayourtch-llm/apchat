@@ -605,7 +605,7 @@ pub(crate) async fn call_api_streaming_stateless(
         output_tokens,
         None,
         Some(request_body_str.clone()),
-        Some(response_body_for_logging.clone()),
+        Some(raw_response_body.clone()),  // Use raw response, not formatted
         None,
         headers.get("x-request-id").and_then(|h| h.to_str().ok().map(|s| s.to_string())),
         None,
