@@ -93,6 +93,16 @@ impl Tool for LaunchSubagentTool {
             cmd.arg("--model").arg(model_string);
         }
 
+        // Propagate --searxng URL if available
+        if let Some(ref searxng_url) = context.searxng_url {
+            cmd.arg("--searxng").arg(searxng_url);
+        }
+
+        // Propagate --python-sandbox flag if enabled
+        if context.python_sandbox {
+            cmd.arg("--python-sandbox");
+        }
+
         // Use the same working directory as the main agent
         cmd.current_dir(&context.work_dir);
 
@@ -254,6 +264,16 @@ impl Tool for LaunchSubagentPrettyTool {
         // Add model parameter if current model string is available
         if let Some(model_string) = &context.current_model_string {
             cmd.arg("--model").arg(model_string);
+        }
+
+        // Propagate --searxng URL if available
+        if let Some(ref searxng_url) = context.searxng_url {
+            cmd.arg("--searxng").arg(searxng_url);
+        }
+
+        // Propagate --python-sandbox flag if enabled
+        if context.python_sandbox {
+            cmd.arg("--python-sandbox");
         }
 
         // Use the same working directory as the main agent

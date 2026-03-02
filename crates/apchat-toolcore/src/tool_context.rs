@@ -50,6 +50,8 @@ pub struct ToolContext {
     pub context_edits: Option<Arc<std::sync::Mutex<Vec<ContextEdit>>>>, // Pending context edits (self-edit tools)
     pub summarize_subagents: bool, // Whether to summarize subagent output via LLM (default: true)
     pub tool_registry: Option<Arc<ToolRegistry>>, // Tool registry for tools that need to invoke other tools (e.g., python_sandbox)
+    pub searxng_url: Option<String>, // SearXNG URL for web search (propagated to subagents)
+    pub python_sandbox: bool, // Whether python sandbox is enabled (propagated to subagents)
 }
 
 impl Clone for ToolContext {
@@ -76,6 +78,8 @@ impl Clone for ToolContext {
             context_edits: self.context_edits.clone(),
             summarize_subagents: self.summarize_subagents,
             tool_registry: self.tool_registry.clone(),
+            searxng_url: self.searxng_url.clone(),
+            python_sandbox: self.python_sandbox,
         }
     }
 }
@@ -102,6 +106,8 @@ impl std::fmt::Debug for ToolContext {
             .field("context_edits", &self.context_edits.is_some())
             .field("summarize_subagents", &self.summarize_subagents)
             .field("tool_registry", &self.tool_registry.is_some())
+            .field("searxng_url", &self.searxng_url.as_ref().map(|s| "***"))
+            .field("python_sandbox", &self.python_sandbox)
             .finish()
     }
 }
@@ -129,6 +135,8 @@ impl ToolContext {
             context_edits: None,
             summarize_subagents: true,
             tool_registry: None,
+            searxng_url: None,
+            python_sandbox: false,
         }
     }
 
@@ -214,6 +222,16 @@ impl ToolContext {
 
     pub fn with_tool_registry(mut self, registry: Arc<ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
+        self
+    }
+
+    pub fn with_searxng_url(mut self, searxng_url: Option<String>) -> Self {
+        self.searxng_url = searxng_url;
+        self
+    }
+
+    pub fn with_python_sandbox(mut self, python_sandbox: bool) -> Self {
+        self.python_sandbox = python_sandbox;
         self
     }
 

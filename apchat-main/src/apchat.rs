@@ -77,6 +77,8 @@ pub struct APChat {
     pub(crate) summarize_subagents: bool,
     // Active MCP server clients (kept alive for the session lifetime)
     pub(crate) mcp_clients: Vec<Arc<apchat_tools::mcp_client::McpClient>>,
+    // Feature flags for propagating to subagents
+    pub(crate) feature_flags: FeatureFlags,
 }
 
 impl APChat {
@@ -271,6 +273,7 @@ impl APChat {
             context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
             summarize_subagents: true,
             mcp_clients: Vec::new(),
+            feature_flags: flags,
         };
 
         chat.messages.push(Message {
@@ -514,6 +517,10 @@ impl APChat {
 
                 // Add tool registry (for tools like python_sandbox that need to invoke other tools)
                 context = context.with_tool_registry(Arc::new(self.tool_registry.clone()));
+
+                // Propagate feature flags to subagents
+                context = context.with_searxng_url(self.feature_flags.searxng_url.clone());
+                context = context.with_python_sandbox(self.feature_flags.python_sandbox);
 
                 let context = context;
 
