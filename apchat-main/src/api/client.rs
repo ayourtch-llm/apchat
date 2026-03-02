@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use std::time::Duration;
 use tokio::time::sleep;
+use uuid;
+use chrono;
 
 use crate::APChat;
 use crate::MAX_RETRIES;
@@ -11,7 +13,38 @@ use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
 use apchat_logging::safe_truncate;
 use apchat_toolcore::parse_xml_tool_calls;
+use apchat_toolcore::sql_logger;
 use super::ApiCallParams;
+
+/// Detect provider from API URL
+fn detect_provider(api_url: &str) -> String {
+    if api_url.contains("api.anthropic.com") {
+        "anthropic".to_string()
+    } else if api_url.contains("api.openai.com") {
+        "openai".to_string()
+    } else if api_url.contains("api.groq.com") {
+        "groq".to_string()
+    } else if api_url.contains("localhost") || api_url.contains("127.0.0.1") {
+        "llama.cpp".to_string()
+    } else {
+        "unknown".to_string()
+    }
+}
+
+/// Extract model from request
+fn extract_model(request: &ChatRequest) -> String {
+    request.model.clone()
+}
+
+/// Extract endpoint from API URL
+fn extract_endpoint(api_url: &str) -> String {
+    // Get the path part of the URL
+    if let Some(pos) = api_url.find("/v1") {
+        api_url[pos..].to_string()
+    } else {
+        "/v1/chat/completions".to_string()
+    }
+}
 
 /// Non-streaming API call for Groq-style APIs (convenience wrapper for backward compatibility)
 pub(crate) async fn call_api(
@@ -106,6 +139,7 @@ pub(crate) async fn call_api_stateless(
         let api_url = crate::config::get_api_url(&params.client_config, &current_model);
 
         // Capture request timestamp for response logging correlation
+        let request_start = std::time::Instant::now();
         let request_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -116,6 +150,35 @@ pub(crate) async fn call_api_stateless(
 
         // Log request to file for persistent debugging
         let _ = log_request_to_file(&api_url, &request, &current_model, &params.api_key);
+
+        // Log to SQL database if enabled
+        let request_body_str = serde_json::to_string(&request).unwrap_or_default();
+        let call_id = uuid::Uuid::new_v4().to_string();
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        let _ = sql_logger::log_http(
+            call_id.clone(),
+            &timestamp,
+            &detect_provider(&api_url),
+            &extract_model(&request),
+            &extract_endpoint(&api_url),
+            0,  // Will update on response
+            0,
+            None,
+            None,
+            None,
+            None,
+            Some(request_body_str.clone()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,  // span_name
+        ).await;
 
         let api_key = crate::config::get_api_key(&params.client_config, &params.api_key, &current_model);
 
@@ -168,10 +231,38 @@ pub(crate) async fn call_api_stateless(
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_else(|_| "Unable to read error body".to_string());
 
+            let latency_ms = request_start.elapsed().as_millis() as u64;
+
             // Log error response in verbose mode
             log_response(&status, &headers, &error_body, params.verbose);
             let _ = log_response_to_file(&status, &headers, &error_body, request_timestamp, &current_model);
             let _ = log_raw_response_to_file(&error_body, request_timestamp, &current_model);
+
+            // Log to SQL database
+            let _ = sql_logger::log_http(
+                call_id.clone(),
+                &timestamp,
+                &detect_provider(&api_url),
+                &extract_model(&request),
+                &extract_endpoint(&api_url),
+                status.as_u16(),
+                latency_ms,
+                None,
+                None,
+                None,
+                None,
+                Some(request_body_str.clone()),
+                Some(error_body.clone()),
+                Some(format!("HTTP {}", status)),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,  // span_name
+            ).await;
 
             // Check if this is a tool-related error
             if status == 400 && error_body.contains("tool_use_failed") {
@@ -198,6 +289,8 @@ pub(crate) async fn call_api_stateless(
 
         let response_text = response.text().await?;
 
+        let latency_ms = request_start.elapsed().as_millis() as u64;
+
         // Log successful response in verbose mode
         log_response(&status, &headers, &response_text, params.verbose);
         let _ = log_response_to_file(&status, &headers, &response_text, request_timestamp, &current_model);
@@ -205,6 +298,35 @@ pub(crate) async fn call_api_stateless(
 
         let chat_response: ChatResponse = serde_json::from_str(&response_text)
             .with_context(|| format!("Failed to parse API response: {}", response_text))?;
+
+        // Log to SQL database with usage data
+        let input_tokens = chat_response.usage.as_ref().map(|u| u.prompt_tokens as i64);
+        let output_tokens = chat_response.usage.as_ref().map(|u| u.completion_tokens as i64);
+        
+        let _ = sql_logger::log_http(
+            call_id.clone(),
+            &timestamp,
+            &detect_provider(&api_url),
+            &extract_model(&request),
+            &extract_endpoint(&api_url),
+            status.as_u16(),
+            latency_ms,
+            None,  // ttft_ms not available in non-streaming
+            input_tokens,
+            output_tokens,
+            None,  // cost not calculated here
+            Some(request_body_str.clone()),
+            Some(response_text.clone()),
+            None,
+            headers.get("x-request-id").and_then(|h| h.to_str().ok().map(|s| s.to_string())),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,  // span_name
+        ).await;
 
         let (mut message, finish_reason) = chat_response
             .choices
