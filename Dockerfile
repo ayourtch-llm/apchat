@@ -37,14 +37,18 @@ RUN mkdir -p /workspace && chown apchat:apchat /workspace
 # Copy the binary from builder
 COPY --from=builder /app/target/release/apchat /usr/local/bin/apchat
 
+# Copy the entrypoint wrapper
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Set the user
 USER apchat
 
 # Set working directory to /workspace for user projects
 WORKDIR /workspace
 
-# The entrypoint is the apchat binary
-ENTRYPOINT ["/usr/local/bin/apchat"]
+# The entrypoint is the wrapper script
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Default to showing help
 CMD ["--help"]
