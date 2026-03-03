@@ -273,9 +273,7 @@ pub async fn run_repl_mode(
         }
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
-                if chat.get_inference_debug() {
-                    print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
-                }
+                print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
                 llm_running = false;
                 request_guard = None;
                 if chat.get_inference_debug() {
@@ -390,7 +388,9 @@ pub async fn run_repl_mode(
                         continue 'outer;
                     }
                     InferenceOutcome::ToolsContinue => {
-                        print_heart_yellow(&format!("🔄 [DEBUG] InferenceOutcome::ToolsContinue - will repeat inference"), true);
+                        if chat.get_inference_debug() {
+                            print_heart_yellow(&format!("🔄 [DEBUG] InferenceOutcome::ToolsContinue - will repeat inference"), true);
+                        }
                         // Reset empty response retries when we have a valid tool call response
                         empty_response_retries = 0;
                         
@@ -407,9 +407,7 @@ pub async fn run_repl_mode(
                         };
 
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
-                            if chat.get_inference_debug() {
-                                print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
-                            }
+                            print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("Started repeat inference"), true);
                             }
@@ -688,9 +686,7 @@ async fn prep_and_send_request(
             print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
             return false;
         }
-        if chat.get_inference_debug() {
-            print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
-        }
+        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
         true
 
 
@@ -739,12 +735,18 @@ async fn process_llm_response(
 
                 // Handle tool calls
                 if let Some(calls) = tool_calls {
-                    print_heart_yellow(&format!("🔧 [DEBUG] Tool calls detected: {} call(s)", calls.len()), true);
+                    if chat.get_inference_debug() {
+                        print_heart_yellow(&format!("🔧 [DEBUG] Tool calls detected: {} call(s)", calls.len()), true);
+                    }
                     *tool_call_iterations += 1;
-                    print_heart_yellow(&format!("🔢 [DEBUG] tool_call_iterations = {}", tool_call_iterations), true);
+                    if chat.get_inference_debug() {
+                        print_heart_yellow(&format!("🔢 [DEBUG] tool_call_iterations = {}", tool_call_iterations), true);
+                    }
 
                     if *tool_call_iterations > MAX_TOOL_ITERATIONS {
-                        print_heart_yellow(&format!("⚠️ [DEBUG] MAX_TOOL_ITERATIONS exceeded: {} > {}", tool_call_iterations, MAX_TOOL_ITERATIONS), true);
+                        if chat.get_inference_debug() {
+                            print_heart_yellow(&format!("⚠️ [DEBUG] MAX_TOOL_ITERATIONS exceeded: {} > {}", tool_call_iterations, MAX_TOOL_ITERATIONS), true);
+                        }
                         print_heart_yellow(&format!("{} {} tool calls - stopping to avoid infinite loop.",
                             "⚠️".yellow(), tool_call_iterations), true);
                         chat.messages.push(Message {
