@@ -10,19 +10,19 @@
 
 ## Useful shortcuts
 
-### Build the project
+### Build the project without warnings
 ```bash
-cargo build --release
+RUSTFLAGS=-Awarnings cargo build
 ```
 
 ### Run the application
 ```bash
-cargo run --release
+cargo run 
 ```
 
 ### Run inside the pty tool, with a real model behind, to be able to interact:
 ```bash
-cargo run --release -- --stream --interactive --llama-cpp-url http://192.168.0.201:8081
+cargo run -- --stream --interactive --llama-cpp-url http://192.168.0.201:8081 --auto-confirm
 ```
 
 ## Project Overview
