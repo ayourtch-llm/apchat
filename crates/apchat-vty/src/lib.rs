@@ -228,6 +228,7 @@ pub mod status_info {
 pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_urgent, get_urgent, set_pid, get_pid};
 
 use std::io::{self, Write};
+use crossterm::terminal::size as terminal_size;
 
 /// Scrolls content upward by inserting a blank line at the specified position.
 ///
@@ -310,7 +311,165 @@ pub fn scroll_insert_up(lines_up: u16, text: &str, scroll_up: bool) {
     print!("\x1b[u");
 }
 
+/// Strips ANSI escape codes from a string to get the visible character count.
+///
+/// ANSI escape codes are sequences like `\x1b[31m` (red) or `\x1b[1m` (bold).
+/// This function removes them so we can calculate the actual display width.
+///
+/// # Arguments
+///
+/// * `s` - The string that may contain ANSI codes
+///
+/// # Returns
+///
+/// * `String` - The string with ANSI codes removed
+fn strip_ansi_codes(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // ANSI escape sequence starts
+            if let Some(&'[') = chars.peek() {
+                chars.next(); // consume '['
+                // Skip until we find the end character (a letter, usually 'm')
+                while let Some(&c) = chars.peek() {
+                    chars.next();
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// Calculates the display width of a string, accounting for ANSI codes and unicode.
+///
+/// This function strips ANSI escape codes and then calculates the actual display
+/// width of the remaining characters. Most characters are 1 column wide, but some
+/// unicode characters (like emojis) can be 2 columns wide.
+///
+/// # Arguments
+///
+/// * `s` - The string to measure
+///
+/// # Returns
+///
+/// * `usize` - The display width in columns
+fn display_width(s: &str) -> usize {
+    let stripped = strip_ansi_codes(s);
+    stripped.chars().map(|c| {
+        // Simple heuristic: emojis and wide characters are typically 2 columns
+        // Regular ASCII and most unicode is 1 column
+        if c as u32 > 0x1F300 {
+            2  // Emoji range and other wide characters
+        } else {
+            1
+        }
+    }).sum()
+}
+
+/// Wraps text to fit within a specified width.
+///
+/// Respects word boundaries and handles ANSI escape codes properly.
+///
+/// # Arguments
+///
+/// * `text` - The text to wrap
+/// * `max_width` - Maximum width in columns
+///
+/// # Returns
+///
+/// * `String` - The wrapped text with newlines
+fn wrap_text_at_width(text: &str, max_width: usize) -> String {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut wrapped_lines = Vec::new();
+
+    for line in lines {
+        if line.is_empty() {
+            wrapped_lines.push(String::new());
+            continue;
+        }
+
+        let current_width = display_width(line);
+        if current_width <= max_width {
+            // Line fits as-is
+            wrapped_lines.push(line.to_string());
+            continue;
+        }
+
+        // Need to wrap the line
+        let mut remaining = line;
+        while !remaining.is_empty() {
+            let mut current_pos = 0;
+            let mut current_width = 0;
+            let mut break_point = None;
+            let mut last_space_pos = 0;
+            let mut chars = remaining.char_indices().peekable();
+
+            while let Some((pos, ch)) = chars.next() {
+                let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                
+                if current_width + char_width > max_width {
+                    break;
+                }
+
+                current_width += char_width;
+                current_pos = pos + ch.len_utf8();
+
+                if ch == ' ' {
+                    last_space_pos = pos;
+                }
+
+                if chars.peek().is_none() {
+                    break_point = Some(current_pos);
+                }
+            }
+
+            if let Some(pos) = break_point {
+                let segment = &remaining[..pos];
+                wrapped_lines.push(segment.to_string());
+                remaining = &remaining[pos..];
+                
+                // Trim leading whitespace from next segment
+                remaining = remaining.trim_start();
+            } else if last_space_pos > 0 {
+                // Break at last space
+                let segment = &remaining[..=last_space_pos];
+                wrapped_lines.push(segment.to_string());
+                remaining = &remaining[last_space_pos + 1..];
+            } else {
+                // No break point found, force break at max_width
+                let mut chars = remaining.char_indices().peekable();
+                let mut cut_pos = 0;
+                let mut width = 0;
+                
+                while let Some((pos, ch)) = chars.next() {
+                    let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                    if width + char_width > max_width {
+                        break;
+                    }
+                    width += char_width;
+                    cut_pos = pos + ch.len_utf8();
+                }
+                
+                wrapped_lines.push(remaining[..cut_pos].to_string());
+                remaining = &remaining[cut_pos..];
+            }
+        }
+    }
+
+    wrapped_lines.join("\n")
+}
+
 /// Prints text with a red heart emoji (❤️) prepended to each line.
+///
+/// Text is automatically wrapped to fit the terminal width, accounting for the emoji prefix.
 ///
 /// # Arguments
 /// * `text` - The text to print (can contain embedded newlines)
@@ -325,10 +484,16 @@ pub fn scroll_insert_up(lines_up: u16, text: &str, scroll_up: bool) {
 /// // (with trailing newline)
 /// ```
 pub fn print_heart_red(text: &str, newline: bool) {
-    print_with_emoji("❤️", text, newline, io::stdout());
+    let width = terminal_size().map(|(cols, _rows)| cols as usize).unwrap_or(80);
+    // Emoji is 2 columns wide, so wrap text at width - 2
+    let wrap_width = width.saturating_sub(2);
+    let wrapped = wrap_text_at_width(text, wrap_width.max(1));
+    print_with_emoji("❤️", &wrapped, newline, io::stdout());
 }
 
 /// Prints text with a yellow heart emoji (💛) prepended to each line.
+///
+/// Text is automatically wrapped to fit the terminal width.
 ///
 /// # Arguments
 /// * `text` - The text to print (can contain embedded newlines)
@@ -341,7 +506,9 @@ pub fn print_heart_red(text: &str, newline: bool) {
 /// // 💛 Warning! (no trailing newline)
 /// ```
 pub fn print_heart_yellow(text: &str, newline: bool) {
-    print_with_emoji("💛", text, newline, io::stderr());
+    let width = terminal_size().map(|(cols, _rows)| cols as usize).unwrap_or(80);
+    let wrapped = wrap_text_at_width(text, width);
+    print_with_emoji("💛", &wrapped, newline, io::stderr());
 }
 
 /// Pretty-prints a debug outcome with a styled layout.
