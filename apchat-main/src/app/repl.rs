@@ -160,9 +160,9 @@ pub async fn run_repl_mode(
     let mspc_channel = mspc_channel_opt.as_ref().map(|(c, _, _)| c.clone()).unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
     chat.mspc_channel = Some(mspc_channel.clone());
 
-    // Register Webex messaging tool if Webex is configured
+    // Register Webex messaging tools if Webex is configured
     if let Some((_, webex_client, authorized_email)) = &mspc_channel_opt {
-        crate::config::register_webex_tool(&mut chat.tool_registry, webex_client.clone(), authorized_email.clone());
+        crate::config::register_webex_tools(&mut chat.tool_registry, webex_client.clone(), authorized_email.clone());
     }
 
     use apchat_toolcore::confirmation::ConfirmationRegistry;
