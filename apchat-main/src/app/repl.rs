@@ -273,7 +273,9 @@ pub async fn run_repl_mode(
         }
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
-                print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
+                if chat.get_inference_debug() {
+                    print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
+                }
                 llm_running = false;
                 request_guard = None;
                 if chat.get_inference_debug() {
@@ -405,7 +407,9 @@ pub async fn run_repl_mode(
                         };
 
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
-                            print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
+                            if chat.get_inference_debug() {
+                                print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
+                            }
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("Started repeat inference"), true);
                             }
@@ -612,7 +616,9 @@ async fn prep_and_send_request(
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
-        print_heart_yellow(&format!("📤 [DEBUG] prep_and_send_request called - messages count: {}", chat.messages.len()), true);
+        if chat.get_inference_debug() {
+            print_heart_yellow(&format!("📤 [DEBUG] prep_and_send_request called - messages count: {}", chat.messages.len()), true);
+        }
 
         // Validate and fix tool calls in the conversation history
         if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
@@ -674,13 +680,17 @@ async fn prep_and_send_request(
             inference_debug: chat.get_inference_debug(),
         };
 
-        print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
+        if chat.get_inference_debug() {
+            print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
+        }
         if let Err(_) = llm_channels.request_tx.send(request).await {
             print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
             print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
             return false;
         }
-        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
+        if chat.get_inference_debug() {
+            print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
+        }
         true
 
 
@@ -708,7 +718,9 @@ async fn process_llm_response(
                 tool_calls,
                 model: current_model,
             } => {
-                print_heart_yellow(&format!("🔍 [DEBUG] LLMResponse::Success received - content_len: {}, has_tool_calls: {}", content.len(), tool_calls.is_some()), true);
+                if chat.get_inference_debug() {
+                    print_heart_yellow(&format!("🔍 [DEBUG] LLMResponse::Success received - content_len: {}, has_tool_calls: {}", content.len(), tool_calls.is_some()), true);
+                }
                 // Update model if it changed
                 if chat.current_model != current_model {
                     print_heart_red(&format!("Model switched: {:?} -> {:?}", &chat.current_model, &current_model), true);
