@@ -106,11 +106,18 @@ pub use request_counter::{RequestGuard, get_count};
 /// Atomic counter for tracking active tool executions
 /// This module provides thread-safe tracking of ongoing tool operations
 pub mod tool_counter {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::Mutex;
 
     /// Global atomic counter for active tool executions
     static ACTIVE_TOOLS: AtomicUsize = AtomicUsize::new(0);
+
+    /// Flag indicating if a tool is currently active
+    static IS_TOOL_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+    /// Mutex-protected current tool name (used for thread-safe access)
+    static CURRENT_TOOL_NAME: Mutex<Option<String>> = Mutex::new(None);
 
     /// Get the current count of active tools
     ///
@@ -118,6 +125,16 @@ pub mod tool_counter {
     /// * `usize` - The number of currently active tool executions
     pub fn get_count() -> usize {
         ACTIVE_TOOLS.load(Ordering::Relaxed)
+    }
+
+    /// Check if a tool is currently active
+    pub fn is_tool_active() -> bool {
+        IS_TOOL_ACTIVE.load(Ordering::Relaxed)
+    }
+
+    /// Get the current tool name if a tool is active
+    pub fn get_current_tool_name() -> Option<String> {
+        CURRENT_TOOL_NAME.lock().unwrap().clone()
     }
 
     /// Increment the tool counter
@@ -128,6 +145,18 @@ pub mod tool_counter {
     /// Decrement the tool counter
     fn decrement() {
         ACTIVE_TOOLS.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    /// Set the current tool name
+    pub fn set_tool_name(name: &str) {
+        IS_TOOL_ACTIVE.store(true, Ordering::Relaxed);
+        *CURRENT_TOOL_NAME.lock().unwrap() = Some(name.to_string());
+    }
+
+    /// Clear the current tool name
+    pub fn clear_tool_name() {
+        IS_TOOL_ACTIVE.store(false, Ordering::Relaxed);
+        *CURRENT_TOOL_NAME.lock().unwrap() = None;
     }
 
     /// RAII guard that automatically increments the counter on creation
@@ -143,16 +172,24 @@ pub mod tool_counter {
             increment();
             ToolGuard { _marker: () }
         }
+
+        /// Create a new ToolGuard with a tool name, incrementing the active tool counter
+        pub fn new_with_tool_name(tool_name: &str) -> Self {
+            increment();
+            set_tool_name(tool_name);
+            ToolGuard { _marker: () }
+        }
     }
 
     impl Drop for ToolGuard {
         fn drop(&mut self) {
+            clear_tool_name();
             decrement();
         }
     }
 }
 
-pub use tool_counter::{ToolGuard, get_count as get_tool_count};
+pub use tool_counter::{ToolGuard, get_count as get_tool_count, is_tool_active, get_current_tool_name};
 
 /// Status information module
 /// Provides atomic singletons for status-related values that appear in the title bar

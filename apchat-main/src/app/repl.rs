@@ -813,7 +813,7 @@ async fn process_llm_response(
                         print_heart_red(&format!("🔧 [DEBUG] Executing tool: {} with args: {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         print_heart_red(&format!("TOOL: {} {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         let tool_result = {
-                          let _tool_guard = apchat_vty::ToolGuard::new();
+                          let _tool_guard = apchat_vty::ToolGuard::new_with_tool_name(&tool_call.function.name);
                           print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard created - counter incremented"), true);
                           match chat.execute_tool(
                             &tool_call.function.name,

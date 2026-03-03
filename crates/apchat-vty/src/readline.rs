@@ -1894,13 +1894,26 @@ impl Readline {
             } else {
                 format!("{}/{}", self.search_match_index + 1, self.search_matches.len())
             };
+
+            // Build tool status display
+            let tool_status = if tool_counter::is_tool_active() {
+                if let Some(tool_name) = tool_counter::get_current_tool_name() {
+                    format!("TOOL({})", tool_name)
+                } else {
+                    "TOOL(?)".to_string()
+                }
+            } else {
+                "TOOL(0)".to_string()
+            };
+
             let mut title = format!(
-                "(reverse-i-search)`{}': {} | time: {} | req: {} | tok: {} | queued: {} | history: {} | ctx: {} | urgent: {} | pid: {}",
+                "(reverse-i-search)`{}': {} | time: {} | req: {} | tok: {} | {} | queued: {} | history: {} | ctx: {} | urgent: {} | pid: {}",
                 self.search_pattern,
                 search_status,
                 &local_time,
                 request_counter::get_count(),
                 token_counter::get_count(),
+                tool_status,
                 status_info::get_queued(),
                 status_info::get_history(),
                 status_info::get_context_bytes(),
@@ -2082,7 +2095,17 @@ impl Readline {
                     "IDLE".to_string()
                 }
             } else if tool_count > 0 && req_count == 0 {
-                format!("TOOL({})", tool_count)
+                // Show current tool name if available
+                let tool_name = if tool_counter::is_tool_active() {
+                    if let Some(name) = tool_counter::get_current_tool_name() {
+                        name
+                    } else {
+                        "UNKNOWN".to_string()
+                    }
+                } else {
+                    "UNKNOWN".to_string()
+                };
+                format!("TOOL({})", tool_name)
             } else if req_count > 0 && tool_count == 0 {
                 format!("INFER({})", req_count)
             } else {
