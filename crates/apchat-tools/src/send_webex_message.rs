@@ -58,19 +58,13 @@ impl Tool for SendWebexMessageTool {
             ));
         }
 
-        // Create or get direct room with recipient
-        match self.webex_client.create_direct_room_by_email(&recipient_email).await {
-            Ok(room) => {
-                // Send message to the room
-                match self.webex_client.send_message(&room.id, &message_text).await {
-                    Ok(msg) => ToolResult::success(format!(
-                        "Message sent to {} (room: {}, message_id: {})",
-                        recipient_email, room.id, msg.id
-                    )),
-                    Err(e) => ToolResult::error(format!("Failed to send message: {}", e)),
-                }
-            }
-            Err(e) => ToolResult::error(format!("Failed to create room: {}", e)),
+        // Send message directly to email (automatically creates/uses direct room)
+        match self.webex_client.send_message_to_email(&recipient_email, &message_text).await {
+            Ok(msg) => ToolResult::success(format!(
+                "Message sent to {} (room: {}, message_id: {})",
+                recipient_email, msg.room_id, msg.id
+            )),
+            Err(e) => ToolResult::error(format!("Failed to send message: {}", e)),
         }
     }
 }
