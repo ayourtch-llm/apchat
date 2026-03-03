@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
 use serde_json;
-use apchat_vty::print_heart_red;
+use apchat_vty::{print_heart_red, set_marquee, clear_marquee};
 use apchat_models::types::ModelColor;
 use apchat_llm_api::client::ChatMessage;
 
@@ -83,6 +83,10 @@ impl Tool for LaunchSubagentTool {
            .arg(&task)
            .arg("--auto-confirm"); // Always use auto-confirm for subagent calls
 
+        // Display task in marquee
+        let task_display = format!("launch_subagent: {}", task);
+        set_marquee(&task_display);
+
         // Propagate --no-summarize-subagents if summarization is disabled
         if !context.summarize_subagents {
             cmd.arg("--no-summarize-subagents");
@@ -118,7 +122,10 @@ impl Tool for LaunchSubagentTool {
             .spawn()
         {
             Ok(child) => child,
-            Err(e) => return ToolResult::error(format!("Failed to spawn subagent: {}", e)),
+            Err(e) => {
+                clear_marquee();
+                return ToolResult::error(format!("Failed to spawn subagent: {}", e));
+            }
         };
 
         let pid = child.id();
@@ -165,6 +172,9 @@ impl Tool for LaunchSubagentTool {
             eprintln!("Subagent stderr reader thread panicked: {:?}", e);
             String::new()
         });
+
+        // Clear marquee after subagent process starts
+        clear_marquee();
 
         // Wait for process to complete
         let status = match child.wait() {
@@ -256,6 +266,10 @@ impl Tool for LaunchSubagentPrettyTool {
            .arg("--pretty")
            .arg("--auto-confirm");
 
+        // Display task in marquee
+        let task_display = format!("launch_subagent_pretty: {}", task);
+        set_marquee(&task_display);
+
         // Propagate --no-summarize-subagents if summarization is disabled
         if !context.summarize_subagents {
             cmd.arg("--no-summarize-subagents");
@@ -291,7 +305,10 @@ impl Tool for LaunchSubagentPrettyTool {
             .spawn()
         {
             Ok(child) => child,
-            Err(e) => return ToolResult::error(format!("Failed to spawn subagent: {}", e)),
+            Err(e) => {
+                clear_marquee();
+                return ToolResult::error(format!("Failed to spawn subagent: {}", e));
+            }
         };
 
         let pid = child.id();
@@ -338,6 +355,9 @@ impl Tool for LaunchSubagentPrettyTool {
             eprintln!("Subagent stderr reader thread panicked: {:?}", e);
             String::new()
         });
+
+        // Clear marquee after subagent process starts
+        clear_marquee();
 
         // Wait for process to complete
         let status = match child.wait() {

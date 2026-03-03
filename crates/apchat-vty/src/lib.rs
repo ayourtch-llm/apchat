@@ -276,8 +276,16 @@ pub mod status_info {
 
     /// Set the marquee text (no longer uses background thread - increments on-demand)
     /// Note: Does NOT reset the scroll index to preserve smooth scrolling when text updates
+    /// 
+    /// Sanitization: Replaces newlines with " ⋯ " to prevent display corruption
+    /// and ensures the text stays within safe bounds.
     pub fn set_marquee(text: &str) {
-        *MARQUEE_TEXT.lock().unwrap() = Some(text.to_string());
+        // Sanitize text: replace newlines and carriage returns with safe separators
+        let sanitized = text
+            .replace('\n', " ⋯ ")
+            .replace('\r', " ⋯ ");
+        
+        *MARQUEE_TEXT.lock().unwrap() = Some(sanitized);
         // Don't reset index - preserve current scroll position for smooth transitions
     }
 

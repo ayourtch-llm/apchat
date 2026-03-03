@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use tokio::process::Command as AsyncCommand;
 use colored::Colorize;
 use std::io::Write;
-use apchat_vty::print_heart_red;
+use apchat_vty::{print_heart_red, set_marquee, clear_marquee};
 
 /// Maximum allowed timeout (600 seconds)
 const MAX_TIMEOUT: u64 = 600000;
@@ -65,6 +65,8 @@ impl Tool for RunCommandTool {
         }
 
         // Check permission using policy system
+        let command_display = format!("run_command: {}", command);
+        set_marquee(&command_display);
         print_heart_red(&format!("{} {} ", "Run command:".yellow(), command.cyan()), true);
         std::io::stdout().flush().ok();
 
@@ -102,6 +104,9 @@ impl Tool for RunCommandTool {
         // Execute command in work directory with timeout
         let timeout_duration = std::time::Duration::from_millis(timeout_msecs);
         let (stdout, stderr, exit_code) = match tokio::time::timeout(timeout_duration, async {
+            // Clear marquee after command execution starts
+            clear_marquee();
+            
             // Spawn the process
             let mut child = match AsyncCommand::new("bash")
                 .args(["-c", &orig_command])
