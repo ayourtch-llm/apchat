@@ -40,6 +40,8 @@ pub struct SendMessageRequest {
     pub to_person_email: Option<String>,
     #[serde(rename = "parentId", skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
+    #[serde(rename = "markdown", skip_serializing_if = "Option::is_none")]
+    pub markdown: Option<bool>,
     pub text: String,
 }
 

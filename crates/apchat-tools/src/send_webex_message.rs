@@ -35,7 +35,8 @@ impl Tool for SendWebexMessageTool {
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("recipient_email", "string", "Email address of the recipient (must be authorized)", required),
-            param!("message_text", "string", "The message content to send", required),
+            param!("message_text", "string", "The message content to send (can be plain text or markdown)", required),
+            param!("use_markdown", "boolean", "If true, treat message_text as markdown. Default: false", optional),
         ])
     }
 
@@ -58,11 +59,23 @@ impl Tool for SendWebexMessageTool {
             ));
         }
 
+        // Check if markdown should be used (default: false)
+        let use_markdown = match params.get_optional::<bool>("use_markdown") {
+            Ok(Some(val)) => val,
+            Ok(None) | Err(_) => false,
+        };
+
         // Send message directly to email (automatically creates/uses direct room)
-        match self.webex_client.send_message_to_email(&recipient_email, &message_text).await {
+        let msg = if use_markdown {
+            self.webex_client.send_message_to_email_markdown(&recipient_email, &message_text).await
+        } else {
+            self.webex_client.send_message_to_email(&recipient_email, &message_text).await
+        };
+
+        match msg {
             Ok(msg) => ToolResult::success(format!(
-                "Message sent to {} (room: {}, message_id: {})",
-                recipient_email, msg.room_id, msg.id
+                "Message sent to {} (room: {}, message_id: {}, markdown: {})",
+                recipient_email, msg.room_id, msg.id, use_markdown
             )),
             Err(e) => ToolResult::error(format!("Failed to send message: {}", e)),
         }

@@ -148,8 +148,20 @@ impl WebexClient {
 
     /// Send a message to a room with optional parent ID for threading
     pub async fn send_message_with_parent(&self, room_id: &str, text: &str, parent_id: Option<String>) -> Result<Message> {
+        self.send_message_with_format(room_id, text, parent_id, false).await
+    }
+
+    /// Send a markdown message to a room with optional parent ID for threading
+    /// Returns the message ID which can be used for deletion via delete_message()
+    pub async fn send_message_markdown_with_parent(&self, room_id: &str, markdown_text: &str, parent_id: Option<String>) -> Result<Message> {
+        self.send_message_with_format(room_id, markdown_text, parent_id, true).await
+    }
+
+    /// Internal method to send message with format option
+    async fn send_message_with_format(&self, room_id: &str, text: &str, parent_id: Option<String>, markdown: bool) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Sending message to room {}{}: {}",
+        print_heart_yellow(&format!("🔍 Sending {}message to room {}{}: {}",
+            if markdown { "markdown " } else { "" },
             room_id,
             parent_id.as_ref().map(|p| format!(" (reply to {})", p.chars().take(8).collect::<String>())).unwrap_or_default(),
             text.chars().take(50).collect::<String>()
@@ -159,6 +171,7 @@ impl WebexClient {
             room_id: Some(room_id.to_string()),
             to_person_email: None,
             parent_id,
+            markdown: if markdown { Some(true) } else { None },
             text: text.to_string(),
         };
 
@@ -177,19 +190,36 @@ impl WebexClient {
             .await
             .context("Failed to parse message response")?;
 
-        print_heart_yellow(&format!("🔍 Sent message ID: {}", message.id), true);
+        print_heart_yellow(&format!("🔍 Sent message ID: {} (use this ID for deletion)", message.id), true);
         Ok(message)
     }
 
     /// Send a message to a person by email (creates/uses direct room automatically)
+    /// Returns the message ID which can be used for deletion via delete_message()
     pub async fn send_message_to_email(&self, email: &str, text: &str) -> Result<Message> {
+        self.send_message_to_email_with_format(email, text, false).await
+    }
+
+    /// Send a markdown message to a person by email (creates/uses direct room automatically)
+    /// Returns the message ID which can be used for deletion via delete_message()
+    pub async fn send_message_to_email_markdown(&self, email: &str, markdown_text: &str) -> Result<Message> {
+        self.send_message_to_email_with_format(email, markdown_text, true).await
+    }
+
+    /// Internal method to send message to email with format option
+    async fn send_message_to_email_with_format(&self, email: &str, text: &str, markdown: bool) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Sending message to email {}: {}", email, text.chars().take(50).collect::<String>()), true);
+        print_heart_yellow(&format!("🔍 Sending {}message to email {}: {}",
+            if markdown { "markdown " } else { "" },
+            email,
+            text.chars().take(50).collect::<String>()
+        ), true);
 
         let request = SendMessageRequest {
             room_id: None,
             to_person_email: Some(email.to_string()),
             parent_id: None,
+            markdown: if markdown { Some(true) } else { None },
             text: text.to_string(),
         };
 
@@ -217,7 +247,7 @@ impl WebexClient {
             .await
             .context("Failed to parse message response")?;
 
-        print_heart_yellow(&format!("🔍 Sent message ID: {}, room ID: {}", message.id, message.room_id), true);
+        print_heart_yellow(&format!("🔍 Sent message ID: {} (use this ID for deletion), room ID: {}", message.id, message.room_id), true);
         Ok(message)
     }
 
