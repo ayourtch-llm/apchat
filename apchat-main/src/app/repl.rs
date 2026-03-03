@@ -324,6 +324,8 @@ pub async fn run_repl_mode(
                                 print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
                                 llm_running = true;
                                 request_guard = Some(RequestGuard::new());
+                                // CRITICAL FIX: Return early to avoid pushing empty assistant message
+                                // The retry will generate a new response, so we don't want to pollute history with empty content
                                 continue; // Continue the select loop to wait for retry response
                             } else {
                                 print_heart_yellow(&format!("❌ [DEBUG] Empty response retry {} - failed to send request", empty_response_retries), true);
@@ -335,7 +337,7 @@ pub async fn run_repl_mode(
                         // Normal response - reset retry counter
                         empty_response_retries = 0;
                         
-                        // Log assistant response
+                        // Log assistant response (only for non-empty responses)
                         if let Some(logger) = &mut chat.logger {
                             logger.log("assistant", &response, None, false).await;
                         }
