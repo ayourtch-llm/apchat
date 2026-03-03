@@ -21,6 +21,23 @@ This directory contains best practice guides for using the available tools effic
   - Examples for file operations, search, subagents, and more
   - Best practices for batching and complex workflows
 
+## Rust Build Best Practices
+
+For efficient Rust development, see the build tips in:
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Includes build/check commands and warning suppression
+
+### Quick Build Tips
+```bash
+# Fast syntax checking
+cargo check
+
+# Suppress warnings to reduce context churn
+export RUSTFLAGS="-Awarnings"
+
+# See just the last 10 lines
+cargo build --release 2>&1 | tail -n 10
+```
+
 ## Why This Matters
 
 Using tools efficiently is crucial because:
@@ -35,7 +52,4 @@ Using tools efficiently is crucial because:
 2. Read **read_file_usage.md** for detailed best practices
 3. Review **curly_glance_usage.md** for advanced exploration techniques
 4. Check **python_sandbox_guide.md** for batch operations and automation
-
-## Need More Help?
-
-Check the main project documentation in `docs/` directory.
+5. Review **QUICK_REFERENCE.md** for build command tips

@@ -168,9 +168,30 @@ cd apchat
 
 2. Build the project:
 ```bash
+# For quick syntax/type checks (fastest!)
+cargo check
 
+# For development builds (fast builds with debug symbols)
+cargo build
+
+# For optimized release builds (slower but faster runtime)
 cargo build --release
+
+# Pro tip: Suppress warnings during development to reduce context churn
+export RUSTFLAGS="-Awarnings"
+cargo check  # or cargo build / cargo build --release
+
+# Pro tip: Use tail to see just the last few lines of output
+cargo build --release 2>&1 | tail -n 10
+cargo check 2>&1 | tail -n 10
 ```
+
+### Build Speed Guide
+- **`cargo check`**: ~1-5 seconds (syntax/type checking only, no compilation)
+- **`cargo build`**: ~10-60 seconds (debug mode, fast iteration)
+- **`cargo build --release`**: ~2-10 minutes (optimized, slower but faster runtime)
+
+**Recommendation**: Use `cargo check` or `cargo build` during development, switch to `--release` only when testing final performance or creating distributable binaries.
 
 3. (Optional) Generate shell completions:
 ```bash

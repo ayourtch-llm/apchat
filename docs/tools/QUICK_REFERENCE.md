@@ -39,3 +39,54 @@ read_file {
 - `docs/tools/read_file_usage.md` - Detailed guide
 - `docs/tools/file_reading_quick_reference.md` - Quick cheat sheet
 - `docs/tools/README.md` - All tools documentation
+
+---
+
+## 🚀 Rust Build & Check Best Practices
+
+### Build Commands
+
+**For syntax/type checking (fast!):**
+```bash
+cargo check
+```
+
+**For quick builds (development):**
+```bash
+cargo build
+```
+
+**For optimized releases (slower but faster runtime):**
+```bash
+cargo build --release
+```
+
+### Why the Difference?
+- **`cargo build`**: Debug mode with optimizations disabled - **much faster builds** (seconds to minutes)
+- **`cargo build --release`**: Optimized mode with -O2/-O3 - **slower builds** (minutes to hours) but faster runtime
+
+### When to Use What
+- **Quick iteration**: `cargo check` (no compilation, just validation)
+- **Development testing**: `cargo build` (fast, with debug symbols)
+- **Before production/testing performance**: `cargo build --release` (slower build, faster execution)
+- **Final release**: `cargo build --release`
+
+### Suppress Warnings (Recommended for Development)
+```bash
+export RUSTFLAGS="-Awarnings"
+cargo check  # or cargo build --release
+```
+This prevents warning messages from cluttering your context window!
+
+### Quick Output Review
+```bash
+# See just the last 10 lines of build output
+cargo build --release 2>&1 | tail -n 10
+cargo check 2>&1 | tail -n 10
+```
+
+### When to Use What
+- **Quick iteration**: `cargo check` (no compilation, just validation)
+- **Before testing**: `cargo build --release` (creates optimized binary)
+- **During development**: Use `RUSTFLAGS="-Awarnings"` to reduce noise
+- **Debugging builds**: `cargo build` (no optimization)
