@@ -2753,11 +2753,12 @@ impl Readline {
                 counter = COUNTDOWN;
             }
 
-            // Check idle timeout (only if no active requests or queued tools)
+            // Check idle timeout (only if no active requests, queued tools, or running tools)
             if let Some(injection_time) = self.idle_command_time {
                 if chrono::Local::now() >= injection_time 
                     && request_counter::get_count() == 0 
-                    && status_info::get_queued() == 0 {
+                    && status_info::get_queued() == 0
+                    && !tool_counter::is_tool_active() {
                     // Inject the idle command
                     if let Some(ref cmd) = self.idle_command {
                         // If command starts with "@", treat remainder as filename to read
