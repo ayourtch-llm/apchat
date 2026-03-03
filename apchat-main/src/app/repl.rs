@@ -17,7 +17,6 @@ use apchat_policy::PolicyManager;
 
 use crate::APChat;
 use crate::api::OutputChunk;
-use crate::bin_version::default_temp_state_path;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::mspc::{MspcChannel, MspcMessage, get_readline_receiver};
@@ -130,7 +129,7 @@ pub async fn run_repl_mode(
     work_dir: PathBuf,
     policy_manager: PolicyManager,
     webex_sink: Option<std::sync::Arc<apchat_webex::WebexOutputSink>>,
-    mspc_channel_opt: Option<Arc<MspcChannel>>,
+    mspc_channel_opt: Option<(std::sync::Arc<MspcChannel>, std::sync::Arc<apchat_webex::WebexClient>, String)>,
 ) -> Result<()> {
     // ── Initialization ─────────────────────────────────────────────────────
     let (mut chat, idle_config) =
@@ -158,8 +157,13 @@ pub async fn run_repl_mode(
     let mut repl_state = ApchatReplLoopState::Idle;
 
     // ── MSPC channel & confirmation plumbing ───────────────────────────────
-    let mspc_channel = mspc_channel_opt.unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
+    let mspc_channel = mspc_channel_opt.as_ref().map(|(c, _, _)| c.clone()).unwrap_or_else(|| Arc::new(MspcChannel::new(100)));
     chat.mspc_channel = Some(mspc_channel.clone());
+
+    // Register Webex messaging tool if Webex is configured
+    if let Some((_, webex_client, authorized_email)) = &mspc_channel_opt {
+        crate::config::register_webex_tool(&mut chat.tool_registry, webex_client.clone(), authorized_email.clone());
+    }
 
     use apchat_toolcore::confirmation::ConfirmationRegistry;
     let confirmation_registry = Arc::new(ConfirmationRegistry::new());
@@ -375,31 +379,6 @@ pub async fn run_repl_mode(
 
     if let Some(logger) = &mut chat.logger {
         logger.shutdown().await;
-    }
-
-    // Save state to file if --save is specified
-    if let Some(save_path) = &cli.save {
-        match chat.save_state(save_path) {
-            Ok(msg) => print_heart_yellow(&format!("{} {}", "💾".bright_green(), msg), true),
-            Err(e) => print_heart_yellow(&format!("{} Failed to save state: {}", "❌".bright_red(), e), true),
-        }
-    }
-
-    // Also save to temp state file if --hot-reload is enabled
-    if cli.hot_reload {
-        let temp_state_path = cli.temp_state
-            .clone()
-            .unwrap_or_else(|| default_temp_state_path().to_string_lossy().to_string());
-        match chat.save_state(&temp_state_path) {
-            Ok(msg) => {
-                if chat.debug_level > 0 {
-                    print_heart_yellow(&format!("{} {}", "💾".bright_green(), msg), true);
-                }
-            }
-            Err(e) => {
-                print_heart_yellow(&format!("{} Failed to save temp state: {}", "⚠️".yellow(), e), true);
-            }
-        }
     }
 
     Ok(())

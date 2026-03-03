@@ -414,6 +414,12 @@ impl APChat {
                 let args: SwitchModelArgs = serde_json::from_str(arguments)?;
                 self.switch_model(&args.model, &args.reason)
             }
+            "save_full_state" => {
+                let params = ToolParameters::from_json(arguments)?;
+                let file_path = params.get_required::<String>("file_path")
+                    .map_err(|e| anyhow::anyhow!(e))?;
+                self.save_state(&file_path)
+            }
             _ => {
                 // Use the tool registry for all tools (including plan_edits and apply_edit_plan)
                 let params = match ToolParameters::from_json(arguments) {

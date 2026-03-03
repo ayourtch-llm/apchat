@@ -33,6 +33,8 @@ pub mod rlm;
 pub mod mcp_client;
 pub mod searxng;
 pub mod python_sandbox;
+pub mod save_full_state;
+pub mod send_webex_message;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -58,5 +60,7 @@ pub use context_edit::*;
 pub use diff_fuzz::*;
 pub use rlm::*;
 pub use python_sandbox::*;
+pub use save_full_state::*;
+pub use send_webex_message::*;
 
 

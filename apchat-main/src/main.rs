@@ -11,15 +11,10 @@ use tokio::sync::Mutex;
 use apchat::{APChat, resolve_terminal_backend};
 use apchat::cli::{Cli, Commands};
 use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode};
-use apchat::bin_version::{default_temp_state_path, check_binary_replaced, store_binary_hash, reexec_with_temp_state};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_toolcore;
-
-// Global flag to prevent infinite re-execution loops
-static mut REEXEC_COUNT: i32 = 0;
-const MAX_REEXEC_COUNT: i32 = 3; // Prevent infinite loops
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -38,54 +33,6 @@ async fn main() -> Result<()> {
     // This takes precedence over the environment variable
     if let Some(path) = &cli.memory_db_path {
         std::env::set_var("APCHAT_MEMORY_DB_PATH", path);
-    }
-
-    // Check for binary replacement if --hot-reload is enabled
-    if cli.hot_reload {
-        let temp_state_path = cli.temp_state
-            .clone()
-            .unwrap_or_else(|| default_temp_state_path().to_string_lossy().to_string());
-        let temp_state_path_buf = PathBuf::from(&temp_state_path);
-        
-        // Get current binary path
-        let current_exe = env::current_exe()?;
-        
-        // Check if binary has been replaced
-        let hash_path = current_exe.with_extension("apchat.hash");
-        
-        match check_binary_replaced(&current_exe, &hash_path) {
-            Ok(Some(_new_hash)) => {
-                // Binary has been replaced!
-                unsafe {
-                    REEXEC_COUNT += 1;
-                    if REEXEC_COUNT > MAX_REEXEC_COUNT {
-                        eprintln!("{} Warning: Max re-execution count ({}) reached. Skipping auto-reload.", 
-                                 "⚠️".yellow(), MAX_REEXEC_COUNT);
-                    } else {
-                        eprintln!("{} Binary replaced! Saving state and re-executing...", 
-                                 "🔄".bright_cyan());
-                        
-                        // We need to save the current state, but we haven't initialized the chat yet
-                        // For now, we'll just store the hash and let the new instance handle state loading
-                        // The actual state saving will happen in run_repl_mode/on_exit
-                        store_binary_hash(&current_exe, &hash_path)?;
-                        
-                        // Re-execute with the temp state file
-                        // Note: This will be called again in the new instance, but without binary replacement
-                        return reexec_with_temp_state(&temp_state_path_buf, &original_args)
-                            .map_err(|e| anyhow::anyhow!(e));
-                    }
-                }
-            }
-            Ok(None) => {
-                // Binary hasn't been replaced, store the current hash
-                let hash_path = current_exe.with_extension("apchat.hash");
-                let _ = store_binary_hash(&current_exe, &hash_path);
-            }
-            Err(e) => {
-                eprintln!("{} Failed to check binary version: {}", "⚠️".yellow(), e);
-            }
-        }
     }
 
     // If a subcommand was provided, execute it and exit
@@ -165,7 +112,7 @@ async fn main() -> Result<()> {
     router.set_readline_active(true);
 
     // Run REPL mode (with optional Webex integration)
-    let (webex_sink, mspc_channel) = if let Some(ref user_email) = cli.webex_bot {
+    let (webex_sink, mspc_channel_opt) = if let Some(ref user_email) = cli.webex_bot {
         // Create shared MSPC channel for both terminal and Webex
         let mspc_channel = Arc::new(apchat::mspc::MspcChannel::new(100));
 
@@ -182,7 +129,7 @@ async fn main() -> Result<()> {
                         Some(cli.webex_reconnect_hours)
                     };
                     match apchat_webex::WebexWebSocketRouter::new(
-                        token,
+                        token.clone(),
                         user_email.clone(),
                         mspc_channel.clone(),
                         reconnect_hours,
@@ -199,13 +146,15 @@ async fn main() -> Result<()> {
                                 }
                             });
 
-                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id, last_message_id));
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client.clone(), room_id, last_message_id));
                             print_heart_red(&format!("{} Webex WebSocket bot ready - responses will be broadcast", "✓".bright_green()), true);
-                            (Some(sink), Some(mspc_channel))
+                            (Some(sink), Some((mspc_channel, client, user_email.clone())))
                         }
                         Err(e) => {
                             print_heart_yellow(&format!("{} Failed to initialize Webex WebSocket bot: {}", "⚠️".yellow(), e), true);
-                            (None, Some(mspc_channel))
+                            // Create a default WebexClient for tool registration
+                            let default_client = apchat_webex::WebexClient::new(token.clone());
+                            (None, Some((mspc_channel, std::sync::Arc::new(default_client), user_email.clone())))
                         }
                     }
                 } else {
@@ -213,7 +162,7 @@ async fn main() -> Result<()> {
 
                     // Initialize Webex input router (polling mode)
                     match apchat_webex::WebexInputRouter::new(
-                        token,
+                        token.clone(),
                         user_email.clone(),
                         mspc_channel.clone(),
                     ).await {
@@ -229,20 +178,22 @@ async fn main() -> Result<()> {
                                 }
                             });
 
-                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client, room_id, last_message_id));
+                            let sink = Arc::new(apchat_webex::WebexOutputSink::new(client.clone(), room_id, last_message_id));
                             print_heart_red(&format!("{} Webex bot ready (polling mode)", "✓".bright_green()), true);
-                            (Some(sink), Some(mspc_channel))
+                            (Some(sink), Some((mspc_channel, client, user_email.clone())))
                         }
                         Err(e) => {
                             print_heart_yellow(&format!("{} Failed to initialize Webex bot: {}", "⚠️".yellow(), e), true);
-                            (None, Some(mspc_channel))
+                            // Create a default WebexClient for tool registration
+                            let default_client = apchat_webex::WebexClient::new(token.clone());
+                            (None, Some((mspc_channel, std::sync::Arc::new(default_client), user_email.clone())))
                         }
                     }
                 }
             }
             Err(e) => {
                 print_heart_yellow(&format!("{} {}", "⚠️".yellow(), e), true);
-                (None, Some(mspc_channel))
+                (None, None)
             }
         }
     } else {
@@ -255,7 +206,7 @@ async fn main() -> Result<()> {
         app_config.work_dir,
         app_config.policy_manager,
         webex_sink,
-        mspc_channel,
+        mspc_channel_opt,
     )
     .await
 }

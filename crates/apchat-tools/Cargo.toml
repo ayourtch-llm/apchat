@@ -23,6 +23,7 @@ apchat-todo = { path = "../apchat-todo" }
 apchat-common = { path = "../apchat-common" }
 apchat-toolcore = { path = "../apchat-toolcore" }
 apchat-vty = { path = "../apchat-vty" }
+apchat-webex = { path = "../apchat-webex" }
 regex = "*"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }

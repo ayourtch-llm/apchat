@@ -31,6 +31,7 @@ pub struct FeatureFlags {
     pub forecasting: bool,
     pub context_mode: bool,
     pub financial_services: bool,
+    pub save: bool,
     pub mcp_servers: Vec<String>,
     pub searxng_url: Option<String>,
 }
@@ -277,7 +278,25 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
         );
     }
 
+    // Register save_full_state tool (only if --save flag is enabled)
+    if flags.save {
+        registry.register_with_categories(SaveFullStateTool, vec!["state".to_string()]);
+        print_heart_red("✓ State save tool enabled", true);
+    }
+
     registry
+}
+
+/// Register Webex messaging tool after Webex client is initialized.
+/// Call this after Webex client is created and you have the authorized user email.
+pub fn register_webex_tool(
+    registry: &mut ToolRegistry,
+    webex_client: std::sync::Arc<apchat_webex::WebexClient>,
+    authorized_email: String,
+) {
+    let tool = SendWebexMessageTool::new(webex_client, authorized_email);
+    registry.register_with_categories(tool, vec!["messaging".to_string(), "webex".to_string()]);
+    print_heart_red("✓ Webex messaging tool enabled", true);
 }
 
 /// Register MCP server tools in the tool registry.

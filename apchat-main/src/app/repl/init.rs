@@ -8,7 +8,6 @@ use apchat_models::{ModelColor, Message};
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
-use crate::bin_version::default_temp_state_path;
 use crate::cli::Cli;
 use crate::config::{ClientConfig, FeatureFlags};
 
@@ -48,6 +47,7 @@ pub async fn initialize_repl(
         forecasting: cli.forecasting,
         context_mode: cli.context_mode,
         financial_services: cli.financial_services,
+        save: cli.save,
         mcp_servers: cli.mcp_server.clone(),
         searxng_url: cli.searxng.clone(),
     };
@@ -102,26 +102,6 @@ pub async fn initialize_repl(
         match chat.load_state(load_path) {
             Ok(msg) => print_heart_yellow(&format!("{} {}", "📂".bright_green(), msg), true),
             Err(e) => print_heart_yellow(&format!("{} Failed to load state: {}", "❌".bright_red(), e), true),
-        }
-    }
-
-    // Also load from temp state file if --hot-reload is enabled
-    if cli.hot_reload {
-        let temp_state_path = cli.temp_state
-            .clone()
-            .unwrap_or_else(|| default_temp_state_path().to_string_lossy().to_string());
-        let temp_path = std::path::Path::new(&temp_state_path);
-        if temp_path.exists() {
-            match chat.load_state(&temp_state_path) {
-                Ok(msg) => {
-                    if chat.debug_level > 0 {
-                        print_heart_yellow(&format!("{} {}", "🔄".bright_cyan(), msg), true);
-                    }
-                }
-                Err(e) => {
-                    print_heart_yellow(&format!("{} Failed to load temp state: {}", "⚠️".yellow(), e), true);
-                }
-            }
         }
     }
 
