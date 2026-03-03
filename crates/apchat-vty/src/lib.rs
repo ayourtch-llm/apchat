@@ -195,6 +195,13 @@ pub use tool_counter::{ToolGuard, get_count as get_tool_count, is_tool_active, g
 /// Provides atomic singletons for status-related values that appear in the title bar
 pub mod status_info {
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+    use tokio::task::JoinHandle;
+
+    /// Marquee display width in characters
+    const MARQUEE_WIDTH: usize = 30;
 
     /// Global atomic counter for queued items
     static QUEUED: AtomicUsize = AtomicUsize::new(0);
@@ -210,6 +217,12 @@ pub mod status_info {
 
     /// Process ID (set once at initialization)
     static PID: AtomicUsize = AtomicUsize::new(0);
+
+    /// Marquee text storage
+    static MARQUEE_TEXT: Mutex<Option<String>> = Mutex::new(None);
+    
+    /// Marquee scroll position (character index)
+    static MARQUEE_INDEX: AtomicUsize = AtomicUsize::new(0);
 
     /// Set the queued count
     pub fn set_queued(count: usize) {
@@ -260,9 +273,59 @@ pub mod status_info {
     pub fn get_pid() -> usize {
         PID.load(Ordering::Relaxed)
     }
+
+    /// Set the marquee text (no longer uses background thread - increments on-demand)
+    pub fn set_marquee(text: &str) {
+        *MARQUEE_TEXT.lock().unwrap() = Some(text.to_string());
+        MARQUEE_INDEX.store(0, Ordering::Relaxed);
+    }
+
+    /// Clear the marquee text
+    pub fn clear_marquee() {
+        *MARQUEE_TEXT.lock().unwrap() = None;
+        MARQUEE_INDEX.store(0, Ordering::Relaxed);
+    }
+
+    /// Get the marquee display text (scrolled to current position)
+    pub fn get_marquee_display() -> String {
+        let binding = MARQUEE_TEXT.lock().unwrap();
+        let text = match binding.as_ref() {
+            Some(t) => t,
+            None => return " ".repeat(MARQUEE_WIDTH), // Always return 30 spaces
+        };
+
+        if text.is_empty() {
+            return " ".repeat(MARQUEE_WIDTH); // Always return 30 spaces
+        }
+
+        // Increment scroll index on each call for on-demand scrolling
+        let current = MARQUEE_INDEX.load(Ordering::Relaxed);
+        MARQUEE_INDEX.store(current + 1, Ordering::Relaxed);
+        
+        let text_len = text.chars().count();
+
+        let mut result = if text_len <= MARQUEE_WIDTH {
+            // Text fits in marquee width, pad it to exactly MARQUEE_WIDTH
+            let mut result = text.clone();
+            result
+        } else {
+            // Scrolling: show window of exactly MARQUEE_WIDTH characters
+            let start = current % text_len;
+            
+            if start >= text_len {
+                " ".repeat(MARQUEE_WIDTH)
+            } else {
+                text.chars().skip(start).take(MARQUEE_WIDTH).collect()
+            }
+        };
+        while result.chars().count() < MARQUEE_WIDTH {
+            result.push(' ');
+        }
+        result
+    }
 }
 
-pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_urgent, get_urgent, set_pid, get_pid};
+pub use status_info::{set_queued, get_queued, set_history, get_history, set_context_bytes, get_context_bytes, set_urgent, get_urgent, set_pid, get_pid, set_marquee, clear_marquee, get_marquee_display};
 
 use std::io::{self, Write};
 use crossterm::terminal::size as terminal_size;

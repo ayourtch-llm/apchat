@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use colored::Colorize;
 use std::time::Duration;
 
+// Import marquee functions from apchat_vty
+use apchat_vty::{set_marquee, clear_marquee};
+
 /// Default wait duration in seconds (30 seconds)
 const DEFAULT_DURATION: f64 = 30.0;
 
@@ -58,8 +61,14 @@ impl Tool for LongWaitTool {
 
         // Implement wait loop with progress updates
         match wait_with_progress(duration, &message, context).await {
-            Ok(msg) => ToolResult::success(msg),
-            Err(e) => ToolResult::error(e.to_string()),
+            Ok(msg) => {
+                clear_marquee();
+                ToolResult::success(msg)
+            },
+            Err(e) => {
+                clear_marquee();
+                ToolResult::error(e.to_string())
+            }
         }
     }
 }
@@ -71,7 +80,8 @@ async fn wait_with_progress(duration: f64, message: &str, context: &ToolContext)
     let start_time = Instant::now();
     let total_duration = Duration::from_secs_f64(duration);
     let mut elapsed = Duration::ZERO;
-    let mut next_update_interval = Duration::from_secs(1);
+    // Start with 0.5 second updates for interactive mode, double up to 32 seconds
+    let mut next_update_interval = Duration::from_millis(500);
     let mut last_update_time = Instant::now();
     
     while elapsed < total_duration {
@@ -165,7 +175,15 @@ async fn send_progress(context: &ToolContext, message: &str, progress_pct: f64, 
         total_secs
     );
     
-    println!("{}", progress_msg.cyan());
+    // Only print colored progress in non-interactive mode
+    // In interactive mode, the marquee handles progress display
+    if context.non_interactive {
+        println!("{}", progress_msg.cyan());
+    }
+    
+    // Update marquee with progress - use format: "⏱ Message: XX.X%"
+    let marquee_text = format!("⏱ {}: {:.1}%", message, progress_pct);
+    set_marquee(&marquee_text);
     
     // Only send if sender is available
     if let Some(sender) = &context.mspc_sender {

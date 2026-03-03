@@ -2105,7 +2105,21 @@ impl Readline {
                 } else {
                     "UNKNOWN".to_string()
                 };
-                format!("TOOL({})", tool_name)
+                // Add marquee after tool name with fixed total width
+                let marquee = status_info::get_marquee_display();
+                let base = format!("TOOL({})", tool_name);
+                // Ensure total width is consistent: if marquee is empty, pad to 30 chars
+                if marquee.is_empty() {
+                    // Pad base to fixed width (35 chars = "TOOL(XXXXXXX)" + 30 spaces)
+                    let mut result = base;
+                    while result.chars().count() < 35 {
+                        result.push(' ');
+                    }
+                    result
+                } else {
+                    // Marquee is already 30 chars, so we get base + " " + 30 chars
+                    format!("{} {}", base, marquee)
+                }
             } else if req_count > 0 && tool_count == 0 {
                 format!("INFER({})", req_count)
             } else {
@@ -2689,7 +2703,7 @@ impl Readline {
         }
 
         let mut curr_output_data = format!("");
-        let COUNTDOWN = 20;
+        let COUNTDOWN = 2; // 2 * 50ms = 100ms redraw interval
         let mut counter = COUNTDOWN;
 
         // Main event loop
