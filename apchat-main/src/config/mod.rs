@@ -288,6 +288,22 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     registry
 }
 
+/// Register Webex messaging tools after Webex client is initialized.
+/// Call this after Webex client is created and you have the authorized user email.
+pub fn register_webex_tools(
+    registry: &mut ToolRegistry,
+    webex_client: std::sync::Arc<apchat_webex::WebexClient>,
+    authorized_email: String,
+) {
+    let send_tool = SendWebexMessageTool::new(webex_client.clone(), authorized_email.clone());
+    registry.register_with_categories(send_tool, vec!["messaging".to_string(), "webex".to_string()]);
+    print_heart_red("✓ Webex messaging tool enabled", true);
+
+    let delete_tool = DeleteWebexMessageTool::new(webex_client, authorized_email);
+    registry.register_with_categories(delete_tool, vec!["messaging".to_string(), "webex".to_string()]);
+    print_heart_red("✓ Webex message deletion tool enabled", true);
+}
+
 /// Register Webex messaging tool after Webex client is initialized.
 /// Call this after Webex client is created and you have the authorized user email.
 pub fn register_webex_tool(

@@ -251,7 +251,71 @@ impl WebexClient {
         Ok(message)
     }
 
-    /// Delete a message from a room
+    /// Delete a message by ID
+    pub async fn delete_message_by_id(&self, room_id: &str, message_id: &str) -> Result<()> {
+        let url = format!("{}/messages/{}", WEBEX_API_BASE, message_id);
+        print_heart_yellow(&format!("🗑️ Deleting message ID: {}", message_id), true);
+
+        let response = self.client
+            .delete(&url)
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .context("Failed to delete message")?;
+
+        let status = response.status();
+        print_heart_yellow(&format!("🗑️ Delete message response status: {}", status), true);
+
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+            print_heart_yellow(&format!("🗑️ Error response body: {}", error_body), true);
+            return Err(anyhow::anyhow!("Failed to delete message: {} - {}", status, error_body));
+        }
+
+        print_heart_yellow("🗑️ Message deleted successfully", true);
+        Ok(())
+    }
+
+    /// Delete a message by text content (finds and deletes the first matching message)
+    pub async fn delete_message_by_text(&self, room_id: &str, text: &str) -> Result<usize> {
+        // Get messages from the room
+        let messages = self.get_messages(room_id).await?;
+        
+        let mut deleted_count = 0;
+        
+        for msg in messages {
+            if msg.text.as_deref() == Some(text) {
+                let msg_id = msg.id.clone();
+                let url = format!("{}/messages/{}", WEBEX_API_BASE, msg_id);
+                print_heart_yellow(&format!("🗑️ Deleting message ID: {} (text: {})", msg_id, text.chars().take(30).collect::<String>()), true);
+
+                let response = self.client
+                    .delete(&url)
+                    .bearer_auth(&self.access_token)
+                    .send()
+                    .await
+                    .context("Failed to delete message")?;
+
+                let status = response.status();
+                if status.is_success() {
+                    deleted_count += 1;
+                    print_heart_yellow(&format!("🗑️ Deleted {}", msg_id), true);
+                } else {
+                    print_heart_yellow(&format!("⚠️ Failed to delete {}: {}", msg_id, status), true);
+                }
+            }
+        }
+
+        if deleted_count > 0 {
+            print_heart_yellow(&format!("🗑️ Deleted {} message(s)", deleted_count), true);
+        } else {
+            print_heart_yellow(&format!("⚠️ No message found with text: {}", text), true);
+        }
+
+        Ok(deleted_count)
+    }
+
+    /// Delete a message from a room (deprecated - use delete_message_by_id or delete_message_by_text instead)
     pub async fn delete_message(&self, room_id: &str, text: &str) -> Result<()> {
         // First, find the message ID by getting messages from the room
         let messages = self.get_messages(room_id).await?;
