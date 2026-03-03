@@ -2017,11 +2017,25 @@ impl Readline {
 		}
 	    }).unwrap_or(0);
 
+            let req_count = request_counter::get_count();
+            let tool_count = tool_counter::get_count();
+
+            // Create fixed-width status zone after clock
+            let status_zone = if req_count == 0 && tool_count == 0 {
+                "IDLE".to_string()
+            } else if tool_count > 0 && req_count == 0 {
+                format!("TOOL({})", tool_count)
+            } else if req_count > 0 && tool_count == 0 {
+                format!("INFER({})", req_count)
+            } else {
+                "ERROR".to_string()
+            };
+
             let mut title = format!(
-                "User entry lines: {}, time: {} req: {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {} rem: {} tool: {}",
+                "User entry lines: {}, time: {} {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {} rem: {}",
                 self.lines.len(),
                 &local_time,
-                request_counter::get_count(),
+                status_zone,
                 token_counter::get_count(),
                 status_info::get_queued(),
                 status_info::get_history(),
@@ -2029,7 +2043,6 @@ impl Readline {
                 status_info::get_urgent(),
                 status_info::get_pid(),
                 idle_remaining,
-                tool_counter::get_count(),
             );
 
             // Ensure title never exceeds screen width by truncating if needed
