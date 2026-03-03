@@ -138,6 +138,7 @@ impl WebexInputRouter {
                         seen_message_ids.insert(msg_id);
 
                         // Filter: only messages from authorized user, not from bot
+                        // NOTE: This logic must stay in sync with websocket_router.rs (see line ~225 for similar implementation)
                         if msg.person_email == Some(self.authorized_user_email.clone())
                             && msg.person_email != Some(self.bot_email.clone())
                         {

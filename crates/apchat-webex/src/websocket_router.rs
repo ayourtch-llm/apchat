@@ -221,9 +221,11 @@ impl WebexWebSocketRouter {
             ), true);
 
             // Filter: only messages from authorized user, not from bot
+            // NOTE: This logic must stay in sync with input_router.rs (see line ~140 for similar implementation)
             if msg.person_email == Some(self.authorized_user_email.clone()) && msg.person_email != Some(self.bot_email.clone()) {
                 if let Some(text) = msg.text {
-                    print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email.as_deref().unwrap_or("unknown"), text), true);
+                    let person_email_str = msg.person_email.as_deref().unwrap_or("unknown");
+                    print_heart_yellow(&format!("📨 Received Webex message from {}: {}", person_email_str, text), true);
 
                     // Track this message ID for threading replies
                     {
@@ -231,10 +233,13 @@ impl WebexWebSocketRouter {
                         *last_id = Some(msg.id.clone());
                     }
 
+                    // Prefix the message with sender email for clarity
+                    let prefixed_text = format!("webex message from {}: {}", person_email_str, text);
+
                     // Send to MSPC channel
                     let message = MspcMessage::UserInput(
-                        text,
-                        Some(format!("webex:{}", msg.person_email.as_deref().unwrap_or("unknown"))),
+                        prefixed_text,
+                        Some(format!("webex:{}", person_email_str)),
                     );
 
                     if let Err(e) = self.mspc_channel.send(message).await {
