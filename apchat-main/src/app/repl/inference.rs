@@ -8,7 +8,7 @@
 //! contains the outcome type definition.
 
 /// Outcome of a single inference cycle.
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum InferenceOutcome {
     /// Inference completed successfully with this response text.
     Response(String),

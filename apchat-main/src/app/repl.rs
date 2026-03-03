@@ -233,11 +233,13 @@ pub async fn run_repl_mode(
                 add_msg_to_history(&mut chat, &mut llm_channels, &urgent_input, &cancel_token).await;
 		tool_call_iterations = 0;
                 total_tokens_start = chat.total_tokens_used;
-                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
-                    llm_running = true;
-                    request_guard = Some(RequestGuard::new());
-                } else {
-                    print_heart_yellow(&format!("Error running inference on urgent message: {:?}", &urgent_input), true);
+        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
+            print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
+            llm_running = true;
+            request_guard = Some(RequestGuard::new());
+        } else {
+            print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - not creating RequestGuard"), true);
+            print_heart_yellow(&format!("Error running inference on urgent message: {:?}", &urgent_input), true);
                 }
             } else if let Some(input) = queued_messages.pop() {
                 print_heart_yellow(&format!("Got new pending input: {:?}", &input), true);
@@ -250,9 +252,11 @@ pub async fn run_repl_mode(
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;
                 if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
+                    print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
                     llm_running = true;
                     request_guard = Some(RequestGuard::new());
                 } else {
+                    print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - not creating RequestGuard"), true);
                     print_heart_yellow(&format!("Error running inference on: {:?}", &input), true);
                 }
                 
@@ -266,8 +270,10 @@ pub async fn run_repl_mode(
         }
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
+                print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
                 llm_running = false;
                 request_guard = None;
+                print_heart_yellow(&format!("📉 [DEBUG] request_guard set to None - counter should decrement"), true);
                 // Always clear the cancellation token, regardless of outcome
                 {
                     let mut guard = current_token.lock().unwrap();
@@ -282,8 +288,10 @@ pub async fn run_repl_mode(
                     }
                 };
                 let outcome = process_llm_response(&mut chat, &mut llm_channels, llm_response, &mut recent_tool_calls, &mut tool_call_iterations, total_tokens_start).await;
+                print_heart_yellow(&format!("🎯 [DEBUG] process_llm_response returned outcome: {:?}", outcome), true);
                 match outcome {
                     InferenceOutcome::Response(response) => {
+                        print_heart_yellow(&format!("✅ [DEBUG] InferenceOutcome::Response - response length: {}", response.len()), true);
                         // Log assistant response
                         if let Some(logger) = &mut chat.logger {
                             logger.log("assistant", &response, None, false).await;
@@ -302,10 +310,12 @@ pub async fn run_repl_mode(
                     }
 
                     InferenceOutcome::Interrupted | InferenceOutcome::Error => {
+                        print_heart_yellow(&format!("🚫 [DEBUG] InferenceOutcome::Interrupted or Error - continuing outer loop"), true);
                         // Error/interrupted messages were already pushed by run_tool_loop
                         continue 'outer;
                     }
                     InferenceOutcome::ToolsContinue => {
+                        print_heart_yellow(&format!("🔄 [DEBUG] InferenceOutcome::ToolsContinue - will repeat inference"), true);
                         // Should push the request again
                         let cancel_token = tokio_util::sync::CancellationToken::new();
                         {
@@ -319,12 +329,14 @@ pub async fn run_repl_mode(
                         };
 
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
+                            print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("Started repeat inference"), true);
                             }
                             llm_running = true;
                             request_guard = Some(RequestGuard::new());
                         } else {
+                            print_heart_yellow(&format!("❌ [DEBUG] Failed to send repeat inference request"), true);
                             print_heart_yellow(&format!("Error running repeat inference"), true);
                         }
                     }
@@ -524,6 +536,8 @@ async fn prep_and_send_request(
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
+        print_heart_yellow(&format!("📤 [DEBUG] prep_and_send_request called - messages count: {}", chat.messages.len()), true);
+
         // Validate and fix tool calls in the conversation history
         if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
             if fixed {
@@ -583,10 +597,13 @@ async fn prep_and_send_request(
             stream_sender,
         };
 
+        print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
         if let Err(_) = llm_channels.request_tx.send(request).await {
             print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
+            print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
             return false;
         }
+        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
         true
 
 
@@ -614,6 +631,7 @@ async fn process_llm_response(
                 tool_calls,
                 model: current_model,
             } => {
+                print_heart_yellow(&format!("🔍 [DEBUG] LLMResponse::Success received - content_len: {}, has_tool_calls: {}", content.len(), tool_calls.is_some()), true);
                 // Update model if it changed
                 if chat.current_model != current_model {
                     print_heart_red(&format!("Model switched: {:?} -> {:?}", &chat.current_model, &current_model), true);
@@ -632,9 +650,12 @@ async fn process_llm_response(
 
                 // Handle tool calls
                 if let Some(calls) = tool_calls {
+                    print_heart_yellow(&format!("🔧 [DEBUG] Tool calls detected: {} call(s)", calls.len()), true);
                     *tool_call_iterations += 1;
+                    print_heart_yellow(&format!("🔢 [DEBUG] tool_call_iterations = {}", tool_call_iterations), true);
 
                     if *tool_call_iterations > MAX_TOOL_ITERATIONS {
+                        print_heart_yellow(&format!("⚠️ [DEBUG] MAX_TOOL_ITERATIONS exceeded: {} > {}", tool_call_iterations, MAX_TOOL_ITERATIONS), true);
                         print_heart_yellow(&format!("{} {} tool calls - stopping to avoid infinite loop.",
                             "⚠️".yellow(), tool_call_iterations), true);
                         chat.messages.push(Message {
@@ -663,6 +684,8 @@ async fn process_llm_response(
                         .rev()
                         .take_while(|(sig, _)| sig == &current_signature)
                         .count();
+
+                    print_heart_yellow(&format!("🔄 [DEBUG] consecutive_count = {} (threshold: {})", consecutive_count, LOOP_DETECTION_WINDOW), true);
 
                     if consecutive_count >= LOOP_DETECTION_WINDOW {
                         print_heart_yellow(&format!("{} Detected infinite tool call loop - stopping.",
@@ -698,14 +721,19 @@ async fn process_llm_response(
 
                     // Execute each tool call
                     for tool_call in &calls {
+                        print_heart_red(&format!("🔧 [DEBUG] Executing tool: {} with args: {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         print_heart_red(&format!("TOOL: {} {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         let tool_result = {
                           let _tool_guard = apchat_vty::ToolGuard::new();
+                          print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard created - counter incremented"), true);
                           match chat.execute_tool(
                             &tool_call.function.name,
                             &tool_call.function.arguments,
                           ).await {
-                            Ok(r) => r,
+                            Ok(r) => {
+                              print_heart_yellow(&format!("✅ [DEBUG] Tool '{}' executed successfully", &tool_call.function.name), true);
+                              r
+                            },
                             Err(e) => {
                                 let error_msg = format!("Error executing tool {}: {}", &tool_call.function.name, e);
                                 print_heart_yellow(&format!("{} {}", "❌".bright_red(), &error_msg), true);
@@ -713,6 +741,7 @@ async fn process_llm_response(
                             }
                           }
                         };
+                        print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard dropped - counter decremented"), true);
                         print_heart_red(&format!("TOOL-RESULT: {}", &tool_result), true);
 
                         let tool_response_message = Message {
@@ -733,9 +762,11 @@ async fn process_llm_response(
                     print_heart_red("", true); // New line after tool outputs
 
                     // Continue the loop to get the next response
+                    print_heart_yellow(&format!("✅ [DEBUG] Returning InferenceOutcome::ToolsContinue"), true);
                     return InferenceOutcome::ToolsContinue;
                 } else {
                     // No tool calls - this is the final response
+                    print_heart_yellow(&format!("📝 [DEBUG] No tool calls - final response with content length: {}", content.len()), true);
                     let final_message = Message {
                         role: "assistant".to_string(),
                         content: content.clone(),
@@ -751,6 +782,7 @@ async fn process_llm_response(
             }
             LLMResponse::Interrupted => {
                 print_heart_yellow(&format!("{} {}", "⚠️".yellow(), "LLM call interrupted"), true);
+                print_heart_yellow(&format!("🚫 [DEBUG] Returning InferenceOutcome::Interrupted"), true);
                 chat.messages.push(Message {
                     role: "assistant".to_string(),
                     content: "[Interrupted]".to_string(),
@@ -763,6 +795,7 @@ async fn process_llm_response(
             }
             LLMResponse::Error(e) => {
                 print_heart_yellow(&format!("{} {}: {}", "❌".bright_red(), "LLM API Error", e), true);
+                print_heart_yellow(&format!("❌ [DEBUG] Returning InferenceOutcome::Error: {}", e), true);
                 chat.messages.push(Message {
                     role: "assistant".to_string(),
                     content: format!("[Error: {}]", e),
