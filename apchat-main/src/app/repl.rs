@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use apchat_vty::{print_heart_yellow, print_heart_red, status_info};
-use apchat_models::ModelColor;
+use apchat_models::{ModelColor, Message};
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
