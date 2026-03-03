@@ -9,6 +9,7 @@ pub struct WebexOutputSink {
     client: Arc<WebexClient>,
     room_id: String,
     last_user_message_id: Arc<Mutex<Option<String>>>,
+    typing_started: Arc<Mutex<bool>>,
 }
 
 impl WebexOutputSink {
@@ -20,7 +21,33 @@ impl WebexOutputSink {
             client,
             room_id,
             last_user_message_id,
+            typing_started: Arc::new(Mutex::new(false)),
         }
+    }
+
+    /// Start the typing indicator
+    pub async fn start_typing(&self) -> Result<()> {
+        let mut typing_started = self.typing_started.lock().await;
+        if *typing_started {
+            return Ok(()); // Already showing typing indicator
+        }
+        
+        self.client.send_typing_indicator(&self.room_id).await?;
+        *typing_started = true;
+        Ok(())
+    }
+
+    /// Stop the typing indicator (clear the typing message)
+    pub async fn stop_typing(&self) -> Result<()> {
+        let mut typing_started = self.typing_started.lock().await;
+        if !*typing_started {
+            return Ok(()); // Not showing typing indicator
+        }
+        
+        // Send a blank message to clear the typing indicator
+        self.client.send_message(&self.room_id, "").await?;
+        *typing_started = false;
+        Ok(())
     }
 
     /// Send a response message to Webex

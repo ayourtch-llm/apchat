@@ -141,6 +141,43 @@ impl WebexClient {
         Ok(room)
     }
 
+    /// Send a typing indicator to a room
+    ///
+    /// Since Webex API doesn't have native typing indicators, we send a special
+    /// message that indicates the bot is "typing" or "generating response"
+    pub async fn send_typing_indicator(&self, room_id: &str) -> Result<()> {
+        let url = format!("{}/messages", WEBEX_API_BASE);
+
+        // Send a subtle typing indicator message
+        let typing_message = "⌨️  Bot is thinking...";
+
+        let request = SendMessageRequest {
+            room_id: Some(room_id.to_string()),
+            to_person_email: None,
+            parent_id: None,
+            markdown: None,
+            text: Some(typing_message.to_string()),
+        };
+
+        let response = self.client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send typing indicator")?;
+
+        let status = response.status();
+        print_heart_yellow(&format!("🔍 Typing indicator sent - status: {}", status), true);
+
+        if !status.is_success() {
+            let error_body = response.text().await.unwrap_or_default();
+            print_heart_yellow(&format!("⚠️  Failed to send typing indicator: {}", error_body), true);
+        }
+
+        Ok(())
+    }
+
     /// Send a message to a room, optionally as a threaded reply
     pub async fn send_message(&self, room_id: &str, text: &str) -> Result<Message> {
         self.send_message_with_parent(room_id, text, None).await

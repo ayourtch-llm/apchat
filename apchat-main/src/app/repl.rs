@@ -15,7 +15,7 @@ use apchat_models::{ModelColor, Message};
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
-use crate::api::OutputChunk;
+use crate::api::{OutputChunk, TypingIndicator};
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::mspc::{MspcChannel, MspcMessage, get_readline_receiver};
@@ -236,7 +236,7 @@ pub async fn run_repl_mode(
                 add_msg_to_history(&mut chat, &mut llm_channels, &urgent_input, &cancel_token).await;
 		tool_call_iterations = 0;
                 total_tokens_start = chat.total_tokens_used;
-        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
+        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
             print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
             llm_running = true;
             request_guard = Some(RequestGuard::new());
@@ -254,7 +254,7 @@ pub async fn run_repl_mode(
 		tool_call_iterations = 0;
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;
-                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None).await {
+                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
                     print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
                     llm_running = true;
                     request_guard = Some(RequestGuard::new());
@@ -348,7 +348,7 @@ pub async fn run_repl_mode(
                                 }
                             }
                             
-                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
+                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, webex_sink.as_ref()).await {
                                 print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
                                 llm_running = true;
                                 request_guard = Some(RequestGuard::new());
@@ -368,9 +368,14 @@ pub async fn run_repl_mode(
                             logger.log("assistant", &response, None, false).await;
                         }
 
-                        // Broadcast to Webex if enabled and not disabled
+                        // Stop Webex typing indicator and broadcast response
                         if let Some(ref webex) = webex_sink {
                             if !chat.feature_flags.disable_webex_broadcast {
+                                // Stop the typing indicator first
+                                if let Err(e) = webex.stop_typing().await {
+                                    print_heart_yellow(&format!("{} Failed to stop Webex typing indicator: {}", "⚠️".yellow(), e), true);
+                                }
+                                // Then send the actual response
                                 if let Err(e) = webex.send_response(&response).await {
                                     print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
                                 }
@@ -406,7 +411,7 @@ pub async fn run_repl_mode(
                             Some(get_urgent_input(&mut urgent_messages))
                         };
 
-                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
+                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, webex_sink.as_ref()).await {
                             print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("Started repeat inference"), true);
@@ -609,87 +614,100 @@ async fn prep_and_send_request(
     llm_channels: &mut LLMTaskChannels,
     cancel_token: &tokio_util::sync::CancellationToken,
     maybe_urgent_input: Option<String>,
+    webex_sink: Option<&std::sync::Arc<apchat_webex::WebexOutputSink>>,
 ) -> bool {
     use apchat_vty::print_heart_yellow;
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
-        if chat.get_inference_debug() {
-            print_heart_yellow(&format!("📤 [DEBUG] prep_and_send_request called - messages count: {}", chat.messages.len()), true);
-        }
+    if chat.get_inference_debug() {
+        print_heart_yellow(&format!("📤 [DEBUG] prep_and_send_request called - messages count: {}", chat.messages.len()), true);
+    }
 
-        // Validate and fix tool calls in the conversation history
-        if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
-            if fixed {
-                print_heart_yellow(&format!("{} {}", "✅".green(), "Tool calls were automatically fixed in conversation history"), true);
+    // Validate and fix tool calls in the conversation history
+    if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {
+        if fixed {
+            print_heart_yellow(&format!("{} {}", "✅".green(), "Tool calls were automatically fixed in conversation history"), true);
+        }
+    }
+    if let Some(urgent_input) = maybe_urgent_input {
+        chat.messages.push(Message {
+            role: "assistant".to_string(),
+            content: "I notice there is some urgent messages from the user ?".to_string(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
+        chat.messages.push(Message {
+            role: "user".to_string(),
+            content: urgent_input,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
+    }
+
+    // Create API call parameters
+    let params = crate::api::ApiCallParams {
+        messages: chat.messages.clone(),
+        current_model: chat.current_model.clone(),
+        client_config: chat.client_config.clone(),
+        api_key: chat.api_key.clone(),
+        tools: chat.get_tools(),
+        stream_responses: chat.stream_responses,
+        verbose: chat.verbose,
+        debug_level: chat.debug_level,
+        http_client: chat.client.clone(),
+        llm_overrides: Some(chat.llm_overrides.clone()),
+    };
+
+    // Prepare streaming channel if needed
+    let stream_sender = if chat.stream_responses {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::api::OutputChunk>(100);
+        tokio::spawn(async move {
+            while let Some(chunk) = rx.recv().await {
+                print_heart_red(&format!("{}", chunk.text), false);
+            }
+        });
+        Some(tx)
+    } else {
+        None
+    };
+
+    // Show typing indicator when starting inference (streaming mode)
+    if chat.stream_responses {
+        print_heart_red(&format!("{} Bot is thinking...", "⌨️".bright_cyan()), false);
+    }
+
+    // Start Webex typing indicator if available
+    if let Some(ref webex) = webex_sink {
+        if chat.stream_responses && !chat.feature_flags.disable_webex_broadcast {
+            if let Err(e) = webex.start_typing().await {
+                print_heart_yellow(&format!("{} Failed to start Webex typing indicator: {}", "⚠️".yellow(), e), true);
             }
         }
-        if let Some(urgent_input) = maybe_urgent_input {
-            chat.messages.push(Message {
-                    role: "assistant".to_string(),
-                    content: "I notice there is some urgent messages from the user ?".to_string(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                    reasoning: None,
-            });
-            chat.messages.push(Message {
-                    role: "user".to_string(),
-                    content: urgent_input,
-                    tool_calls: None,
-                    tool_call_id: None,
-                    name: None,
-                    reasoning: None,
-            });
-        }
+    }
 
-        // Create API call parameters
-        let params = crate::api::ApiCallParams {
-            messages: chat.messages.clone(),
-            current_model: chat.current_model.clone(),
-            client_config: chat.client_config.clone(),
-            api_key: chat.api_key.clone(),
-            tools: chat.get_tools(),
-            stream_responses: chat.stream_responses,
-            verbose: chat.verbose,
-            debug_level: chat.debug_level,
-            http_client: chat.client.clone(),
-            llm_overrides: Some(chat.llm_overrides.clone()),
-        };
+    // Send request to LLM task
+    let request = LLMRequest {
+        params,
+        cancel_token: cancel_token.clone(),
+        stream_sender,
+        inference_debug: chat.get_inference_debug(),
+    };
 
-        // Prepare streaming channel if needed
-        let stream_sender = if chat.stream_responses {
-            let (tx, mut rx) = tokio::sync::mpsc::channel::<crate::api::OutputChunk>(100);
-            tokio::spawn(async move {
-                while let Some(chunk) = rx.recv().await {
-                    print_heart_red(&format!("{}", chunk.text), false);
-                }
-            });
-            Some(tx)
-        } else {
-            None
-        };
-
-        // Send request to LLM task
-        let request = LLMRequest {
-            params,
-            cancel_token: cancel_token.clone(),
-            stream_sender,
-            inference_debug: chat.get_inference_debug(),
-        };
-
-        if chat.get_inference_debug() {
-            print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
-        }
-        if let Err(_) = llm_channels.request_tx.send(request).await {
-            print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
-            print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
-            return false;
-        }
-        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
-        true
-
-
+    if chat.get_inference_debug() {
+        print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
+    }
+    if let Err(_) = llm_channels.request_tx.send(request).await {
+        print_heart_yellow(&format!("{} {}", "❌".bright_red(), "Failed to send request to LLM task"), true);
+        print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
+        return false;
+    }
+    print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
+    true
 }
 
 async fn process_llm_response(
@@ -706,7 +724,10 @@ async fn process_llm_response(
     const MAX_TOOL_ITERATIONS: usize = 250;
     const LOOP_DETECTION_WINDOW: usize = 8;
 
-        // Process the LLM response
+    // Print newline before response content
+    print_heart_red("", true);
+
+    // Process the LLM response
         match llm_response {
             LLMResponse::Success {
                 content,

@@ -42,6 +42,8 @@ impl ApiCallParams {
 
 mod streaming;
 mod client;
+mod typing_indicator;
 
 pub(crate) use streaming::{call_api_streaming, call_api_streaming_with_llm_client, call_api_streaming_stateless, call_api_streaming_with_llm_client_stateless, OutputChunk, StreamingMetrics};
 pub(crate) use client::{call_api, call_api_with_llm_client, call_api_stateless, call_api_with_llm_client_stateless};
+pub use typing_indicator::{TypingIndicator, TypingIndicatorHandle};
