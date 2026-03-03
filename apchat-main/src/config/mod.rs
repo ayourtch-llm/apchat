@@ -32,6 +32,7 @@ pub struct FeatureFlags {
     pub context_mode: bool,
     pub financial_services: bool,
     pub save: bool,
+    pub disable_webex_broadcast: bool,
     pub mcp_servers: Vec<String>,
     pub searxng_url: Option<String>,
 }

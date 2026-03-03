@@ -289,10 +289,14 @@ pub async fn run_repl_mode(
                             logger.log("assistant", &response, None, false).await;
                         }
 
-                        // Broadcast to Webex if enabled
+                        // Broadcast to Webex if enabled and not disabled
                         if let Some(ref webex) = webex_sink {
-                            if let Err(e) = webex.send_response(&response).await {
-                                print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
+                            if !chat.feature_flags.disable_webex_broadcast {
+                                if let Err(e) = webex.send_response(&response).await {
+                                    print_heart_yellow(&format!("{} Failed to send to Webex: {}", "⚠️".yellow(), e), true);
+                                }
+                            } else {
+                                print_heart_yellow("🔕 Webex broadcast disabled (--disable-webex-broadcast)", true);
                             }
                         }
                     }

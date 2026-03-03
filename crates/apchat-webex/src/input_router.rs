@@ -46,19 +46,16 @@ impl WebexInputRouter {
             .ok_or_else(|| anyhow::anyhow!("Bot has no email addresses"))?
             .clone();
 
-        // Create/find the direct room by sending a test message
-        // This automatically creates/uses the direct room
-        // Note: We don't send a visible message, just use the API to get the room ID
-        let room_id = {
-            let test_message = client
-                .send_message_to_email(&user_email, "🔧 APchat initialization")
-                .await
-                .context("Failed to initialize Webex room")?;
-            test_message.room_id.clone()
-        };
+        // Send startup message to create/find the direct room
+        // This automatically creates/uses the direct room and marks it as seen
+        let startup_message = format!("🤖 APChat ready (PID: {})", std::process::id());
+        let message = client
+            .send_message_to_email(&user_email, &startup_message)
+            .await
+            .context("Failed to send startup message")?;
 
-        // Delete the initialization message to avoid clutter
-        let _ = client.delete_message(&room_id, &"🔧 APchat initialization".to_string()).await;
+        // Extract the room ID from the message response
+        let room_id = message.room_id.clone();
 
         print_heart_yellow("🔍 Webex room initialized successfully", true);
 

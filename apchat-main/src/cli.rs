@@ -304,6 +304,10 @@ pub struct Cli {
     /// When enabled, the LLM can call save_full_state to persist conversation
     #[arg(long)]
     pub save: bool,
+
+    /// Disable broadcasting AI responses to Webex (keep Webex for chat only)
+    #[arg(long)]
+    pub disable_webex_broadcast: bool,
 }
 
 #[derive(Subcommand)]
