@@ -320,23 +320,10 @@ pub async fn run_repl_mode(
                                 Some(get_urgent_input(&mut urgent_messages))
                             };
                             
-                            // Add a non-empty assistant message before retry to satisfy Anthropic's API
-                            // which requires assistant prefill when last message is tool result
-                            chat.messages.push(Message {
-                                role: "assistant".to_string(),
-                                content: "Please continue.".to_string(),
-                                tool_calls: None,
-                                tool_call_id: None,
-                                name: None,
-                                reasoning: None,
-                            });
-                            
                             if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
                                 print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
                                 llm_running = true;
                                 request_guard = Some(RequestGuard::new());
-                                // CRITICAL FIX: Return early to avoid pushing empty assistant message
-                                // The retry will generate a new response, so we don't want to pollute history with empty content
                                 continue; // Continue the select loop to wait for retry response
                             } else {
                                 print_heart_yellow(&format!("❌ [DEBUG] Empty response retry {} - failed to send request", empty_response_retries), true);

@@ -188,6 +188,18 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
 */
             }
         }
+        if last_role == "tool" {
+                // need to add the empty assistant message to preserve the order
+                let new_assistant_msg = Message {
+                    role: "assistant".to_string(),
+                    content: String::new(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+                };
+                messages.push(new_assistant_msg);
+        }
     }
 }
 
