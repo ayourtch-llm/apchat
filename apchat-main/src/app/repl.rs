@@ -238,7 +238,9 @@ pub async fn run_repl_mode(
 		tool_call_iterations = 0;
                 total_tokens_start = chat.total_tokens_used;
         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
-            print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
+            if chat.get_inference_debug() {
+                print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
+            }
             llm_running = true;
             request_guard = Some(RequestGuard::new());
         } else {
@@ -256,7 +258,9 @@ pub async fn run_repl_mode(
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;
                 if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
-                    print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
+                    if chat.get_inference_debug() {
+                        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
+                    }
                     llm_running = true;
                     request_guard = Some(RequestGuard::new());
                 } else {
