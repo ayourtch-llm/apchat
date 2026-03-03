@@ -584,7 +584,7 @@ impl Readline {
             self.lines = entry.split('\n').map(String::from).collect();
             // Position cursor at end of last line
             self.cursor_line = self.lines.len().saturating_sub(1);
-            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+            self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
             // Sync deprecated fields
             self.cursor = self.cursor_col;
             if !self.lines.is_empty() {
@@ -601,7 +601,7 @@ impl Readline {
                 self.lines = entry.split('\n').map(String::from).collect();
                 // Position cursor at end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
                 // Sync deprecated fields
                 self.cursor = self.cursor_col;
                 if !self.lines.is_empty() {
@@ -662,7 +662,7 @@ impl Readline {
                 self.lines = entry.split('\n').map(String::from).collect();
                 // Position cursor at end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
                 return true;
             } else {
                 // Exit history navigation, restore saved multiline state
@@ -670,7 +670,7 @@ impl Readline {
                 self.lines = self.saved_lines.clone();
                 // Restore cursor to end of last line
                 self.cursor_line = self.lines.len().saturating_sub(1);
-                self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+                self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
                 self.saved_lines.clear();
                 return true;
             }
@@ -805,7 +805,7 @@ impl Readline {
             self.lines = self.history[match_idx].split('\n').map(String::from).collect();
             // Position cursor at end of last line
             self.cursor_line = self.lines.len().saturating_sub(1);
-            self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+            self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
             // Sync deprecated fields
             self.cursor = self.cursor_col;
             if !self.lines.is_empty() {
@@ -834,7 +834,7 @@ impl Readline {
         self.lines = self.history[match_idx].split('\n').map(String::from).collect();
         // Position cursor at end of last line
         self.cursor_line = self.lines.len().saturating_sub(1);
-        self.cursor_col = self.lines.last().map(|l| l.len()).unwrap_or(0);
+        self.cursor_col = self.lines.last().map(|l| l.chars().count()).unwrap_or(0);
         // Sync deprecated fields
         self.cursor = self.cursor_col;
         if !self.lines.is_empty() {
@@ -967,6 +967,14 @@ impl Readline {
             self.exit_history_navigation();
         }
 
+        // Get current line and validate cursor position
+        let current_line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > current_line_len {
+            self.cursor_col = current_line_len;
+        }
+
         if self.cursor_col > 0 {
             // Delete character within current line
             self.cursor_col -= 1;
@@ -1032,6 +1040,11 @@ impl Readline {
         }
 
         let current_line_len = self.lines[self.cursor_line].chars().count();
+
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > current_line_len {
+            self.cursor_col = current_line_len;
+        }
 
         if self.cursor_col < current_line_len {
             // Delete character within current line
@@ -1220,6 +1233,12 @@ impl Readline {
     /// ```
     pub fn handle_end(&mut self) -> bool {
         let line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+        
         if self.cursor_col >= line_len {
             return false;
         }
@@ -1238,6 +1257,12 @@ impl Readline {
     /// * `false` - No text to kill
     pub fn kill_to_end(&mut self) -> bool {
         let line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+        
         if self.cursor_col > line_len {
             return false;
         }
@@ -1273,6 +1298,13 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_to_start(&mut self) -> bool {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+        
         if self.cursor_col == 0 {
             return false;
         }
@@ -1300,6 +1332,12 @@ impl Readline {
     /// * `false` - No text to kill
     pub fn kill_word_right(&mut self) -> bool {
         let line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+        
         if self.cursor_col >= line_len {
             return false;
         }
@@ -1316,6 +1354,11 @@ impl Readline {
         // Skip alphanumeric characters (the word)
         while end < line_len && chars[end].is_alphanumeric() {
             end += 1;
+        }
+
+        // Clamp end to line length
+        if end > line_len {
+            end = line_len;
         }
 
         if end == self.cursor_col {
@@ -1344,6 +1387,13 @@ impl Readline {
     /// * `true` - Text was killed, a redraw is needed
     /// * `false` - No text to kill
     pub fn kill_word_left(&mut self) -> bool {
+        let line_len = self.lines[self.cursor_line].chars().count();
+        
+        // Ensure cursor_col is within bounds
+        if self.cursor_col > line_len {
+            self.cursor_col = line_len;
+        }
+        
         if self.cursor_col == 0 {
             return false;
         }
