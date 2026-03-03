@@ -2076,7 +2076,11 @@ impl Readline {
 
             // Create fixed-width status zone after clock
             let status_zone = if req_count == 0 && tool_count == 0 {
-                "IDLE".to_string()
+                if idle_remaining > 0 {
+                    format!("IDLE({})", idle_remaining)
+                } else {
+                    "IDLE".to_string()
+                }
             } else if tool_count > 0 && req_count == 0 {
                 format!("TOOL({})", tool_count)
             } else if req_count > 0 && tool_count == 0 {
