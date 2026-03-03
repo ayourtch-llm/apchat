@@ -152,8 +152,8 @@ impl WebexInputRouter {
                                     *last_id = Some(msg.id.clone());
                                 }
 
-                                // Prefix the message with sender email for clarity
-                                let prefixed_text = format!("webex message from {}: {}", person_email_str, text);
+                                // Prefix the message with sender email and tool reference for clarity
+                                let prefixed_text = format!("webex message from {}: [Use send_webex_message tool to respond] {}", person_email_str, text);
 
                                 // Convert to MSPC message
                                 let message = MspcMessage::UserInput(
