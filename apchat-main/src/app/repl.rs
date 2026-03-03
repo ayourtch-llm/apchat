@@ -17,6 +17,7 @@ use apchat_policy::PolicyManager;
 
 use crate::APChat;
 use crate::api::OutputChunk;
+use crate::bin_version::default_temp_state_path;
 use crate::cli::Cli;
 use crate::config::ClientConfig;
 use crate::mspc::{MspcChannel, MspcMessage, get_readline_receiver};
@@ -381,6 +382,23 @@ pub async fn run_repl_mode(
         match chat.save_state(save_path) {
             Ok(msg) => print_heart_yellow(&format!("{} {}", "💾".bright_green(), msg), true),
             Err(e) => print_heart_yellow(&format!("{} Failed to save state: {}", "❌".bright_red(), e), true),
+        }
+    }
+
+    // Also save to temp state file if --hot-reload is enabled
+    if cli.hot_reload {
+        let temp_state_path = cli.temp_state
+            .clone()
+            .unwrap_or_else(|| default_temp_state_path().to_string_lossy().to_string());
+        match chat.save_state(&temp_state_path) {
+            Ok(msg) => {
+                if chat.debug_level > 0 {
+                    print_heart_yellow(&format!("{} {}", "💾".bright_green(), msg), true);
+                }
+            }
+            Err(e) => {
+                print_heart_yellow(&format!("{} Failed to save temp state: {}", "⚠️".yellow(), e), true);
+            }
         }
     }
 

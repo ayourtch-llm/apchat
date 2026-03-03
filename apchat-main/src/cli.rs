@@ -303,6 +303,17 @@ pub struct Cli {
     /// Path to save the current state to (enables persistence across restarts)
     #[arg(long, value_name = "PATH")]
     pub save: Option<String>,
+
+    /// Enable automatic binary replacement detection and state reload
+    /// When enabled, detects if the binary has been replaced and automatically
+    /// saves state to a temp file, then re-executes with that state loaded
+    #[arg(long)]
+    pub hot_reload: bool,
+
+    /// Path to temporary state file for binary replacement detection (auto-generated if not provided)
+    /// Only used when --hot-reload is enabled
+    #[arg(long, value_name = "PATH", hide = true)]
+    pub temp_state: Option<String>,
 }
 
 #[derive(Subcommand)]

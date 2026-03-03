@@ -11,10 +11,15 @@ use tokio::sync::Mutex;
 use apchat::{APChat, resolve_terminal_backend};
 use apchat::cli::{Cli, Commands};
 use apchat::app::{setup_from_cli, run_subagent_mode, run_repl_mode};
+use apchat::bin_version::{default_temp_state_path, check_binary_replaced, store_binary_hash, reexec_with_temp_state};
 use apchat_terminal::{TerminalManager, MAX_CONCURRENT_SESSIONS};
 use apchat_logging;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_toolcore;
+
+// Global flag to prevent infinite re-execution loops
+static mut REEXEC_COUNT: i32 = 0;
+const MAX_REEXEC_COUNT: i32 = 3; // Prevent infinite loops
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -27,11 +32,60 @@ async fn main() -> Result<()> {
 
     // Parse CLI arguments
     let cli = Cli::parse();
+    let original_args: Vec<String> = env::args().collect();
 
     // Set memory database path from CLI flag if provided
     // This takes precedence over the environment variable
     if let Some(path) = &cli.memory_db_path {
         std::env::set_var("APCHAT_MEMORY_DB_PATH", path);
+    }
+
+    // Check for binary replacement if --hot-reload is enabled
+    if cli.hot_reload {
+        let temp_state_path = cli.temp_state
+            .clone()
+            .unwrap_or_else(|| default_temp_state_path().to_string_lossy().to_string());
+        let temp_state_path_buf = PathBuf::from(&temp_state_path);
+        
+        // Get current binary path
+        let current_exe = env::current_exe()?;
+        
+        // Check if binary has been replaced
+        let hash_path = current_exe.with_extension("apchat.hash");
+        
+        match check_binary_replaced(&current_exe, &hash_path) {
+            Ok(Some(_new_hash)) => {
+                // Binary has been replaced!
+                unsafe {
+                    REEXEC_COUNT += 1;
+                    if REEXEC_COUNT > MAX_REEXEC_COUNT {
+                        eprintln!("{} Warning: Max re-execution count ({}) reached. Skipping auto-reload.", 
+                                 "⚠️".yellow(), MAX_REEXEC_COUNT);
+                    } else {
+                        eprintln!("{} Binary replaced! Saving state and re-executing...", 
+                                 "🔄".bright_cyan());
+                        
+                        // We need to save the current state, but we haven't initialized the chat yet
+                        // For now, we'll just store the hash and let the new instance handle state loading
+                        // The actual state saving will happen in run_repl_mode/on_exit
+                        store_binary_hash(&current_exe, &hash_path)?;
+                        
+                        // Re-execute with the temp state file
+                        // Note: This will be called again in the new instance, but without binary replacement
+                        return reexec_with_temp_state(&temp_state_path_buf, &original_args)
+                            .map_err(|e| anyhow::anyhow!(e));
+                    }
+                }
+            }
+            Ok(None) => {
+                // Binary hasn't been replaced, store the current hash
+                let hash_path = current_exe.with_extension("apchat.hash");
+                let _ = store_binary_hash(&current_exe, &hash_path);
+            }
+            Err(e) => {
+                eprintln!("{} Failed to check binary version: {}", "⚠️".yellow(), e);
+            }
+        }
     }
 
     // If a subcommand was provided, execute it and exit
