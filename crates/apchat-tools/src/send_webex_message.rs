@@ -73,10 +73,12 @@ impl Tool for SendWebexMessageTool {
         };
 
         match msg {
-            Ok(msg) => ToolResult::success(format!(
-                "Message sent to {} (room: {}, message_id: {}, markdown: {})",
-                recipient_email, msg.room_id, msg.id, use_markdown
-            )),
+            Ok(msg) => {
+                ToolResult::success(format!(
+                    "Message sent to {} (room: {}, message_id: {}, markdown: {})",
+                    recipient_email, msg.room_id, msg.id, use_markdown
+                ))
+            },
             Err(e) => ToolResult::error(format!("Failed to send message: {}", e)),
         }
     }

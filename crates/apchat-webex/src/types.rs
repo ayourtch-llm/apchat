@@ -41,8 +41,9 @@ pub struct SendMessageRequest {
     #[serde(rename = "parentId", skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
     #[serde(rename = "markdown", skip_serializing_if = "Option::is_none")]
-    pub markdown: Option<bool>,
-    pub text: String,
+    pub markdown: Option<String>,
+    #[serde(rename = "text", skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +60,8 @@ pub struct Message {
     pub person_id: Option<String>,
     #[serde(rename = "personEmail")]
     pub person_email: Option<String>,
+    #[serde(rename = "markdown")]
+    pub markdown: Option<String>,
     pub created: String,
 }
 

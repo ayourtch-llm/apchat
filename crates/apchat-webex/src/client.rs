@@ -171,8 +171,8 @@ impl WebexClient {
             room_id: Some(room_id.to_string()),
             to_person_email: None,
             parent_id,
-            markdown: if markdown { Some(true) } else { None },
-            text: text.to_string(),
+            markdown: if markdown { Some(text.to_string()) } else { None },
+            text: if markdown { None } else { Some(text.to_string()) },
         };
 
         let response = self.client
@@ -219,8 +219,8 @@ impl WebexClient {
             room_id: None,
             to_person_email: Some(email.to_string()),
             parent_id: None,
-            markdown: if markdown { Some(true) } else { None },
-            text: text.to_string(),
+            markdown: if markdown { Some(text.to_string()) } else { None },
+            text: if markdown { None } else { Some(text.to_string()) },
         };
 
         print_heart_yellow(&format!("🔍 Request body: {}", serde_json::to_string(&request).unwrap_or_default()), true);
@@ -236,16 +236,23 @@ impl WebexClient {
         let status = response.status();
         print_heart_yellow(&format!("🔍 Send message response status: {}", status), true);
 
+        // Get raw response body for debugging
+        let raw_body = response.text().await
+            .context("Failed to read response body")?;
+        
+        print_heart_yellow(&format!("🔍 Raw API response: {}", raw_body), true);
+
         if !status.is_success() {
-            let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
-            print_heart_yellow(&format!("🔍 Error response body: {}", error_body), true);
-            return Err(anyhow::anyhow!("Failed to send message: {} - {}", status, error_body));
+            print_heart_yellow(&format!("🔍 Error response body: {}", raw_body), true);
+            return Err(anyhow::anyhow!("Failed to send message: {} - {}", status, raw_body));
         }
 
-        let message: Message = response
-            .json()
-            .await
+        let message: Message = serde_json::from_str(&raw_body)
             .context("Failed to parse message response")?;
+
+        // Debug: Log the message fields
+        print_heart_yellow(&format!("🔍 Parsed message - ID: {}, Room: {}, Text: {:?}, Markdown: {:?}", 
+            message.id, message.room_id, message.text, message.markdown), true);
 
         print_heart_yellow(&format!("🔍 Sent message ID: {} (use this ID for deletion), room ID: {}", message.id, message.room_id), true);
         Ok(message)
