@@ -98,11 +98,13 @@ pub async fn initialize_repl(
 
     let idle_config = parse_idle_config(cli)?;
 
-    // Load saved state if --load is specified
-    if let Some(load_path) = &cli.load {
-        match chat.load_state(load_path) {
-            Ok(msg) => print_heart_yellow(&format!("{} {}", "📂".bright_green(), msg), true),
-            Err(e) => print_heart_yellow(&format!("{} Failed to load state: {}", "❌".bright_red(), e), true),
+    // Set the load filename in readline instance instead of loading immediately
+    // This prevents state corruption from other initializations (tools, etc.)
+    if let Some(ref load_path) = cli.load {
+        if let Err(e) = apchat_vty::ReadlineInstance::set_load_filename(Some(load_path.clone())) {
+            print_heart_yellow(&format!("{} Failed to set load filename: {}", "⚠️".yellow(), e), true);
+        } else {
+            print_heart_yellow(&format!("{} State load will be triggered after readline initialization: {}", "ℹ️".bright_cyan(), load_path), true);
         }
     }
 

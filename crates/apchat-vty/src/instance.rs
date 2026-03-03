@@ -324,6 +324,27 @@ impl ReadlineInstance {
 
         Ok(())
     }
+
+    /// Set the load filename for later processing in the readline loop
+    ///
+    /// This allows the --load flag to be handled after initialization,
+    /// preventing state corruption from other initializations.
+    ///
+    /// # Arguments
+    ///
+    /// * `filename` - Optional filename to load after initialization
+    pub fn set_load_filename(filename: Option<String>) -> Result<()> {
+        let mut guard = Self::get()?;
+        guard.set_load_filename(filename);
+        Ok(())
+    }
+}
+
+impl Readline {
+    /// Set the load filename for later processing in the readline loop
+    pub fn set_load_filename(&mut self, filename: Option<String>) {
+        self.load_filename = filename;
+    }
 }
 
 #[cfg(test)]

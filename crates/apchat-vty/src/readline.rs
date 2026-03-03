@@ -19,6 +19,7 @@ use crate::tool_counter;
 use crate::tool_counter::ToolGuard;
 use crate::token_counter;
 use crate::status_info;
+use crate::print_heart_yellow;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -320,6 +321,8 @@ pub struct Readline {
     idle_period_secs: Option<u32>,
     /// Next time to inject idle command (Some = enabled)
     idle_command_time: Option<chrono::DateTime<chrono::Local>>,
+    /// Optional filename to load after initialization (set via --load flag)
+    pub load_filename: Option<String>,
 }
 
 impl Readline {
@@ -401,6 +404,7 @@ impl Readline {
             idle_command: None,
             idle_period_secs: None,
             idle_command_time: None,
+            load_filename: None,
         })
     }
 
@@ -2650,6 +2654,13 @@ impl Readline {
         self.idle_command_time = idle_config.map(|c| {
             chrono::Local::now() + chrono::Duration::seconds(c.timeout_secs as i64)
         });
+
+        // Check if we need to load a saved state file (from --load flag)
+        if let Some(ref load_filename) = self.load_filename {
+            print_heart_yellow(&format!("📂 Attempting to load state from: {}", load_filename), true);
+            // Return the load command to be processed by the REPL
+            return Ok(ReadlineResult::Input(format!("/load {}", load_filename)));
+        }
 
         let mut curr_output_data = format!("");
         let COUNTDOWN = 20;

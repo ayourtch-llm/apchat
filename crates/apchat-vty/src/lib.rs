@@ -13,6 +13,8 @@ pub use instance::ReadlineInstance;
 use std::io::BufWriter;
 use std::fs::OpenOptions;
 
+use apchat_types::InferenceOutcome;
+
 /// Global broadcast channel for TextOutput messages
 /// Allows non-blocking sends from synchronous code
 /// This is set by apchat-main to connect print_with_emoji to the OutputRouter
@@ -340,6 +342,66 @@ pub fn print_heart_red(text: &str, newline: bool) {
 /// ```
 pub fn print_heart_yellow(text: &str, newline: bool) {
     print_with_emoji("💛", text, newline, io::stderr());
+}
+
+/// Pretty-prints a debug outcome with a styled layout.
+///
+/// Displays the outcome title in green text on gray background,
+/// followed by the outcome value (if any) pretty-printed in light-gray text on gray background.
+///
+/// # Arguments
+/// * `title` - The title to display (e.g., "process_llm_response outcome")
+/// * `outcome` - The InferenceOutcome value to display
+///
+/// # Example
+/// ```ignore
+/// print_outcome_box("process_llm_response outcome", &outcome);
+/// ```
+pub fn print_outcome_box(title: &str, outcome: &InferenceOutcome) {
+    use std::fmt::Write;
+    
+    // ANSI codes:
+    // Green text: \x1b[38;2;0;255;0m
+    // Gray background: \x1b[48;2;60;60;60m
+    // Light-gray text: \x1b[38;2;200;200;200m
+    // Reset: \x1b[0m
+    
+    // Format the title in green on gray background
+    let topbar = format!(
+        "\x1b[48;2;60;60;60m\x1b[38;2;0;255;0m{}:\x1b[0m",
+        title
+    );
+    
+    // Format the outcome value
+    let content = match outcome {
+        InferenceOutcome::Response(ref text) => {
+            // Pretty-print the response string in light-gray on gray background
+            format!(
+                "\x1b[48;2;60;60;60m\x1b[38;2;200;200;200m{}\x1b[0m",
+                text
+            )
+        }
+        InferenceOutcome::Interrupted => {
+            format!(
+                "\x1b[48;2;60;60;60m\x1b[38;2;200;200;200m{}\x1b[0m",
+                "Interrupted by user"
+            )
+        }
+        InferenceOutcome::Error => {
+            format!(
+                "\x1b[48;2;60;60;60m\x1b[38;2;200;200;200m{}\x1b[0m",
+                "Error occurred"
+            )
+        }
+        InferenceOutcome::ToolsContinue => {
+            format!(
+                "\x1b[48;2;60;60;60m\x1b[38;2;200;200;200m{}\x1b[0m",
+                "Continuing with tool calls"
+            )
+        }
+    };
+    
+    print_heart_red(&format!("{} {}", topbar, content), true);
 }
 
 pub fn print_heart_to_file(text: &str, newline: bool) -> Result<(), std::io::Error> {
