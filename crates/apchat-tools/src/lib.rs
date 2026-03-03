@@ -34,6 +34,7 @@ pub mod mcp_client;
 pub mod searxng;
 pub mod python_sandbox;
 pub mod save_full_state;
+pub mod load_full_state;
 pub mod send_webex_message;
 pub mod delete_webex_message;
 
@@ -62,6 +63,7 @@ pub use diff_fuzz::*;
 pub use rlm::*;
 pub use python_sandbox::*;
 pub use save_full_state::*;
+pub use load_full_state::*;
 pub use send_webex_message::*;
 pub use delete_webex_message::*;
 

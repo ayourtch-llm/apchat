@@ -32,6 +32,7 @@ pub struct FeatureFlags {
     pub context_mode: bool,
     pub financial_services: bool,
     pub save: bool,
+    pub load: Option<String>,
     pub disable_webex_broadcast: bool,
     pub mcp_servers: Vec<String>,
     pub searxng_url: Option<String>,
@@ -283,6 +284,10 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     if flags.save {
         registry.register_with_categories(SaveFullStateTool, vec!["state".to_string()]);
         print_heart_red("✓ State save tool enabled", true);
+        
+        // Also enable load_full_state tool when save is enabled
+        registry.register_with_categories(LoadFullStateTool, vec!["state".to_string()]);
+        print_heart_red("✓ State load tool enabled", true);
     }
 
     registry

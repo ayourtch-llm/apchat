@@ -48,6 +48,7 @@ pub async fn initialize_repl(
         context_mode: cli.context_mode,
         financial_services: cli.financial_services,
         save: cli.save,
+        load: cli.load.clone(),
         disable_webex_broadcast: cli.disable_webex_broadcast,
         mcp_servers: cli.mcp_server.clone(),
         searxng_url: cli.searxng.clone(),

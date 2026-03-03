@@ -296,12 +296,14 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub searxng: Option<String>,
 
-    /// Path to a saved state file to load at startup (enables resuming from where you stopped)
+    /// Path to a saved state file to load at startup (one-shot context loading)
+    /// This flag loads the state immediately after startup and is then consumed
     #[arg(long, value_name = "PATH")]
     pub load: Option<String>,
 
     /// Enable state saving via the save_full_state tool
-    /// When enabled, the LLM can call save_full_state to persist conversation
+    /// When enabled, the LLM can use both save_full_state and load_full_state tools
+    /// to persist and resume conversations during the session
     #[arg(long)]
     pub save: bool,
 
