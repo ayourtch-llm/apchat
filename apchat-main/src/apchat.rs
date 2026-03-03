@@ -55,6 +55,8 @@ pub struct APChat {
     pub(crate) verbose: bool,
     // Debug level for controlling debug output (0=off, 1=basic, 2=detailed, etc.)
     pub(crate) debug_level: u32,
+    // Inference debug - controls detailed LLM task debug output
+    pub(crate) inference_debug: bool,
     // Process ID
     pub(crate) process_id: u32,
     // Readline history for REPL
@@ -152,6 +154,16 @@ impl APChat {
     /// Check if debug output should be shown for a given level
     pub fn should_show_debug(&self, level: u32) -> bool {
         self.debug_level & (1 << (level - 1)) != 0
+    }
+
+    /// Get the current inference debug status
+    pub fn get_inference_debug(&self) -> bool {
+        self.inference_debug
+    }
+
+    /// Set the inference debug status
+    pub fn set_inference_debug(&mut self, enabled: bool) {
+        self.inference_debug = enabled;
     }
 
     pub fn new_with_config(
@@ -261,6 +273,7 @@ impl APChat {
             stream_responses,
             verbose,
             debug_level: 0, // Default debug level is 0 (off)
+            inference_debug: false, // Default inference debug is off
             non_interactive: false, // Default to interactive mode
             process_id: std::process::id(),
             readline_history: None,

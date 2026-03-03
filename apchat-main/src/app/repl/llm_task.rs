@@ -36,6 +36,8 @@ pub struct LLMRequest {
     pub cancel_token: CancellationToken,
     /// Optional channel for streaming chunks (created per-request when streaming enabled)
     pub stream_sender: Option<mpsc::Sender<OutputChunk>>,
+    /// Whether inference debug output should be shown
+    pub inference_debug: bool,
 }
 
 /// Response from the LLM task after processing a request.
@@ -94,13 +96,18 @@ async fn llm_task_loop(
     response_tx: mpsc::Sender<LLMResponse>,
 ) {
     while let Some(request) = request_rx.recv().await {
-        print_heart_yellow(&format!("📨 [LLM TASK] Received request from channel"), true);
+        let inference_debug = request.inference_debug;
+        if inference_debug {
+            print_heart_yellow(&format!("📨 [LLM TASK] Received request from channel"), true);
+        }
         let response = process_llm_request(request).await;
-        print_heart_yellow(&format!("📨 [LLM TASK] Sending response: {:?}", match &response {
-            LLMResponse::Success { .. } => "Success",
-            LLMResponse::Interrupted => "Interrupted",
-            LLMResponse::Error(_) => "Error",
-        }), true);
+        if inference_debug {
+            print_heart_yellow(&format!("📨 [LLM TASK] Sending response: {:?}", match &response {
+                LLMResponse::Success { .. } => "Success",
+                LLMResponse::Interrupted => "Interrupted",
+                LLMResponse::Error(_) => "Error",
+            }), true);
+        }
         if response_tx.send(response).await.is_err() {
             // Response channel closed, exit the task
             print_heart_yellow(&format!("❌ [LLM TASK] Response channel closed, exiting"), true);
@@ -116,19 +123,27 @@ async fn process_llm_request(request: LLMRequest) -> LLMResponse {
     // Check if already cancelled before starting
     if request.cancel_token.is_cancelled() {
         use apchat_vty::print_heart_yellow;
-        print_heart_yellow(&format!("🚫 [LLM TASK] Request already cancelled before starting"), true);
+        if request.inference_debug {
+            print_heart_yellow(&format!("🚫 [LLM TASK] Request already cancelled before starting"), true);
+        }
         return LLMResponse::Interrupted;
     }
 
     // Race the API call against cancellation
-    print_heart_yellow(&format!("🚀 [LLM TASK] Starting API call"), true);
+    if request.inference_debug {
+        print_heart_yellow(&format!("🚀 [LLM TASK] Starting API call"), true);
+    }
     tokio::select! {
         result = make_llm_call(&request) => {
-            print_heart_yellow(&format!("✅ [LLM TASK] API call completed"), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("✅ [LLM TASK] API call completed"), true);
+            }
             result
         }
         _ = request.cancel_token.cancelled() => {
-            print_heart_yellow(&format!("🚫 [LLM TASK] Request cancelled during API call"), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("🚫 [LLM TASK] Request cancelled during API call"), true);
+            }
             LLMResponse::Interrupted
         }
     }
@@ -138,10 +153,14 @@ async fn process_llm_request(request: LLMRequest) -> LLMResponse {
 async fn make_llm_call(request: &LLMRequest) -> LLMResponse {
     use apchat_vty::print_heart_yellow;
     if request.params.stream_responses {
-        print_heart_yellow(&format!("📡 [LLM TASK] Making streaming API call"), true);
+        if request.inference_debug {
+            print_heart_yellow(&format!("📡 [LLM TASK] Making streaming API call"), true);
+        }
         make_streaming_call(request).await
     } else {
-        print_heart_yellow(&format!("📡 [LLM TASK] Making non-streaming API call"), true);
+        if request.inference_debug {
+            print_heart_yellow(&format!("📡 [LLM TASK] Making non-streaming API call"), true);
+        }
         make_non_streaming_call(request).await
     }
 }
@@ -149,11 +168,15 @@ async fn make_llm_call(request: &LLMRequest) -> LLMResponse {
 /// Make a non-streaming LLM API call.
 async fn make_non_streaming_call(request: &LLMRequest) -> LLMResponse {
     use apchat_vty::print_heart_yellow;
-    print_heart_yellow(&format!("🔧 [LLM TASK] Calling call_api_stateless"), true);
+    if request.inference_debug {
+        print_heart_yellow(&format!("🔧 [LLM TASK] Calling call_api_stateless"), true);
+    }
     // Use the stateless API function
     match crate::api::call_api_stateless(&request.params).await {
         Ok((message, usage, model, _finish_reason)) => {
-            print_heart_yellow(&format!("✅ [LLM TASK] call_api_stateless succeeded - content_len: {}, has_tool_calls: {}", message.content.len(), message.tool_calls.is_some()), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("✅ [LLM TASK] call_api_stateless succeeded - content_len: {}, has_tool_calls: {}", message.content.len(), message.tool_calls.is_some()), true);
+            }
             LLMResponse::Success {
                 content: message.content,
                 usage,
@@ -162,7 +185,9 @@ async fn make_non_streaming_call(request: &LLMRequest) -> LLMResponse {
             }
         }
         Err(e) => {
-            print_heart_yellow(&format!("❌ [LLM TASK] call_api_stateless failed: {}", e), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("❌ [LLM TASK] call_api_stateless failed: {}", e), true);
+            }
             LLMResponse::Error(e.to_string())
         }
     }
@@ -171,11 +196,15 @@ async fn make_non_streaming_call(request: &LLMRequest) -> LLMResponse {
 /// Make a streaming LLM API call.
 async fn make_streaming_call(request: &LLMRequest) -> LLMResponse {
     use apchat_vty::print_heart_yellow;
-    print_heart_yellow(&format!("🔧 [LLM TASK] Calling call_api_streaming_stateless"), true);
+    if request.inference_debug {
+        print_heart_yellow(&format!("🔧 [LLM TASK] Calling call_api_streaming_stateless"), true);
+    }
     // Use the stateless streaming API function
     match crate::api::call_api_streaming_stateless(&request.params, request.stream_sender.clone()).await {
         Ok((message, usage, model, _metrics)) => {
-            print_heart_yellow(&format!("✅ [LLM TASK] call_api_streaming_stateless succeeded - content_len: {}, has_tool_calls: {}", message.content.len(), message.tool_calls.is_some()), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("✅ [LLM TASK] call_api_streaming_stateless succeeded - content_len: {}, has_tool_calls: {}", message.content.len(), message.tool_calls.is_some()), true);
+            }
             LLMResponse::Success {
                 content: message.content,
                 usage,
@@ -184,7 +213,9 @@ async fn make_streaming_call(request: &LLMRequest) -> LLMResponse {
             }
         }
         Err(e) => {
-            print_heart_yellow(&format!("❌ [LLM TASK] call_api_streaming_stateless failed: {}", e), true);
+            if request.inference_debug {
+                print_heart_yellow(&format!("❌ [LLM TASK] call_api_streaming_stateless failed: {}", e), true);
+            }
             LLMResponse::Error(e.to_string())
         }
     }

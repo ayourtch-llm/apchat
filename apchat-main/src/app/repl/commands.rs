@@ -170,14 +170,39 @@ fn cmd_history(chat: &APChat) -> CommandResult {
 }
 
 fn cmd_debug(chat: &mut APChat, line: &str) -> CommandResult {
+    // Check for inference debug subcommand: /debug inference 1|0
+    if line.starts_with("/debug inference ") {
+        let value_str = line[17..].trim();
+        match value_str {
+            "1" => {
+                chat.set_inference_debug(true);
+                print_heart_red(&format!("{} Inference debug enabled", "🔧".bright_green()), true);
+            }
+            "0" => {
+                chat.set_inference_debug(false);
+                print_heart_red(&format!("{} Inference debug disabled", "🔧".bright_green()), true);
+            }
+            _ => {
+                print_heart_yellow(&format!("{} Invalid value for inference debug: '{}'. Use 1 to enable or 0 to disable.", "❌".bright_red(), value_str), true);
+            }
+        }
+        return CommandResult::Handled;
+    }
+
     if line == "/debug" {
         print_heart_red(&format!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level()), true);
+        print_heart_red(&format!("{} Inference debug: {}", "🔧".bright_cyan(), if chat.get_inference_debug() { "enabled" } else { "disabled" }), true);
         print_heart_red(&format!("{} Usage: /debug <level>", "💡".bright_yellow()), true);
         print_heart_red(&format!("  0 = off"), true);
         print_heart_red(&format!("  1 = basic (bit 0)"), true);
         print_heart_red(&format!("  2 = detailed (bit 1)"), true);
         print_heart_red(&format!("  4 = verbose (bit 2)"), true);
         print_heart_red(&format!("  Example: /debug 3 (enables basic + detailed)"), true);
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{} Usage: /debug inference <1|0>", "💡".bright_yellow()), true);
+        print_heart_red(&format!("  1 = enable inference debug"), true);
+        print_heart_red(&format!("  0 = disable inference debug"), true);
+        print_heart_red(&format!("  Example: /debug inference 1"), true);
         return CommandResult::Handled;
     }
 

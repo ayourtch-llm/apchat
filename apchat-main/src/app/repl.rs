@@ -276,7 +276,9 @@ pub async fn run_repl_mode(
                 print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
                 llm_running = false;
                 request_guard = None;
-                print_heart_yellow(&format!("📉 [DEBUG] request_guard set to None - counter should decrement"), true);
+                if chat.get_inference_debug() {
+                    print_heart_yellow(&format!("📉 [DEBUG] request_guard set to None - counter should decrement"), true);
+                }
                 // Always clear the cancellation token, regardless of outcome
                 {
                     let mut guard = current_token.lock().unwrap();
@@ -669,6 +671,7 @@ async fn prep_and_send_request(
             params,
             cancel_token: cancel_token.clone(),
             stream_sender,
+            inference_debug: chat.get_inference_debug(),
         };
 
         print_heart_yellow(&format!("📤 [DEBUG] Sending request to LLM task channel"), true);
