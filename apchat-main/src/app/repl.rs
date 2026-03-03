@@ -2,7 +2,6 @@
 mod init;
 mod commands;
 mod input_router;
-mod inference;
 pub mod llm_task;
 
 use anyhow::Result;
@@ -25,7 +24,7 @@ use crate::app::repl::llm_task::LLMTaskChannels;
 use crate::app::repl::llm_task::spawn_llm_task;
 
 use commands::CommandResult;
-use inference::InferenceOutcome;
+use apchat_types::InferenceOutcome;
 use apchat_vty::request_counter::RequestGuard;
 use crate::chat::history::calculate_conversation_size;
 use crate::scheduled_instructions::poller::ScheduledInstructionPoller;
@@ -292,7 +291,7 @@ pub async fn run_repl_mode(
                     }
                 };
                 let outcome = process_llm_response(&mut chat, &mut llm_channels, llm_response, &mut recent_tool_calls, &mut tool_call_iterations, total_tokens_start).await;
-                print_heart_yellow(&format!("🎯 [DEBUG] process_llm_response returned outcome: {:?}", outcome), true);
+                apchat_vty::print_outcome_box("process_llm_response outcome", &outcome);
                 match outcome {
                     InferenceOutcome::Response(response) => {
                         print_heart_yellow(&format!("✅ [DEBUG] InferenceOutcome::Response - response length: {}", response.len()), true);
