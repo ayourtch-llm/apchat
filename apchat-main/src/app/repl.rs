@@ -322,7 +322,6 @@ pub async fn run_repl_mode(
                             
                             // Add a non-empty assistant message before retry to satisfy Anthropic's API
                             // which requires assistant prefill when last message is tool result
-                            use apchat_models::Message;
                             chat.messages.push(Message {
                                 role: "assistant".to_string(),
                                 content: "Please continue.".to_string(),
