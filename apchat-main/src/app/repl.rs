@@ -376,9 +376,11 @@ pub async fn run_repl_mode(
         logger.shutdown().await;
     }
 
-    if let Err(e) = apchat_vty::ReadlineInstance::cleanup() {
-        if chat.debug_level > 0 {
-            print_heart_yellow(&format!("{} Failed to cleanup readline instance: {}", "⚠️".yellow(), e), true);
+    // Save state to file if --save is specified
+    if let Some(save_path) = &cli.save {
+        match chat.save_state(save_path) {
+            Ok(msg) => print_heart_yellow(&format!("{} {}", "💾".bright_green(), msg), true),
+            Err(e) => print_heart_yellow(&format!("{} Failed to save state: {}", "❌".bright_red(), e), true),
         }
     }
 

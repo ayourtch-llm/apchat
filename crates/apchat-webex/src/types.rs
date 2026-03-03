@@ -48,9 +48,15 @@ pub struct Message {
     pub id: String,
     #[serde(rename = "roomId")]
     pub room_id: String,
-    #[serde(rename = "personEmail")]
-    pub person_email: String,
+    #[serde(rename = "toPersonEmail")]
+    pub to_person_email: Option<String>,
+    #[serde(rename = "roomType")]
+    pub room_type: Option<String>,
     pub text: Option<String>,
+    #[serde(rename = "personId")]
+    pub person_id: Option<String>,
+    #[serde(rename = "personEmail")]
+    pub person_email: Option<String>,
     pub created: String,
 }
 

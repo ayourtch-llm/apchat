@@ -114,8 +114,9 @@ impl WebexInputRouter {
                     print_heart_yellow(&format!("🔍 Poll #{} - Got {} messages", poll_count, messages.len()), true);
 
                     for msg in messages {
+                        let person_email_str = msg.person_email.as_deref().unwrap_or("unknown");
                         print_heart_yellow(&format!("🔍 Message ID: {}, from: {}, already seen: {}",
-                            msg.id, msg.person_email, seen_message_ids.contains(&msg.id)), true);
+                            msg.id, person_email_str, seen_message_ids.contains(&msg.id)), true);
 
                         // If we've already processed this message, we've caught up
                         // Since messages are newest-first, we can stop here
@@ -124,19 +125,22 @@ impl WebexInputRouter {
                             break;
                         }
 
+                        let authorized_str = self.authorized_user_email.as_str();
+                        let bot_str = self.bot_email.as_str();
                         print_heart_yellow(&format!("🔍 Message from {} (authorized: {}, bot: {})",
-                            msg.person_email, self.authorized_user_email, self.bot_email), true);
+                            person_email_str, authorized_str, bot_str), true);
 
                         // Mark as seen immediately (before filtering) so we don't reprocess it
                         let msg_id = msg.id.clone();
                         seen_message_ids.insert(msg_id);
 
                         // Filter: only messages from authorized user, not from bot
-                        if msg.person_email == self.authorized_user_email
-                            && msg.person_email != self.bot_email
+                        if msg.person_email == Some(self.authorized_user_email.clone())
+                            && msg.person_email != Some(self.bot_email.clone())
                         {
                             if let Some(text) = msg.text {
-                                print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email, text), true);
+                                let person_email_str = msg.person_email.as_deref().unwrap_or("unknown");
+                                print_heart_yellow(&format!("📨 Received Webex message from {}: {}", person_email_str, text), true);
 
                                 // Track this message ID for threading replies
                                 {
@@ -147,7 +151,7 @@ impl WebexInputRouter {
                                 // Convert to MSPC message
                                 let message = MspcMessage::UserInput(
                                     text,
-                                    Some(format!("webex:{}", msg.person_email)),
+                                    Some(format!("webex:{}", msg.person_email.as_deref().unwrap_or("unknown"))),
                                 );
 
                                 // Send to MSPC channel

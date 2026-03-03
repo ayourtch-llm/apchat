@@ -295,6 +295,14 @@ pub struct Cli {
     /// Example: --searxng "https://searxng.example.com"
     #[arg(long, value_name = "URL")]
     pub searxng: Option<String>,
+
+    /// Path to a saved state file to load at startup (enables resuming from where you stopped)
+    #[arg(long, value_name = "PATH")]
+    pub load: Option<String>,
+
+    /// Path to save the current state to (enables persistence across restarts)
+    #[arg(long, value_name = "PATH")]
+    pub save: Option<String>,
 }
 
 #[derive(Subcommand)]

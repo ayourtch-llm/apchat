@@ -215,15 +215,15 @@ impl WebexWebSocketRouter {
 
             print_heart_yellow(&format!("🔍 New message [{}] from {} @ {}: {}",
                 msg.id.chars().take(8).collect::<String>(),
-                msg.person_email,
+                msg.person_email.as_deref().unwrap_or("unknown"),
                 msg.created,
                 msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())
             ), true);
 
             // Filter: only messages from authorized user, not from bot
-            if msg.person_email == self.authorized_user_email && msg.person_email != self.bot_email {
+            if msg.person_email == Some(self.authorized_user_email.clone()) && msg.person_email != Some(self.bot_email.clone()) {
                 if let Some(text) = msg.text {
-                    print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email, text), true);
+                    print_heart_yellow(&format!("📨 Received Webex message from {}: {}", msg.person_email.as_deref().unwrap_or("unknown"), text), true);
 
                     // Track this message ID for threading replies
                     {
@@ -234,7 +234,7 @@ impl WebexWebSocketRouter {
                     // Send to MSPC channel
                     let message = MspcMessage::UserInput(
                         text,
-                        Some(format!("webex:{}", msg.person_email)),
+                        Some(format!("webex:{}", msg.person_email.as_deref().unwrap_or("unknown"))),
                     );
 
                     if let Err(e) = self.mspc_channel.send(message).await {
@@ -243,12 +243,12 @@ impl WebexWebSocketRouter {
 
                     processed_count += 1;
                 }
-            } else if msg.person_email == self.bot_email {
+            } else if msg.person_email == Some(self.bot_email.clone()) {
                 print_heart_yellow(&format!("🔍 Skipping bot's own message: {}",
                     msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
             } else {
                 print_heart_yellow(&format!("🔍 Skipping message from {}: {}",
-                    msg.person_email,
+                    msg.person_email.as_deref().unwrap_or("unknown"),
                     msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
             }
         }
@@ -281,8 +281,8 @@ impl WebexWebSocketRouter {
             drop(seen); // Release lock before processing
 
             // Collect messages instead of processing immediately
-            if msg.person_email == self.authorized_user_email
-                && msg.person_email != self.bot_email
+            if msg.person_email == Some(self.authorized_user_email.clone())
+                && msg.person_email != Some(self.bot_email.clone())
             {
                 new_messages.push(msg);
             }
@@ -291,11 +291,11 @@ impl WebexWebSocketRouter {
         // Process in reverse order (oldest first)
         for msg in new_messages.into_iter().rev() {
             if let Some(text) = msg.text {
-                print_heart_yellow(&format!("📨 Recovered missed message from {}: {}", msg.person_email, text), true);
+                print_heart_yellow(&format!("📨 Recovered missed message from {}: {}", msg.person_email.as_deref().unwrap_or("unknown"), text), true);
 
                 let message = MspcMessage::UserInput(
                     text,
-                    Some(format!("webex:{}", msg.person_email)),
+                    Some(format!("webex:{}", msg.person_email.as_deref().unwrap_or("unknown"))),
                 );
 
                 if let Err(e) = self.mspc_channel.send(message).await {

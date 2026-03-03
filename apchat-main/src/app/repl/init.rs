@@ -96,6 +96,14 @@ pub async fn initialize_repl(
 
     let idle_config = parse_idle_config(cli)?;
 
+    // Load saved state if --load is specified
+    if let Some(load_path) = &cli.load {
+        match chat.load_state(load_path) {
+            Ok(msg) => print_heart_yellow(&format!("{} {}", "📂".bright_green(), msg), true),
+            Err(e) => print_heart_yellow(&format!("{} Failed to load state: {}", "❌".bright_red(), e), true),
+        }
+    }
+
     load_project_context(&mut chat).await;
 
     Ok((chat, idle_config))
