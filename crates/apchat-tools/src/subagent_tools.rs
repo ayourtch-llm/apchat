@@ -12,6 +12,9 @@ use apchat_llm_api::client::ChatMessage;
 
 /// Summarize subagent output using an LLM call
 async fn summarize_subagent_output(context: &ToolContext, task: &str, output: &str) -> Option<String> {
+    // Set marquee to indicate summarization is in progress
+    set_marquee("summarizing subagent output...");
+
     let prompt = format!(
         "You are summarizing the output of a subagent that was given a task. \
         Extract and return ONLY the most critically important parts of the content. \

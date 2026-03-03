@@ -275,7 +275,7 @@ pub mod status_info {
     }
 
     /// Set the marquee text (no longer uses background thread - increments on-demand)
-    /// Note: Does NOT reset the scroll index to preserve smooth scrolling when text updates
+    /// Note: Resets scroll index to 0 if the new text is shorter than the current index
     /// 
     /// Sanitization: Replaces newlines with " ⋯ " to prevent display corruption
     /// and ensures the text stays within safe bounds.
@@ -285,8 +285,15 @@ pub mod status_info {
             .replace('\n', " ⋯ ")
             .replace('\r', " ⋯ ");
         
+        let new_len = sanitized.chars().count();
         *MARQUEE_TEXT.lock().unwrap() = Some(sanitized);
-        // Don't reset index - preserve current scroll position for smooth transitions
+        
+        // Check if current index is beyond the new text length
+        // If so, reset to 0 to avoid out-of-bounds scrolling
+        let current = MARQUEE_INDEX.load(Ordering::Relaxed);
+        if current >= new_len {
+            MARQUEE_INDEX.store(0, Ordering::Relaxed);
+        }
     }
 
     /// Clear the marquee text
