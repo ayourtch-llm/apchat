@@ -216,6 +216,10 @@ pub async fn run_repl_mode(
     let mut tool_call_iterations = 0;
     let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
     let mut total_tokens_start = chat.total_tokens_used;
+    
+    // Empty response retry configuration
+    const MAX_EMPTY_RESPONSE_RETRIES: usize = 3;
+    let mut empty_response_retries: usize = 0;
 
     // ── Main REPL loop ─────────────────────────────────────────────────────
     'outer: loop {
@@ -292,6 +296,45 @@ pub async fn run_repl_mode(
                 match outcome {
                     InferenceOutcome::Response(response) => {
                         print_heart_yellow(&format!("✅ [DEBUG] InferenceOutcome::Response - response length: {}", response.len()), true);
+                        
+                        // Check for empty response and apply retry logic
+                        if response.trim().is_empty() {
+                            empty_response_retries += 1;
+                            print_heart_yellow(&format!("⚠️ [DEBUG] Empty response detected! Retry attempt {}/{}", empty_response_retries, MAX_EMPTY_RESPONSE_RETRIES), true);
+                            
+                            if empty_response_retries >= MAX_EMPTY_RESPONSE_RETRIES {
+                                print_heart_yellow(&format!("❌ [DEBUG] Max empty response retries ({}) exceeded - treating as error", MAX_EMPTY_RESPONSE_RETRIES), true);
+                                empty_response_retries = 0; // Reset for next time
+                                continue 'outer;
+                            }
+                            
+                            // Retry: push request again without consuming user input
+                            let cancel_token = tokio_util::sync::CancellationToken::new();
+                            {
+                                let mut guard = current_token.lock().unwrap();
+                                *guard = Some(cancel_token.clone());
+                            }
+                            let maybe_urgent_input = if urgent_messages.is_empty() {
+                                None
+                            } else {
+                                Some(get_urgent_input(&mut urgent_messages))
+                            };
+                            
+                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
+                                print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
+                                llm_running = true;
+                                request_guard = Some(RequestGuard::new());
+                                continue; // Continue the select loop to wait for retry response
+                            } else {
+                                print_heart_yellow(&format!("❌ [DEBUG] Empty response retry {} - failed to send request", empty_response_retries), true);
+                                empty_response_retries = 0;
+                                continue 'outer;
+                            }
+                        }
+                        
+                        // Normal response - reset retry counter
+                        empty_response_retries = 0;
+                        
                         // Log assistant response
                         if let Some(logger) = &mut chat.logger {
                             logger.log("assistant", &response, None, false).await;
@@ -311,11 +354,16 @@ pub async fn run_repl_mode(
 
                     InferenceOutcome::Interrupted | InferenceOutcome::Error => {
                         print_heart_yellow(&format!("🚫 [DEBUG] InferenceOutcome::Interrupted or Error - continuing outer loop"), true);
+                        // Reset empty response retries on error/interrupt
+                        empty_response_retries = 0;
                         // Error/interrupted messages were already pushed by run_tool_loop
                         continue 'outer;
                     }
                     InferenceOutcome::ToolsContinue => {
                         print_heart_yellow(&format!("🔄 [DEBUG] InferenceOutcome::ToolsContinue - will repeat inference"), true);
+                        // Reset empty response retries when we have a valid tool call response
+                        empty_response_retries = 0;
+                        
                         // Should push the request again
                         let cancel_token = tokio_util::sync::CancellationToken::new();
                         {
