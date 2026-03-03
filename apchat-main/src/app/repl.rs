@@ -111,6 +111,7 @@ fn get_urgent_input(urgent_messages: &mut Vec<String>) -> String {
     let mut urgent_input = format!("START URGENT:\n");
     while let Some(urgent_msg) = urgent_messages.pop() {
       print_heart_yellow(&format!("Injecting urgent message: {:?}", &urgent_msg), true);
+      // Preserve the ! prefix for urgent messages
       urgent_input.push_str(&format!("    {}\n", urgent_msg));
     }
     urgent_input.push_str("END URGENT\n");
@@ -453,7 +454,8 @@ pub async fn run_repl_mode(
                     }
                 };
                 if line.starts_with("!") {
-                    urgent_messages.push(line[1..].to_string());
+                    // Preserve the ! prefix for urgent messages
+                    urgent_messages.push(line.to_string());
                 } else {
                     queued_messages.push(line.to_string());
                 }
