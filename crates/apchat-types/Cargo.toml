@@ -1,0 +1,11 @@
+[package]
+name = "apchat-types"
+version = "0.1.0"
+edition = "2021"
+description = "Shared types for APChat"
+license = "MIT"
+
+[dependencies]
+
+[lib]
+path = "src/lib.rs"
