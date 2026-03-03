@@ -36,7 +36,7 @@ impl TypingIndicator {
                 
                 let frame = frames[i % frames.len()];
                 let dot = dots[i % dots.len()];
-                let message = format!("{} Bot is thinking{}{}", 
+                let message = format!("{}{}{}", 
                     frame.bright_cyan(), 
                     dot.bright_yellow(), 
                     " ".repeat(20)); // Clear space

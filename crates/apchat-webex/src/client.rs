@@ -149,7 +149,7 @@ impl WebexClient {
         let url = format!("{}/messages", WEBEX_API_BASE);
 
         // Send a subtle typing indicator message
-        let typing_message = "⌨️  Bot is thinking...";
+        let typing_message = "";
 
         let request = SendMessageRequest {
             room_id: Some(room_id.to_string()),

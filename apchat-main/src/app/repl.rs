@@ -413,7 +413,9 @@ pub async fn run_repl_mode(
                         };
 
                         if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, webex_sink.as_ref()).await {
-                            print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
+                            if chat.debug_level > 0 {
+                                print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
+                            }
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("Started repeat inference"), true);
                             }
@@ -680,7 +682,7 @@ async fn prep_and_send_request(
 
     // Show typing indicator when starting inference (streaming mode)
     if chat.stream_responses {
-        print_heart_red(&format!("{} Bot is thinking...", "⌨️".bright_cyan()), false);
+        // Typing indicator removed
     }
 
     // Start Webex typing indicator if available
@@ -708,7 +710,9 @@ async fn prep_and_send_request(
         print_heart_yellow(&format!("❌ [DEBUG] Failed to send request - returning false"), true);
         return false;
     }
-    print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
+    if chat.get_inference_debug() {
+        print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - returning true"), true);
+    }
     true
 }
 
@@ -876,7 +880,9 @@ async fn process_llm_response(
                     print_heart_red("", true); // New line after tool outputs
 
                     // Continue the loop to get the next response
-                    print_heart_yellow(&format!("✅ [DEBUG] Returning InferenceOutcome::ToolsContinue"), true);
+                    if chat.get_inference_debug() {
+                        print_heart_yellow(&format!("✅ [DEBUG] Returning InferenceOutcome::ToolsContinue"), true);
+                    }
                     return InferenceOutcome::ToolsContinue;
                 } else {
                     // No tool calls - this is the final response

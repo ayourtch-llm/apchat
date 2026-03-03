@@ -395,7 +395,6 @@ impl APChat {
     /// Save conversation history automatically to logs directory
     pub fn auto_save_history(&self) -> Result<String> {
         let history_dir = apchat_logging::get_logs_dir()?.join("history");
-        print_heart_red(&format!("History dir: {:?}", &history_dir), true);
         fs::create_dir_all(&history_dir).unwrap();
         let file_name = format!("history-{}.json", self.process_id);
         let file_path = history_dir.join(file_name);

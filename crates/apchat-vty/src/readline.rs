@@ -1817,12 +1817,19 @@ impl Readline {
     /// Resets all lines to a single empty line, moves cursor to the start,
     /// and resets the scroll offset to zero.
     pub fn reset_input(&mut self) {
+        let stdout = &mut std::io::stdout();
         self.lines = vec![String::new()];
         self.cursor_line = 0;
         self.cursor_col = 0;
         self.scroll_offset = 0;
+        while self.cursor_line > 0 {
+            stdout.queue(MoveUp(1)).ok();
+            self.cursor_offset_from_bottom += 1;
+        }
+        /* 
         self.editor_height = 1;
         self.cursor_offset_from_bottom = 1;
+        */
     }
 
     /// Redraws the current line to the terminal.
@@ -2737,15 +2744,8 @@ impl Readline {
                                 self.redraw(prompt);
                             }
                             KeyResult::Return(result) => {
-                                // Redraw to clear the line before returning
-                                /*
-                                let mut stdout = std::io::stdout();
-                                stdout.queue(MoveToColumn(0)).ok();
-                                stdout
-                                    .queue(Clear(crossterm::terminal::ClearType::CurrentLine))
-                                    .ok();
-                                stdout.flush().ok();
-                                */
+                                // Redraw to clear the line and redraw the title bar before returning
+                                self.redraw(prompt);
                                 return Ok(result);
                             }
                         }
