@@ -221,6 +221,44 @@ impl WebexClient {
         Ok(message)
     }
 
+    /// Delete a message from a room
+    pub async fn delete_message(&self, room_id: &str, text: &str) -> Result<()> {
+        // First, find the message ID by getting messages from the room
+        let messages = self.get_messages(room_id).await?;
+        
+        let message_id = messages
+            .iter()
+            .find(|msg| msg.text.as_deref() == Some(text))
+            .map(|msg| msg.id.clone());
+
+        if let Some(msg_id) = message_id {
+            let url = format!("{}/messages/{}", WEBEX_API_BASE, msg_id);
+            print_heart_yellow(&format!("🗑️ Deleting message ID: {}", msg_id), true);
+
+            let response = self.client
+                .delete(&url)
+                .bearer_auth(&self.access_token)
+                .send()
+                .await
+                .context("Failed to delete message")?;
+
+            let status = response.status();
+            print_heart_yellow(&format!("🗑️ Delete message response status: {}", status), true);
+
+            if !status.is_success() {
+                let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
+                print_heart_yellow(&format!("🗑️ Error response body: {}", error_body), true);
+                return Err(anyhow::anyhow!("Failed to delete message: {} - {}", status, error_body));
+            }
+
+            print_heart_yellow("🗑️ Message deleted successfully", true);
+            Ok(())
+        } else {
+            print_heart_yellow(&format!("⚠️ Message not found with text: {}", text), true);
+            Ok(())
+        }
+    }
+
     /// Get messages from a room
     /// In DM rooms, we get all messages and filter by person_email in the router
     /// Using max=20 since we're polling frequently and only need recent messages

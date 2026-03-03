@@ -46,15 +46,21 @@ impl WebexInputRouter {
             .ok_or_else(|| anyhow::anyhow!("Bot has no email addresses"))?
             .clone();
 
-        // Send startup message directly to user's email
+        // Create/find the direct room by sending a test message
         // This automatically creates/uses the direct room
-        let message = client
-            .send_message_to_email(&user_email, "APchat ready")
-            .await
-            .context("Failed to send startup message")?;
+        // Note: We don't send a visible message, just use the API to get the room ID
+        let room_id = {
+            let test_message = client
+                .send_message_to_email(&user_email, "🔧 APchat initialization")
+                .await
+                .context("Failed to initialize Webex room")?;
+            test_message.room_id.clone()
+        };
 
-        // Extract the room ID from the message response
-        let room_id = message.room_id.clone();
+        // Delete the initialization message to avoid clutter
+        let _ = client.delete_message(&room_id, &"🔧 APchat initialization".to_string()).await;
+
+        print_heart_yellow("🔍 Webex room initialized successfully", true);
 
         print_heart_yellow("🔍 Fetching existing messages to mark as seen...", true);
 
@@ -148,10 +154,13 @@ impl WebexInputRouter {
                                     *last_id = Some(msg.id.clone());
                                 }
 
+                                // Prefix the message with sender email for clarity
+                                let prefixed_text = format!("webex message from {}: {}", person_email_str, text);
+
                                 // Convert to MSPC message
                                 let message = MspcMessage::UserInput(
-                                    text,
-                                    Some(format!("webex:{}", msg.person_email.as_deref().unwrap_or("unknown"))),
+                                    prefixed_text,
+                                    Some(format!("webex:{}", person_email_str)),
                                 );
 
                                 // Send to MSPC channel
