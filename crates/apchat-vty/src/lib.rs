@@ -322,20 +322,21 @@ pub mod status_info {
             // Take exactly MARQUEE_WIDTH characters
             result.chars().take(MARQUEE_WIDTH).collect()
         } else {
-            // For continuous seamless scrolling, create a doubled string
+            // For continuous seamless scrolling, create a quadrupled string
             // This creates the illusion of infinite scrolling right-to-left
-            let doubled = format!("{}{}", text, text);
-            let doubled_len = doubled.chars().count();
+            // Moving through 4x the string for smoother scrolling
+            let quadrupled = format!("{}{}{}{}", text, text, text, text);
+            let quadrupled_len = quadrupled.chars().count();
             
-            // Scroll through the doubled string
-            let start = current % doubled_len;
+            // Scroll through the quadrupled string
+            let start = current % quadrupled_len;
             
-            if start >= doubled_len {
+            if start >= quadrupled_len {
                 " ".repeat(MARQUEE_WIDTH)
             } else {
-                // Take exactly MARQUEE_WIDTH characters from the doubled string
+                // Take exactly MARQUEE_WIDTH characters from the quadrupled string
                 // This ensures seamless transition when we reach the end
-                doubled.chars().skip(start).take(MARQUEE_WIDTH).collect()
+                quadrupled.chars().skip(start).take(MARQUEE_WIDTH).collect()
             }
         }
     }
