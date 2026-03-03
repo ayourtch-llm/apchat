@@ -320,14 +320,17 @@ pub async fn run_repl_mode(
                                 Some(get_urgent_input(&mut urgent_messages))
                             };
                             
-                            // Remove any trailing empty assistant message before retry
-                            // to avoid "Cannot have 2 or more assistant messages at the end" error
-                            if let Some(last_msg) = chat.messages.last() {
-                                if last_msg.role == "assistant" && last_msg.content.is_empty() {
-                                    chat.messages.pop();
-                                    print_heart_yellow(&format!("🔧 [DEBUG] Removed trailing empty assistant message before retry"), true);
-                                }
-                            }
+                            // Append a user message to prompt the LLM to retry
+                            // This maintains proper role alternation and signals retry intent
+                            use apchat_models::Message;
+                            chat.messages.push(Message {
+                                role: "user".to_string(),
+                                content: "Please try again and provide a response.".to_string(),
+                                tool_calls: None,
+                                tool_call_id: None,
+                                name: None,
+                                reasoning: None,
+                            });
                             
                             if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input).await {
                                 print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
