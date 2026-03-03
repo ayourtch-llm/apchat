@@ -275,9 +275,10 @@ pub mod status_info {
     }
 
     /// Set the marquee text (no longer uses background thread - increments on-demand)
+    /// Note: Does NOT reset the scroll index to preserve smooth scrolling when text updates
     pub fn set_marquee(text: &str) {
         *MARQUEE_TEXT.lock().unwrap() = Some(text.to_string());
-        MARQUEE_INDEX.store(0, Ordering::Relaxed);
+        // Don't reset index - preserve current scroll position for smooth transitions
     }
 
     /// Clear the marquee text
@@ -304,24 +305,31 @@ pub mod status_info {
         
         let text_len = text.chars().count();
 
-        let mut result = if text_len <= MARQUEE_WIDTH {
+        if text_len <= MARQUEE_WIDTH {
             // Text fits in marquee width, pad it to exactly MARQUEE_WIDTH
             let mut result = text.clone();
-            result
+            while result.chars().count() < MARQUEE_WIDTH {
+                result.push(' ');
+            }
+            // Take exactly MARQUEE_WIDTH characters
+            result.chars().take(MARQUEE_WIDTH).collect()
         } else {
-            // Scrolling: show window of exactly MARQUEE_WIDTH characters
-            let start = current % text_len;
+            // For continuous seamless scrolling, create a doubled string
+            // This creates the illusion of infinite scrolling right-to-left
+            let doubled = format!("{}{}", text, text);
+            let doubled_len = doubled.chars().count();
             
-            if start >= text_len {
+            // Scroll through the doubled string
+            let start = current % doubled_len;
+            
+            if start >= doubled_len {
                 " ".repeat(MARQUEE_WIDTH)
             } else {
-                text.chars().skip(start).take(MARQUEE_WIDTH).collect()
+                // Take exactly MARQUEE_WIDTH characters from the doubled string
+                // This ensures seamless transition when we reach the end
+                doubled.chars().skip(start).take(MARQUEE_WIDTH).collect()
             }
-        };
-        while result.chars().count() < MARQUEE_WIDTH {
-            result.push(' ');
         }
-        result
     }
 }
 
