@@ -3,6 +3,10 @@
 //! This module provides functionality to detect if the binary has been replaced
 //! on disk and automatically save state to a temporary file, then re-execute
 //! with loading of that temporary state.
+//!
+//! Uses std::process::Command for cross-platform compatibility.
+//! Note: This spawns a new process (different PID), but preserves all state.
+//! For true in-place execve() with PID preservation, see the alternative implementation below.
 
 use anyhow::Result;
 use std::fs;
@@ -87,11 +91,12 @@ pub fn store_binary_hash(binary_path: &Path, hash_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Re-execute the current binary with the temporary state file
+/// Re-execute the current binary with the temporary state file using Command
+/// This spawns a new process (different PID) but preserves all state.
 pub fn reexec_with_temp_state(
     temp_state_path: &Path,
     args: &[String],
-) -> Result<(), anyhow::Error> {
+) -> Result<()> {
     let current_exe = std::env::current_exe()?;
     let mut cmd = Command::new(current_exe);
     
@@ -112,6 +117,61 @@ pub fn reexec_with_temp_state(
         Err(anyhow::anyhow!("Re-execution failed with status: {}", status))
     } else {
         Ok(())
+    }
+}
+
+/// Alternative: Re-execute using execve() for true in-place process replacement
+/// This preserves the PID but is Unix-specific and more complex.
+/// Currently not used due to complexity and potential issues.
+#[cfg(target_os = "linux")]
+pub fn reexec_with_execve(
+    temp_state_path: &Path,
+    args: &[String],
+) -> Result<()> {
+    use std::ffi::{CString, c_char};
+    
+    // Build argv array - must keep CStrings alive until execve completes
+    let exe_cstr = CString::new(std::env::current_exe()?.to_str().ok_or_else(|| anyhow::anyhow!("Invalid path"))?)
+        .map_err(|e| anyhow::anyhow!("Failed to convert path to C string: {}", e))?;
+    
+    let mut argv: Vec<CString> = Vec::new();
+    argv.push(exe_cstr); // argv[0] should be the program name
+    
+    // Add --load flag with temp state path
+    let load_arg = format!("--load {}", temp_state_path.display());
+    argv.push(CString::new(load_arg)
+        .map_err(|e| anyhow::anyhow!("Failed to create --load argument: {}", e))?);
+    
+    // Add original args (skip binary path and --temp-state)
+    for arg in args.iter().skip(1) {
+        if !arg.starts_with("--temp-state") {
+            argv.push(CString::new(arg.as_str())
+                .map_err(|e| anyhow::anyhow!("Failed to convert argument to C string: {}", e))?);
+        }
+    }
+    
+    // Build envp array
+    let mut envp: Vec<CString> = std::env::vars()
+        .map(|(k, v)| CString::new(format!("{}={}", k, v)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| anyhow::anyhow!("Failed to convert environment variable to C string: {}", e))?;
+    
+    // Call execve - this will never return if successful
+    unsafe {
+        // Convert CStrings to pointers
+        let argv_ptrs: Vec<*const c_char> = argv.iter().map(|s| s.as_ptr() as *const c_char).collect();
+        let env_ptrs: Vec<*const c_char> = envp.iter().map(|s| s.as_ptr() as *const c_char).collect();
+        
+        let result = libc::execve(
+            argv[0].as_ptr(),
+            argv_ptrs.as_ptr(),
+            env_ptrs.as_ptr(),
+        );
+        
+        // If we get here, execve failed
+        let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(-1);
+        let err_msg = std::io::Error::from_raw_os_error(errno).to_string();
+        Err(anyhow::anyhow!("execve() failed with errno {}: {}", errno, err_msg))
     }
 }
 
