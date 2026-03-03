@@ -19,6 +19,7 @@ members = [
     "crates/apchat-mcp-pty-server",
     "crates/apchat-finserv",
     "crates/apchat-ocr",
+    "crates/apchat-types",
 ]
 resolver = "2"
 
@@ -42,3 +43,4 @@ proptest = "1.0"
 tokio = { version = "1.41", features = ["full"] }
 serial_test = "3.0"
 env_logger = "0.11"
+apchat-types = { path = "crates/apchat-types" }

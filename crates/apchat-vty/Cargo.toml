@@ -9,6 +9,7 @@ apchat-common = { path = "../apchat-common" }
 apchat-mspc = { path = "../apchat-mspc" }
 apchat-models = { path = "../apchat-models" }
 apchat-logging = { path = "../apchat-logging" }
+apchat-types = { path = "../apchat-types" }
 chrono = { version = "0.4.42", features = ["serde"] }
 colored = "2.1"
 reqwest = "0.12"
