@@ -320,6 +320,25 @@ pub async fn run_repl_mode(
                                 Some(get_urgent_input(&mut urgent_messages))
                             };
                             
+                            // Add a bogus assistant message and encouragement before retry
+                            // This helps the LLM continue when it produces empty responses
+                            chat.messages.push(Message {
+                                role: "assistant".to_string(),
+                                content: "".to_string(),
+                                tool_calls: None,
+                                tool_call_id: None,
+                                name: None,
+                                reasoning: None,
+                            });
+                            chat.messages.push(Message {
+                                role: "user".to_string(),
+                                content: "You are doing great, please continue!".to_string(),
+                                tool_calls: None,
+                                tool_call_id: None,
+                                name: None,
+                                reasoning: None,
+                            });
+                            
                             // Remove trailing empty assistant message before retry to avoid duplicate
                             // ensure_proper_role_alternation will add a fresh one if needed
                             if let Some(last_msg) = chat.messages.last() {
