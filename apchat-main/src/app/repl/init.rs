@@ -64,6 +64,11 @@ pub async fn initialize_repl(
         flags.clone(),
     );
 
+    // Set bogus_ack_msg from CLI flag
+    if let Some(bogus_ack) = &cli.bogus_ack_msg {
+        chat.bogus_ack_msg = Some(bogus_ack.clone());
+    }
+
     // Register MCP server tools (async initialization)
     chat.register_mcp_tools(&flags).await;
 

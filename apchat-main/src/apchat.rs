@@ -81,6 +81,8 @@ pub struct APChat {
     pub(crate) mcp_clients: Vec<Arc<apchat_tools::mcp_client::McpClient>>,
     // Feature flags for propagating to subagents
     pub(crate) feature_flags: FeatureFlags,
+    // Bogus acknowledgment message for deduplication
+    pub(crate) bogus_ack_msg: Option<String>,
 }
 
 impl APChat {
@@ -287,6 +289,7 @@ impl APChat {
             summarize_subagents: true,
             mcp_clients: Vec::new(),
             feature_flags: flags,
+            bogus_ack_msg: None, // Default to no bogus ack message
         };
 
         chat.messages.push(Message {

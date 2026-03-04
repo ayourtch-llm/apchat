@@ -603,6 +603,50 @@ async fn add_msg_to_history(
     use apchat_models::Message;
     use crate::app::repl::llm_task::{spawn_llm_task, LLMRequest, LLMResponse};
 
+    // Check for bogus_ack_msg deduplication logic
+    if let Some(ref bogus_ack) = chat.bogus_ack_msg {
+        // Remove spaces from bogus_ack for comparison
+        let bogus_ack_normalized: String = bogus_ack.chars().filter(|c| !c.is_whitespace()).collect();
+        
+        // Check if we have at least 2 messages (previous user + last assistant)
+        if chat.messages.len() >= 2 {
+            // Clone the last assistant message content for comparison
+            let last_assistant_content = chat.messages.last().map(|m| m.content.clone());
+            
+            if let Some(ref last_assistant_content) = last_assistant_content {
+                if let Some(last_assistant_msg) = chat.messages.last() {
+                    if last_assistant_msg.role == "assistant" {
+                        // Remove spaces from last assistant message content for comparison
+                        let last_assistant_normalized: String = last_assistant_content.chars().filter(|c| !c.is_whitespace()).collect();
+                        
+                        // Check if last assistant message matches bogus_ack (ignoring spaces)
+                        if last_assistant_normalized == bogus_ack_normalized {
+                            // Clone the previous user message content before we mutate
+                            let prev_user_content = chat.messages.get(chat.messages.len() - 2).map(|m| m.content.clone());
+                            
+                            if let Some(ref prev_user_content) = prev_user_content {
+                                if prev_user_content == input {
+                                    // Deduplication condition met!
+                                    // Remove the last assistant message
+                                    chat.messages.pop();
+                                    
+                                    print_heart_yellow(&format!("🔄 [DEDUP] Deduplication triggered!"), true);
+                                    print_heart_yellow(&format!("   📝 Last assistant message (removed): {:?}", last_assistant_content), true);
+                                    print_heart_yellow(&format!("   📝 Previous user message (skipped): {:?}", prev_user_content), true);
+                                    print_heart_yellow(&format!("   🎯 Bogus ack pattern: {:?}", bogus_ack), true);
+                                    
+                                    // Don't add the new user message - skip to return early
+                                    let _ = crate::chat::history::summarize_and_trim_history(chat).await;
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Prepare for LLM call (add user message, summarize history)
     chat.messages.push(Message {
         role: "user".to_string(),

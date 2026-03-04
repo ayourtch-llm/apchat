@@ -310,6 +310,13 @@ pub struct Cli {
     /// Disable broadcasting AI responses to Webex (keep Webex for chat only)
     #[arg(long)]
     pub disable_webex_broadcast: bool,
+
+    /// Bogus acknowledgment message for deduplication
+    /// When specified, if the last assistant message equals this string (ignoring spaces),
+    /// and the new user message equals the previous user message, the assistant message
+    /// will be removed and the new user message won't be added to avoid context pollution.
+    #[arg(long, value_name = "UTF8-STRING")]
+    pub bogus_ack_msg: Option<String>,
 }
 
 #[derive(Subcommand)]
