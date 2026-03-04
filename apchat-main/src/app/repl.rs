@@ -488,6 +488,11 @@ pub async fn run_repl_mode(
         logger.shutdown().await;
     }
 
+    // Restore terminal settings before exiting (critical for Ctrl-D handling)
+    if let Err(e) = apchat_vty::ReadlineInstance::cleanup() {
+        print_heart_yellow(&format!("Warning: Failed to cleanup readline instance: {}", e), true);
+    }
+
     Ok(())
 }
 
