@@ -42,6 +42,7 @@ pub async fn initialize_repl(
         crafting_instructions: cli.crafting_instructions,
         reviewing_ai_papers: cli.reviewing_ai_papers,
         elements_of_style: cli.elements_of_style,
+        ed3d_skills: cli.ed3d_skills,
         self_edit: cli.self_edit,
         diff_fuzz: cli.diff_fuzz,
         forecasting: cli.forecasting,

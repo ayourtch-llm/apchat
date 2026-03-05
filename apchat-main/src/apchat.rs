@@ -213,6 +213,11 @@ impl APChat {
                 if !flags.elements_of_style {
                     registry.remove_skill("writing-clearly-and-concisely");
                 }
+                if !flags.ed3d_skills {
+                    registry.remove_skill("property-based-testing");
+                    registry.remove_skill("functional-core-imperative-shell");
+                    registry.remove_skill("writing-for-a-technical-audience");
+                }
                 if flags.financial_services {
                     let fsi_skills = apchat_finserv::get_financial_services_skills();
                     let mut count = 0;

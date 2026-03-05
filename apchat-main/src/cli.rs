@@ -255,6 +255,11 @@ pub struct Cli {
     #[arg(long)]
     pub elements_of_style: bool,
 
+    /// Enable ed3d-plugins skills (property-based-testing, functional-core-imperative-shell, writing-for-a-technical-audience)
+    /// Based on https://github.com/ed3dai/ed3d-plugins
+    #[arg(long)]
+    pub ed3d_skills: bool,
+
     /// Enable differential fuzzing tool for AI-generated code verification
     /// Inspired by https://codeberg.org/canoozie/ctrlcode - derives behavioral
     /// invariants from specs, generates fuzz tests, and classifies divergences
