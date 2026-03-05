@@ -153,16 +153,22 @@ impl WebexWebSocketRouter {
     async fn process_event(&self, event: MercuryEvent) -> Result<()> {
         // Only process conversation.activity events
         if event.data.event_type != "conversation.activity" {
+            // Skip other event types (e.g., conversation.highlight, membership.activity, etc.)
+            print_heart_yellow(&format!("🔍 Skipping non-activity event type: {}", event.data.event_type), true);
             return Ok(());
         }
 
         let activity = match event.data.activity {
             Some(act) => act,
-            None => return Ok(()),
+            None => {
+                print_heart_yellow("🔍 Skipping event with no activity data", true);
+                return Ok(());
+            }
         };
 
         // Only process "post" verbs (new messages)
         if activity.verb != "post" {
+            print_heart_yellow(&format!("🔍 Skipping non-post verb: {}", activity.verb), true);
             return Ok(());
         }
 
@@ -176,11 +182,14 @@ impl WebexWebSocketRouter {
 
         // Skip Mercury notifications for bot's own messages
         // This prevents unnecessary API calls and avoids triggering "new messages" indicator
-        if actor_email == self.authorized_user_email {
-            print_heart_yellow("🔍 Actor is authorized user, processing...", true);
+        if actor_email.is_empty() {
+            print_heart_yellow("🔍 Skipping event with empty actor ID", true);
+            return Ok(());
         } else if actor_email == self.bot_email {
             print_heart_yellow("🔍 Skipping Mercury notification for bot's own message", true);
             return Ok(());
+        } else if actor_email == self.authorized_user_email {
+            print_heart_yellow("🔍 Actor is authorized user, processing...", true);
         } else {
             print_heart_yellow(&format!("🔍 Skipping Mercury notification from {}", actor_email), true);
             return Ok(());
