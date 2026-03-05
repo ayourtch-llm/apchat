@@ -101,22 +101,40 @@ impl ToolRegistry {
                     context.clone()
                 };
                 
+                // Check if tool should skip content limiter
+                let mut effective_context = effective_context;
+                
+                // Automatically skip content limiter for tools that handle binary data
+                // or need to send large raw data (images, etc.)
+                match name {
+                    "read_image" => {
+                        effective_context.skip_content_limiter = true;
+                    }
+                    _ => {}
+                }
+                
                 let mut result = tool.execute(params, &effective_context).await;
                 
-                // Apply content limiting if the tool result was successful and we have a content limiter
+                // Apply content limiting if:
+                // 1. The tool result was successful and not already truncated
+                // 2. We have a content limiter
+                // 3. The tool did NOT request to skip the limiter (skip_content_limiter flag)
                 if result.success && !result.truncated {
                     if let Some(limiter) = &self.content_limiter {
-                        let (truncated_content, note, was_truncated) = limiter.save_and_truncate(
-                            result.content.clone(), name
-                        );
-                        
-                        if was_truncated {
-                            // Extract file path from the note
-                            let full_path = note.as_ref().and_then(|n| {
-                                n.split("at: ").last().map(|s| s.trim().to_string())
-                            }).unwrap_or_default();
+                        // Check if the tool requested to skip the limiter
+                        if !effective_context.skip_content_limiter {
+                            let (truncated_content, note, was_truncated) = limiter.save_and_truncate(
+                                result.content.clone(), name
+                            );
                             
-                            result = ToolResult::success_with_truncation(truncated_content, full_path);
+                            if was_truncated {
+                                // Extract file path from the note
+                                let full_path = note.as_ref().and_then(|n| {
+                                    n.split("at: ").last().map(|s| s.trim().to_string())
+                                }).unwrap_or_default();
+                                
+                                result = ToolResult::success_with_truncation(truncated_content, full_path);
+                            }
                         }
                     }
                 }

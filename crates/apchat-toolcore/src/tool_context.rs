@@ -52,6 +52,7 @@ pub struct ToolContext {
     pub tool_registry: Option<Arc<ToolRegistry>>, // Tool registry for tools that need to invoke other tools (e.g., python_sandbox)
     pub searxng_url: Option<String>, // SearXNG URL for web search (propagated to subagents)
     pub python_sandbox: bool, // Whether python sandbox is enabled (propagated to subagents)
+    pub skip_content_limiter: bool, // Whether to skip content limiter for this tool execution (per-tool bypass)
 }
 
 impl Clone for ToolContext {
@@ -80,6 +81,7 @@ impl Clone for ToolContext {
             tool_registry: self.tool_registry.clone(),
             searxng_url: self.searxng_url.clone(),
             python_sandbox: self.python_sandbox,
+            skip_content_limiter: self.skip_content_limiter,
         }
     }
 }
@@ -108,6 +110,7 @@ impl std::fmt::Debug for ToolContext {
             .field("tool_registry", &self.tool_registry.is_some())
             .field("searxng_url", &self.searxng_url.as_ref().map(|s| "***"))
             .field("python_sandbox", &self.python_sandbox)
+            .field("skip_content_limiter", &self.skip_content_limiter)
             .finish()
     }
 }
@@ -137,6 +140,7 @@ impl ToolContext {
             tool_registry: None,
             searxng_url: None,
             python_sandbox: false,
+            skip_content_limiter: false,
         }
     }
 
@@ -232,6 +236,11 @@ impl ToolContext {
 
     pub fn with_python_sandbox(mut self, python_sandbox: bool) -> Self {
         self.python_sandbox = python_sandbox;
+        self
+    }
+
+    pub fn with_skip_content_limiter(mut self, skip: bool) -> Self {
+        self.skip_content_limiter = skip;
         self
     }
 

@@ -18,13 +18,12 @@ impl Tool for ReadImageTool {
     }
 
     fn description(&self) -> &str {
-        "Encode an image file to base64 for use with multimodal LLMs (Qwen3.5, Qwen3-VL). Supports JPEG, PNG, WebP, BMP formats. Returns base64-encoded image data that can be included in multimodal prompts. Maximum file size: 50MB."
+        "Encode an image file to base64 for use with multimodal LLMs (Qwen3.5, Qwen3-VL). Supports JPEG, PNG, WebP, BMP formats. Returns base64-encoded image data in Qwen3.5 format. Automatically bypasses content length limits to send full image data to the LLM."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("file_path", "string", "Path to the image file relative to the work directory", required),
-            param!("max_size_mb", "integer", "Maximum file size in MB (default: 50)", optional),
         ])
     }
 
@@ -34,29 +33,12 @@ impl Tool for ReadImageTool {
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
-        let max_size_mb = params.get_optional::<usize>("max_size_mb").unwrap_or(Some(50));
-        let max_size_bytes = max_size_mb.unwrap_or(50) as u64 * 1024 * 1024;
-
         // Construct full path
         let full_path = context.work_dir.join(&file_path);
 
         // Validate file exists
         if !full_path.exists() {
             return ToolResult::error(format!("Image file not found: {}", file_path));
-        }
-
-        // Check file size
-        let metadata = match fs::metadata(&full_path) {
-            Ok(m) => m,
-            Err(e) => return ToolResult::error(format!("Failed to read file metadata: {}", e)),
-        };
-
-        if metadata.len() > max_size_bytes {
-            return ToolResult::error(format!(
-                "Image too large: {} bytes (max {} MB)",
-                metadata.len(),
-                max_size_mb.unwrap_or(50)
-            ));
         }
 
         // Read file contents
@@ -68,35 +50,9 @@ impl Tool for ReadImageTool {
         // Encode to base64
         let base64_data = BASE64.encode(&image_data);
 
-        // Detect file format from extension
-        let format = file_path
-            .split('.')
-            .last()
-            .unwrap_or("unknown")
-            .to_uppercase();
-
-        // Return structured result with metadata
+        // Return only Qwen3.5 format
         let result = format!(
-            "Image encoded successfully:\n\
-             File: {}\n\
-             Format: {}\n\
-             Size: {} bytes\n\
-             Base64 data:\n{}\n\
-             \n\
-             **Usage with Qwen3.5/Qwen3-VL:**\n\
-             Include this base64 data in your multimodal prompt using the format:\n\
-             ```\n\
-             <image>{base64_data}</image>\n\
-             ```\n\
-             Or with Qwen3.5 special tokens:\n\
-             ```\n\
-             <|image_start|>\n\
-             {base64_data}\n\
-             <|image_end|>\n\
-             ```",
-            file_path,
-            format,
-            image_data.len(),
+            "<|image_start|>\n{}\n<|image_end|>",
             base64_data
         );
 
