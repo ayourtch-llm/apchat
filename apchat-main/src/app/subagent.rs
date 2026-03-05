@@ -49,6 +49,7 @@ pub async fn run_subagent_mode(
         context_mode: cli.context_mode,
         mcp_servers: cli.mcp_server.clone(),
         searxng_url: cli.searxng.clone(),
+        image_processing: cli.image_processing,
         ..FeatureFlags::default()
     };
 

@@ -36,6 +36,7 @@ pub struct FeatureFlags {
     pub disable_webex_broadcast: bool,
     pub mcp_servers: Vec<String>,
     pub searxng_url: Option<String>,
+    pub image_processing: bool,
 }
 
 /// Configuration for APChat client
@@ -205,6 +206,18 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
 
     // Register RLM context chunking tool
     registry.register_with_categories(RlmContextChunkTool, vec!["file_ops".to_string(), "rlm".to_string()]);
+
+    // Register image processing tool (only if enabled via --image-processing CLI flag)
+    if flags.image_processing {
+        registry.register_with_categories(
+            ReadImageTool,
+            vec!["image_processing".to_string(), "multimodal".to_string()],
+        );
+        print_heart_red(
+            "✓ Image processing enabled (read_image tool available for Qwen3.5/Qwen3-VL)",
+            true,
+        );
+    }
 
     // Register scheduled instruction tools (only if enabled via CLI flag)
     if flags.delayed_instructions {

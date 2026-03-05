@@ -52,6 +52,7 @@ pub async fn initialize_repl(
         disable_webex_broadcast: cli.disable_webex_broadcast,
         mcp_servers: cli.mcp_server.clone(),
         searxng_url: cli.searxng.clone(),
+        image_processing: cli.image_processing,
     };
 
     let mut chat = APChat::new_with_config(

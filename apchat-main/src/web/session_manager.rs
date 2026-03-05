@@ -256,6 +256,7 @@ impl SessionManager {
             crate::terminal::TerminalBackendType::Pty,
             FeatureFlags {
                 early_superpowers: config.early_superpowers,
+                image_processing: config.image_processing,
                 ..FeatureFlags::default()
             },
         );

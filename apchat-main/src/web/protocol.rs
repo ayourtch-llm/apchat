@@ -18,6 +18,8 @@ pub struct SessionConfig {
     pub stream_responses: bool,
     #[serde(default)]
     pub early_superpowers: bool,
+    #[serde(default)]
+    pub image_processing: bool,
 }
 
 fn default_stream() -> bool {

@@ -37,6 +37,7 @@ pub mod save_full_state;
 pub mod load_full_state;
 pub mod send_webex_message;
 pub mod delete_webex_message;
+pub mod read_image;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -66,5 +67,6 @@ pub use save_full_state::*;
 pub use load_full_state::*;
 pub use send_webex_message::*;
 pub use delete_webex_message::*;
+pub use read_image::*;
 
 

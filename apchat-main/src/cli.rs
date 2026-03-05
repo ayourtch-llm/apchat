@@ -250,6 +250,11 @@ pub struct Cli {
     #[arg(long)]
     pub reviewing_ai_papers: bool,
 
+    /// Enable image processing for multimodal models (Qwen3.5, Qwen3-VL)
+    /// When enabled, the read_image tool can be used to encode images for multimodal LLMs
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub image_processing: bool,
+
     /// Enable the writing-clearly-and-concisely skill (Elements of Style)
     /// Based on https://github.com/obra/the-elements-of-style
     #[arg(long)]
