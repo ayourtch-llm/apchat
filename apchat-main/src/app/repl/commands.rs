@@ -189,9 +189,29 @@ fn cmd_debug(chat: &mut APChat, line: &str) -> CommandResult {
         return CommandResult::Handled;
     }
 
+    // Check for webex debug subcommand: /debug webex 1|0
+    if line.starts_with("/debug webex ") {
+        let value_str = line[13..].trim();
+        match value_str {
+            "1" => {
+                chat.set_webex_debug(true);
+                print_heart_red(&format!("{} Webex debug enabled", "🔧".bright_green()), true);
+            }
+            "0" => {
+                chat.set_webex_debug(false);
+                print_heart_red(&format!("{} Webex debug disabled", "🔧".bright_green()), true);
+            }
+            _ => {
+                print_heart_yellow(&format!("{} Invalid value for webex debug: '{}'. Use 1 to enable or 0 to disable.", "❌".bright_red(), value_str), true);
+            }
+        }
+        return CommandResult::Handled;
+    }
+
     if line == "/debug" {
         print_heart_red(&format!("{} Debug level: {} (binary: {:b})", "🔧".bright_cyan(), chat.get_debug_level(), chat.get_debug_level()), true);
         print_heart_red(&format!("{} Inference debug: {}", "🔧".bright_cyan(), if chat.get_inference_debug() { "enabled" } else { "disabled" }), true);
+        print_heart_red(&format!("{} Webex debug: {}", "🔧".bright_cyan(), if chat.get_webex_debug() { "enabled" } else { "disabled" }), true);
         print_heart_red(&format!("{} Usage: /debug <level>", "💡".bright_yellow()), true);
         print_heart_red(&format!("  0 = off"), true);
         print_heart_red(&format!("  1 = basic (bit 0)"), true);
@@ -203,6 +223,11 @@ fn cmd_debug(chat: &mut APChat, line: &str) -> CommandResult {
         print_heart_red(&format!("  1 = enable inference debug"), true);
         print_heart_red(&format!("  0 = disable inference debug"), true);
         print_heart_red(&format!("  Example: /debug inference 1"), true);
+        print_heart_red(&format!(""), true);
+        print_heart_red(&format!("{} Usage: /debug webex <1|0>", "💡".bright_yellow()), true);
+        print_heart_red(&format!("  1 = enable webex debug (hides all 🔍 debug logs)"), true);
+        print_heart_red(&format!("  0 = disable webex debug (show all 🔍 debug logs)"), true);
+        print_heart_red(&format!("  Example: /debug webex 1"), true);
         return CommandResult::Handled;
     }
 

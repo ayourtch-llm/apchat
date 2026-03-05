@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use reqwest::Client;
 use crate::types::*;
+use apchat_core::WebexDebugState;
 use apchat_vty::print_heart_yellow;
 
 const WEBEX_API_BASE: &str = "https://webexapis.com/v1";
@@ -11,21 +12,46 @@ const WEBEX_WDM_BASE: &str = "https://wdm-a.wbx2.com/wdm/api/v1";
 pub struct WebexClient {
     client: Client,
     access_token: String,
+    debug_state: Option<WebexDebugState>,
 }
 
 impl WebexClient {
+    /// Create a new WebexClient without debug state (debug logging disabled)
     pub fn new(access_token: String) -> Self {
         Self {
             client: Client::new(),
             access_token,
+            debug_state: None,
+        }
+    }
+
+    /// Create a new WebexClient with debug state for toggling debug output
+    /// 
+    /// # Arguments
+    /// * `access_token` - Webex API access token
+    /// * `debug_state` - Shared debug state for toggling debug output
+    pub fn new_with_debug(access_token: String, debug_state: WebexDebugState) -> Self {
+        Self {
+            client: Client::new(),
+            access_token,
+            debug_state: Some(debug_state),
+        }
+    }
+
+    /// Helper method to print debug message if debug is enabled
+    fn debug_log(&self, message: &str) {
+        if let Some(ref state) = self.debug_state {
+            if state.is_enabled() {
+                print_heart_yellow(message, true);
+            }
         }
     }
 
     /// Get person by email
     pub async fn get_person_by_email(&self, email: &str) -> Result<Person> {
         let url = format!("{}/people?email={}", WEBEX_API_BASE, email);
-        print_heart_yellow(&format!("🔍 Fetching person by email: {}", email), true);
-        print_heart_yellow(&format!("🔍 URL: {}", url), true);
+        self.debug_log(&format!("🔍 Fetching person by email: {}", email));
+        self.debug_log(&format!("🔍 URL: {}", url));
 
         let response = self.client
             .get(&url)
@@ -34,14 +60,14 @@ impl WebexClient {
             .await
             .context("Failed to send request to Webex API")?;
 
-        print_heart_yellow(&format!("🔍 Response status: {}", response.status()), true);
+        self.debug_log(&format!("🔍 Response status: {}", response.status()));
 
         let response: PeopleResponse = response
             .json()
             .await
             .context("Failed to parse Webex API response")?;
 
-        print_heart_yellow(&format!("🔍 Found {} people", response.items.len()), true);
+        self.debug_log(&format!("🔍 Found {} people", response.items.len()));
 
         response.items
             .into_iter()
@@ -52,7 +78,7 @@ impl WebexClient {
     /// Get bot's own details
     pub async fn get_me(&self) -> Result<Person> {
         let url = format!("{}/people/me", WEBEX_API_BASE);
-        print_heart_yellow("🔍 Fetching bot details from /people/me", true);
+        self.debug_log("🔍 Fetching bot details from /people/me");
 
         let response = self.client
             .get(&url)
@@ -61,21 +87,21 @@ impl WebexClient {
             .await
             .context("Failed to get bot details")?;
 
-        print_heart_yellow(&format!("🔍 Bot details response status: {}", response.status()), true);
+        self.debug_log(&format!("🔍 Bot details response status: {}", response.status()));
 
         let person: Person = response
             .json()
             .await
             .context("Failed to parse bot details")?;
 
-        print_heart_yellow(&format!("🔍 Bot email: {:?}", person.emails.first()), true);
+        self.debug_log(&format!("🔍 Bot email: {:?}", person.emails.first()));
         Ok(person)
     }
 
     /// Create a direct room with a person by person ID
     pub async fn create_direct_room(&self, person_id: &str) -> Result<Room> {
         let url = format!("{}/rooms", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Creating direct room with person_id: {}", person_id), true);
+        self.debug_log(&format!("🔍 Creating direct room with person_id: {}", person_id));
 
         let request = CreateRoomRequest {
             title: None,
@@ -91,21 +117,21 @@ impl WebexClient {
             .await
             .context("Failed to create direct room")?;
 
-        print_heart_yellow(&format!("🔍 Create room response status: {}", response.status()), true);
+        self.debug_log(&format!("🔍 Create room response status: {}", response.status()));
 
         let room: Room = response
             .json()
             .await
             .context("Failed to parse room response")?;
 
-        print_heart_yellow(&format!("🔍 Created room ID: {}", room.id), true);
+        self.debug_log(&format!("🔍 Created room ID: {}", room.id));
         Ok(room)
     }
 
     /// Create a direct room with a person by email address
     pub async fn create_direct_room_by_email(&self, email: &str) -> Result<Room> {
         let url = format!("{}/rooms", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Creating direct room with email: {}", email), true);
+        self.debug_log(&format!("🔍 Creating direct room with email: {}", email));
 
         let request = CreateRoomRequest {
             title: None,
@@ -113,7 +139,7 @@ impl WebexClient {
             to_person_email: Some(email.to_string()),
         };
 
-        print_heart_yellow(&format!("🔍 Request body: {}", serde_json::to_string(&request).unwrap_or_default()), true);
+        self.debug_log(&format!("🔍 Request body: {}", serde_json::to_string(&request).unwrap_or_default()));
 
         let response = self.client
             .post(&url)
@@ -124,11 +150,11 @@ impl WebexClient {
             .context("Failed to create direct room")?;
 
         let status = response.status();
-        print_heart_yellow(&format!("🔍 Create room response status: {}", status), true);
+        self.debug_log(&format!("🔍 Create room response status: {}", status));
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
-            print_heart_yellow(&format!("🔍 Error response body: {}", error_body), true);
+            self.debug_log(&format!("🔍 Error response body: {}", error_body));
             return Err(anyhow::anyhow!("Failed to create room: {} - {}", status, error_body));
         }
 
@@ -137,7 +163,7 @@ impl WebexClient {
             .await
             .context("Failed to parse room response")?;
 
-        print_heart_yellow(&format!("🔍 Created room ID: {}", room.id), true);
+        self.debug_log(&format!("🔍 Created room ID: {}", room.id));
         Ok(room)
     }
 
@@ -168,7 +194,7 @@ impl WebexClient {
             .context("Failed to send typing indicator")?;
 
         let status = response.status();
-        print_heart_yellow(&format!("🔍 Typing indicator sent - status: {}", status), true);
+        self.debug_log(&format!("🔍 Typing indicator sent - status: {}", status));
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_default();
@@ -197,12 +223,12 @@ impl WebexClient {
     /// Internal method to send message with format option
     async fn send_message_with_format(&self, room_id: &str, text: &str, parent_id: Option<String>, markdown: bool) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Sending {}message to room {}{}: {}",
+        self.debug_log(&format!("🔍 Sending {}message to room {}{}: {}",
             if markdown { "markdown " } else { "" },
             room_id,
             parent_id.as_ref().map(|p| format!(" (reply to {})", p.chars().take(8).collect::<String>())).unwrap_or_default(),
             text.chars().take(50).collect::<String>()
-        ), true);
+        ));
 
         let request = SendMessageRequest {
             room_id: Some(room_id.to_string()),
@@ -220,14 +246,14 @@ impl WebexClient {
             .await
             .context("Failed to send message")?;
 
-        print_heart_yellow(&format!("🔍 Send message response status: {}", response.status()), true);
+        self.debug_log(&format!("🔍 Send message response status: {}", response.status()));
 
         let message: Message = response
             .json()
             .await
             .context("Failed to parse message response")?;
 
-        print_heart_yellow(&format!("🔍 Sent message ID: {} (use this ID for deletion)", message.id), true);
+        self.debug_log(&format!("🔍 Sent message ID: {} (use this ID for deletion)", message.id));
         Ok(message)
     }
 
@@ -246,11 +272,11 @@ impl WebexClient {
     /// Internal method to send message to email with format option
     async fn send_message_to_email_with_format(&self, email: &str, text: &str, markdown: bool) -> Result<Message> {
         let url = format!("{}/messages", WEBEX_API_BASE);
-        print_heart_yellow(&format!("🔍 Sending {}message to email {}: {}",
+        self.debug_log(&format!("🔍 Sending {}message to email {}: {}",
             if markdown { "markdown " } else { "" },
             email,
             text.chars().take(50).collect::<String>()
-        ), true);
+        ));
 
         let request = SendMessageRequest {
             room_id: None,
@@ -260,7 +286,7 @@ impl WebexClient {
             text: if markdown { None } else { Some(text.to_string()) },
         };
 
-        print_heart_yellow(&format!("🔍 Request body: {}", serde_json::to_string(&request).unwrap_or_default()), true);
+        self.debug_log(&format!("🔍 Request body: {}", serde_json::to_string(&request).unwrap_or_default()));
 
         let response = self.client
             .post(&url)
@@ -271,16 +297,16 @@ impl WebexClient {
             .context("Failed to send message")?;
 
         let status = response.status();
-        print_heart_yellow(&format!("🔍 Send message response status: {}", status), true);
+        self.debug_log(&format!("🔍 Send message response status: {}", status));
 
         // Get raw response body for debugging
         let raw_body = response.text().await
             .context("Failed to read response body")?;
         
-        print_heart_yellow(&format!("🔍 Raw API response: {}", raw_body), true);
+        self.debug_log(&format!("🔍 Raw API response: {}", raw_body));
 
         if !status.is_success() {
-            print_heart_yellow(&format!("🔍 Error response body: {}", raw_body), true);
+            self.debug_log(&format!("🔍 Error response body: {}", raw_body));
             return Err(anyhow::anyhow!("Failed to send message: {} - {}", status, raw_body));
         }
 
@@ -288,10 +314,10 @@ impl WebexClient {
             .context("Failed to parse message response")?;
 
         // Debug: Log the message fields
-        print_heart_yellow(&format!("🔍 Parsed message - ID: {}, Room: {}, Text: {:?}, Markdown: {:?}", 
-            message.id, message.room_id, message.text, message.markdown), true);
+        self.debug_log(&format!("🔍 Parsed message - ID: {}, Room: {}, Text: {:?}, Markdown: {:?}", 
+            message.id, message.room_id, message.text, message.markdown));
 
-        print_heart_yellow(&format!("🔍 Sent message ID: {} (use this ID for deletion), room ID: {}", message.id, message.room_id), true);
+        self.debug_log(&format!("🔍 Sent message ID: {} (use this ID for deletion), room ID: {}", message.id, message.room_id));
         Ok(message)
     }
 
@@ -411,14 +437,14 @@ impl WebexClient {
             .await
             .context("Failed to get messages")?;
 
-        print_heart_yellow(&format!("🔍 Get messages response status: {}", response.status()), true);
+        self.debug_log(&format!("🔍 Get messages response status: {}", response.status()));
 
         let messages_response: MessagesResponse = response
             .json()
             .await
             .context("Failed to parse messages response")?;
 
-        print_heart_yellow(&format!("🔍 Received {} messages from room {}", messages_response.items.len(), room_id), true);
+        self.debug_log(&format!("🔍 Received {} messages from room {}", messages_response.items.len(), room_id));
 
         // API returns newest first by default
         Ok(messages_response.items)
@@ -427,8 +453,8 @@ impl WebexClient {
     /// Register device to get Mercury WebSocket URL
     pub async fn register_device(&self) -> Result<DeviceRegistration> {
         let url = format!("{}/devices", WEBEX_WDM_BASE);
-        print_heart_yellow("🔍 Registering device for Mercury WebSocket", true);
-        print_heart_yellow(&format!("🔍 Using WDM endpoint: {}", url), true);
+        self.debug_log("🔍 Registering device for Mercury WebSocket");
+        self.debug_log(&format!("🔍 Using WDM endpoint: {}", url));
 
         // Generate unique device name (similar to Python bot implementation)
         // Use timestamp and process ID for uniqueness
@@ -449,7 +475,7 @@ impl WebexClient {
             system_version: "0.1.0".to_string(),
         };
 
-        print_heart_yellow(&format!("🔍 Device registration payload: {}", serde_json::to_string_pretty(&request).unwrap_or_default()), true);
+        self.debug_log(&format!("🔍 Device registration payload: {}", serde_json::to_string_pretty(&request).unwrap_or_default()));
 
         let response = self.client
             .post(&url)
@@ -460,22 +486,22 @@ impl WebexClient {
             .context("Failed to register device")?;
 
         let status = response.status();
-        print_heart_yellow(&format!("🔍 Device registration response status: {}", status), true);
+        self.debug_log(&format!("🔍 Device registration response status: {}", status));
 
         if !status.is_success() {
             let error_body = response.text().await.unwrap_or_else(|_| "Could not read error body".to_string());
-            print_heart_yellow(&format!("🔍 Error response body: {}", error_body), true);
+            self.debug_log(&format!("🔍 Error response body: {}", error_body));
             return Err(anyhow::anyhow!("Failed to register device: {} - {}", status, error_body));
         }
 
         // Get response text first for diagnostics
         let response_text = response.text().await.context("Failed to read response body")?;
-        print_heart_yellow(&format!("🔍 Device registration response body: {}", response_text), true);
+        self.debug_log(&format!("🔍 Device registration response body: {}", response_text));
 
         let registration: DeviceRegistration = serde_json::from_str(&response_text)
             .context("Failed to parse device registration response")?;
 
-        print_heart_yellow(&format!("🔍 Device registered: WebSocket URL={}", registration.web_socket_url), true);
+        self.debug_log(&format!("🔍 Device registered: WebSocket URL={}", registration.web_socket_url));
 
         Ok(registration)
     }

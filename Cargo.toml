@@ -2,6 +2,7 @@
 members = [
     "apchat-main",
     "crates/apchat-common",
+    "crates/apchat-core",
     "crates/apchat-models",
     "crates/apchat-progress",
     "crates/apchat-logging",

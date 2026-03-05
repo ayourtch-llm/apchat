@@ -14,3 +14,6 @@ pub use input_router::WebexInputRouter;
 pub use output_sink::WebexOutputSink;
 pub use websocket_router::WebexWebSocketRouter;
 pub use websocket_router::DEFAULT_RECONNECT_HOURS;
+
+// Re-export WebexDebugState from apchat-core for convenience
+pub use apchat_core::WebexDebugState;

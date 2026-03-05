@@ -57,6 +57,8 @@ pub struct APChat {
     pub(crate) debug_level: u32,
     // Inference debug - controls detailed LLM task debug output
     pub(crate) inference_debug: bool,
+    // Webex debug - controls Webex integration debug output
+    pub(crate) webex_debug: bool,
     // Process ID
     pub(crate) process_id: u32,
     // Readline history for REPL
@@ -168,6 +170,16 @@ impl APChat {
         self.inference_debug = enabled;
     }
 
+    /// Get the current webex debug status
+    pub fn get_webex_debug(&self) -> bool {
+        self.webex_debug
+    }
+
+    /// Set the webex debug status
+    pub fn set_webex_debug(&mut self, enabled: bool) {
+        self.webex_debug = enabled;
+    }
+
     pub fn new_with_config(
         client_config: ClientConfig,
         work_dir: PathBuf,
@@ -276,6 +288,7 @@ impl APChat {
             verbose,
             debug_level: 0, // Default debug level is 0 (off)
             inference_debug: false, // Default inference debug is off
+            webex_debug: false, // Default webex debug is off
             non_interactive: false, // Default to interactive mode
             process_id: std::process::id(),
             readline_history: None,

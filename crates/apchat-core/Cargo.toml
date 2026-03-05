@@ -1,0 +1,11 @@
+[package]
+name = "apchat-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core shared types and utilities for APChat"
+license = "MIT"
+
+[dependencies]
+
+[lints]
+workspace = true

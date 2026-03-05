@@ -7,6 +7,7 @@ use tokio::time::{sleep, Duration, Instant};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use futures_util::{StreamExt, SinkExt};
 use apchat_mspc::{MspcChannel, MspcMessage};
+use apchat_core::WebexDebugState;
 use apchat_vty::print_heart_yellow;
 use crate::client::WebexClient;
 use crate::types::{MercuryEvent};
@@ -63,9 +64,20 @@ pub struct WebexWebSocketRouter {
     reconnect_interval: Option<Duration>,
     /// Total number of connections made (for diagnostics)
     connection_count: Arc<Mutex<u64>>,
+    /// Optional debug state for toggling debug output
+    debug_state: Option<WebexDebugState>,
 }
 
 impl WebexWebSocketRouter {
+    /// Helper method to print debug message if debug is enabled
+    fn debug_log(&self, message: &str) {
+        if let Some(ref state) = self.debug_state {
+            if state.is_enabled() {
+                print_heart_yellow(message, true);
+            }
+        }
+    }
+
     /// Create a new WebexWebSocketRouter
     ///
     /// `reconnect_hours` controls proactive reconnection interval:
@@ -122,11 +134,16 @@ impl WebexWebSocketRouter {
             None => "disabled".to_string(),
         };
 
-        print_heart_yellow(&format!(
+        // Local helper for debug logging (no self available in static method)
+        let debug_log = |msg: &str| {
+            // Debug logging disabled by default in new()
+        };
+
+        debug_log(&format!(
             "🔍 WebSocket router initialized with {} seen messages, proactive reconnect: {}",
             seen_ids.len(),
             reconnect_desc,
-        ), true);
+        ));
 
         Ok(Self {
             client: Arc::new(client),
@@ -141,6 +158,7 @@ impl WebexWebSocketRouter {
             last_user_message_id: Arc::new(Mutex::new(None)),
             reconnect_interval,
             connection_count: Arc::new(Mutex::new(0)),
+            debug_state: None,
         })
     }
 
@@ -154,21 +172,21 @@ impl WebexWebSocketRouter {
         // Only process conversation.activity events
         if event.data.event_type != "conversation.activity" {
             // Skip other event types (e.g., conversation.highlight, membership.activity, etc.)
-            print_heart_yellow(&format!("🔍 Skipping non-activity event type: {}", event.data.event_type), true);
+            self.debug_log(&format!("🔍 Skipping non-activity event type: {}", event.data.event_type));
             return Ok(());
         }
 
         let activity = match event.data.activity {
             Some(act) => act,
             None => {
-                print_heart_yellow("🔍 Skipping event with no activity data", true);
+                self.debug_log("🔍 Skipping event with no activity data");
                 return Ok(());
             }
         };
 
         // Only process "post" verbs (new messages)
         if activity.verb != "post" {
-            print_heart_yellow(&format!("🔍 Skipping non-post verb: {}", activity.verb), true);
+            self.debug_log(&format!("🔍 Skipping non-post verb: {}", activity.verb));
             return Ok(());
         }
 
@@ -178,27 +196,27 @@ impl WebexWebSocketRouter {
             .map(|a| a.id.as_str())
             .unwrap_or("");
 
-        print_heart_yellow(&format!("🔍 Mercury notification - new activity from {}", actor_email), true);
+        self.debug_log(&format!("🔍 Mercury notification - new activity from {}", actor_email));
 
         // Skip Mercury notifications for bot's own messages
         // This prevents unnecessary API calls and avoids triggering "new messages" indicator
         if actor_email.is_empty() {
-            print_heart_yellow("🔍 Skipping event with empty actor ID", true);
+            self.debug_log("🔍 Skipping event with empty actor ID");
             return Ok(());
         } else if actor_email == self.bot_email {
-            print_heart_yellow("🔍 Skipping Mercury notification for bot's own message", true);
+            self.debug_log("🔍 Skipping Mercury notification for bot's own message");
             return Ok(());
         } else if actor_email == self.authorized_user_email {
-            print_heart_yellow("🔍 Actor is authorized user, processing...", true);
+            self.debug_log("🔍 Actor is authorized user, processing...");
         } else {
-            print_heart_yellow(&format!("🔍 Skipping Mercury notification from {}", actor_email), true);
+            self.debug_log(&format!("🔍 Skipping Mercury notification from {}", actor_email));
             return Ok(());
         }
 
         // Mercury sends encrypted content - we need to fetch the actual messages via REST API
         // Note: Mercury activity.id != REST API message.id (different ID formats)
         // So we just fetch recent messages and process any unseen ones from authorized user
-        print_heart_yellow("🔍 Fetching recent messages from REST API...", true);
+        self.debug_log("🔍 Fetching recent messages from REST API...");
         let messages = self.client
             .get_messages(&self.room_id)
             .await
@@ -222,12 +240,12 @@ impl WebexWebSocketRouter {
                 continue;
             }
 
-            print_heart_yellow(&format!("🔍 New message [{}] from {} @ {}: {}",
+            self.debug_log(&format!("🔍 New message [{}] from {} @ {}: {}",
                 msg.id.chars().take(8).collect::<String>(),
                 msg.person_email.as_deref().unwrap_or("unknown"),
                 msg.created,
                 msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())
-            ), true);
+            ));
 
             // Filter: only messages from authorized user, not from bot
             // NOTE: This logic must stay in sync with input_router.rs (see line ~140 for similar implementation)
@@ -258,23 +276,23 @@ impl WebexWebSocketRouter {
                     processed_count += 1;
                 }
             } else if msg.person_email == Some(self.bot_email.clone()) {
-                print_heart_yellow(&format!("🔍 Skipping bot's own message: {}",
-                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
+                self.debug_log(&format!("🔍 Skipping bot's own message: {}",
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())));
             } else {
-                print_heart_yellow(&format!("🔍 Skipping message from {}: {}",
+                self.debug_log(&format!("🔍 Skipping message from {}: {}",
                     msg.person_email.as_deref().unwrap_or("unknown"),
-                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())), true);
+                    msg.text.as_ref().map(|t| t.chars().take(50).collect::<String>()).unwrap_or_else(|| "[no text]".to_string())));
             }
         }
 
-        print_heart_yellow(&format!("🔍 Processed {} new messages from authorized user", processed_count), true);
+        self.debug_log(&format!("🔍 Processed {} new messages from authorized user", processed_count));
 
         Ok(())
     }
 
     /// Poll for missed messages after reconnection
     async fn recover_message_gap(&self) -> Result<()> {
-        print_heart_yellow("🔍 Checking for missed messages during disconnect...", true);
+        self.debug_log("🔍 Checking for missed messages during disconnect...");
 
         let messages = self.client
             .get_messages(&self.room_id)
@@ -321,9 +339,9 @@ impl WebexWebSocketRouter {
         }
 
         if new_count > 0 {
-            print_heart_yellow(&format!("🔍 Recovered {} missed messages", new_count), true);
+            self.debug_log(&format!("🔍 Recovered {} missed messages", new_count));
         } else {
-            print_heart_yellow("🔍 No missed messages during disconnect", true);
+            self.debug_log("🔍 No missed messages during disconnect");
         }
 
         Ok(())
@@ -331,25 +349,25 @@ impl WebexWebSocketRouter {
 
     /// Re-register device to get a fresh Mercury WebSocket URL
     async fn refresh_websocket_url(&self) -> Result<()> {
-        print_heart_yellow("🔍 Re-registering device for fresh WebSocket URL...", true);
+        self.debug_log("🔍 Re-registering device for fresh WebSocket URL...");
         let registration = self.client
             .register_device()
             .await
             .context("Failed to re-register device")?;
         let mut url = self.websocket_url.lock().await;
         *url = registration.web_socket_url;
-        print_heart_yellow("🔍 Device re-registered, got fresh WebSocket URL", true);
+        self.debug_log("🔍 Device re-registered, got fresh WebSocket URL");
         Ok(())
     }
 
     /// Run the WebSocket router with auto-reconnection
     pub async fn run(&self) -> Result<()> {
-        print_heart_yellow(&format!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email), true);
-        print_heart_yellow(&format!("🔍 Device ID: {}", self.device_id), true);
+        self.debug_log(&format!("🌐 Webex WebSocket bot starting - monitoring messages from {}", self.authorized_user_email));
+        self.debug_log(&format!("🔍 Device ID: {}", self.device_id));
         if let Some(interval) = self.reconnect_interval {
-            print_heart_yellow(&format!("🔍 Proactive reconnect every {}h", interval.as_secs() / 3600), true);
+            self.debug_log(&format!("🔍 Proactive reconnect every {}h", interval.as_secs() / 3600));
         }
-        print_heart_yellow(&format!("🔍 Client ping interval: {}s", PING_INTERVAL_SECS), true);
+        self.debug_log(&format!("🔍 Client ping interval: {}s", PING_INTERVAL_SECS));
 
         let mut reconnect_delay = 0u64; // 0 = immediate first connect
         let mut last_reason = ReconnectReason::Initial;
@@ -357,10 +375,10 @@ impl WebexWebSocketRouter {
         loop {
             // Reconnection backoff delay
             if reconnect_delay > 0 {
-                print_heart_yellow(&format!(
+                self.debug_log(&format!(
                     "🔍 Reconnecting in {}s (reason: {})...",
                     reconnect_delay, last_reason
-                ), true);
+                ));
                 sleep(Duration::from_secs(reconnect_delay)).await;
 
                 // Re-register device to get a fresh WebSocket URL before reconnecting
@@ -378,10 +396,10 @@ impl WebexWebSocketRouter {
             {
                 let mut count = self.connection_count.lock().await;
                 *count += 1;
-                print_heart_yellow(&format!(
+                self.debug_log(&format!(
                     "🔍 Starting connection #{} (reason: {})",
                     *count, last_reason
-                ), true);
+                ));
             }
 
             // Try to connect
@@ -391,13 +409,13 @@ impl WebexWebSocketRouter {
                     match &last_reason {
                         ReconnectReason::MaxAgeExceeded { .. } | ReconnectReason::ActivityTimeout { .. } => {
                             // Proactive reconnect - use minimal delay
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Proactive reconnect triggered ({})", last_reason
-                            ), true);
+                            ));
                             reconnect_delay = 1;
                         }
                         _ => {
-                            print_heart_yellow("🔍 WebSocket connection ended cleanly", true);
+                            self.debug_log("🔍 WebSocket connection ended cleanly");
                             reconnect_delay = 1;
                         }
                     }
@@ -415,26 +433,26 @@ impl WebexWebSocketRouter {
                 }
             }
 
-            print_heart_yellow("🔍 Attempting reconnection...", true);
+            self.debug_log("🔍 Attempting reconnection...");
         }
     }
 
     /// Handle a decoded Mercury message (text or binary converted to text)
     async fn handle_mercury_message(&self, text: &str) {
-        print_heart_yellow(&format!("🔍 Processing message ({} bytes)", text.len()), true);
-        print_heart_yellow(&format!("🔍 Message preview: {}", text.chars().take(200).collect::<String>()), true);
+        self.debug_log(&format!("🔍 Processing message ({} bytes)", text.len()));
+        self.debug_log(&format!("🔍 Message preview: {}", text.chars().take(200).collect::<String>()));
 
         // Parse Mercury event
         match serde_json::from_str::<MercuryEvent>(text) {
             Ok(event) => {
-                print_heart_yellow(&format!("🔍 Parsed event type: {}", event.data.event_type), true);
+                self.debug_log(&format!("🔍 Parsed event type: {}", event.data.event_type));
                 if let Err(e) = self.process_event(event).await {
                     print_heart_yellow(&format!("⚠️ Error processing event: {}", e), true);
                 }
             }
             Err(e) => {
                 print_heart_yellow(&format!("⚠️ Failed to parse Mercury event: {}", e), true);
-                print_heart_yellow(&format!("🔍 Raw message: {}", text), true);
+                self.debug_log(&format!("🔍 Raw message: {}", text));
             }
         }
     }
@@ -452,7 +470,7 @@ impl WebexWebSocketRouter {
             .context("Failed to connect to Mercury WebSocket")?;
 
         let connected_at = Instant::now();
-        print_heart_yellow("🔍 WebSocket connected", true);
+        self.debug_log("🔍 WebSocket connected");
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -466,7 +484,7 @@ impl WebexWebSocketRouter {
         });
 
         let auth_text = serde_json::to_string(&auth_message)?;
-        print_heart_yellow("🔍 Sending authorization to Mercury", true);
+        self.debug_log("🔍 Sending authorization to Mercury");
         write.send(Message::Text(auth_text)).await
             .context("Failed to send authorization message")?;
 
@@ -524,7 +542,7 @@ impl WebexWebSocketRouter {
                         }
                         Some(Ok(Message::Ping(data))) => {
                             last_data_received = Instant::now();
-                            print_heart_yellow(&format!("🔍 Received ping ({} bytes), sending pong", data.len()), true);
+                            self.debug_log(&format!("🔍 Received ping ({} bytes), sending pong", data.len()));
                             if let Err(e) = write.send(Message::Pong(data)).await {
                                 print_heart_yellow(&format!("⚠️ Failed to send pong: {}", e), true);
                             }
@@ -539,7 +557,7 @@ impl WebexWebSocketRouter {
                         }
                         Some(Ok(msg)) => {
                             last_data_received = Instant::now();
-                            print_heart_yellow(&format!("🔍 Received other message type: {:?}", msg), true);
+                            self.debug_log(&format!("🔍 Received other message type: {:?}", msg));
                         }
                         Some(Err(e)) => {
                             let age = connected_at.elapsed().as_secs();
