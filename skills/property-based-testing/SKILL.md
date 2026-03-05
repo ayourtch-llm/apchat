@@ -80,9 +80,9 @@ Always aim for the strongest property that applies.
 
 1. **Constrain early:** Build constraints INTO the strategy, not via filtering
    ```rust
-   // GOOD - proptest
+   // OK but slower - proptest filtering
    prop::num::i32::ANY.prop_filter("positive", |x| *x > 0)
-   // BETTER
+   // BETTER - direct constraint
    1..=i32::MAX
    ```
 

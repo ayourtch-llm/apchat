@@ -119,26 +119,26 @@ If you catch yourself doing ANY of these, STOP:
 **Symptom:** Function mixes I/O with logic
 
 ```rust
-// BEFORE - hard to test
+// BEFORE - hard to test, logic mixed with I/O
 fn process_order(db: &Database, order_id: &str) -> Result<()> {
     let order = db.fetch(order_id)?;           // I/O
     let discount = calculate_discount(&order);  // Pure logic
-    let total = apply_discount(&order, discount);  // Pure logic
+    let total = order.subtotal - discount;      // Pure logic
     db.save(order_id, total)?;                 // I/O
     Ok(())
 }
 
 // AFTER - pure core extracted
 fn calculate_order_total(order: &Order, rules: &DiscountRules) -> Decimal {
-    // Pure function - easy to test
+    // Pure function - easy to test, no I/O
     let discount = calculate_discount(order, rules);
-    apply_discount(order, discount)
+    order.subtotal - discount
 }
 
-fn process_order(db: &Database, order_id: &str) -> Result<()> {
-    // Thin I/O wrapper
+fn process_order(db: &Database, order_id: &str, rules: &DiscountRules) -> Result<()> {
+    // Thin I/O wrapper: gather -> process -> persist
     let order = db.fetch(order_id)?;
-    let total = calculate_order_total(&order, &get_discount_rules());
+    let total = calculate_order_total(&order, rules);
     db.save(order_id, total)?;
     Ok(())
 }
