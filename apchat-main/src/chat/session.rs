@@ -553,9 +553,20 @@ pub(crate) async fn chat(
                     };
                     tool_call_history.push(call_info);
 
+                    // Determine content type based on tool name
+                    // For read_image tool, the result is a data: URI that should be treated as an image
+                    let content_parts = if tool_call.function.name == "read_image" {
+                        vec![
+                            ContentPart::Text("Attached image(s) from tool result:".to_string()),
+                            ContentPart::ImageUrl { url: result.clone() }
+                        ]
+                    } else {
+                        vec![ContentPart::Text(result)]
+                    };
+
                     chat.messages.push(Message {
                         role: "tool".to_string(),
-                        content: vec![ContentPart::Text(result)],
+                        content: content_parts,
                         tool_calls: None,
                         tool_call_id: Some(tool_call.id.clone()),
                         name: Some(tool_call.function.name.clone()),
