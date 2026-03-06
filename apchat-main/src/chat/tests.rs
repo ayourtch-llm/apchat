@@ -3,6 +3,7 @@ mod tests {
     use crate::chat::{calculate_conversation_size, get_max_session_size, should_compact_session, intelligent_compaction};
     use crate::{APChat, config::ClientConfig};
     use apchat_models::{Message, ModelColor, ToolCall, FunctionCall};
+    use apchat_models::types::ContentPart;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use apchat_terminal::TerminalManager;
@@ -52,7 +53,7 @@ mod tests {
     fn create_test_message(role: &str, content: &str) -> Message {
         Message {
             role: role.to_string(),
-            content: content.to_string(),
+            content: vec![ContentPart::Text(content.to_string())],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -73,7 +74,7 @@ mod tests {
 
         Message {
             role: role.to_string(),
-            content: content.to_string(),
+            content: vec![ContentPart::Text(content.to_string())],
             tool_calls: Some(vec![tool_call]),
             tool_call_id: None,
             name: None,
@@ -88,7 +89,7 @@ mod tests {
         
         Message {
             role: role.to_string(),
-            content,
+            content: vec![ContentPart::Text(content)],
             tool_calls: None,
             tool_call_id: None,
             name: None,

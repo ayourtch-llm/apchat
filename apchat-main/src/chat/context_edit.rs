@@ -1,4 +1,5 @@
 use crate::APChat;
+use apchat_models::types::ContentPart;
 use apchat_toolcore::ContextEdit;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use colored::Colorize;
@@ -45,7 +46,7 @@ pub(crate) fn apply_pending_context_edits(chat: &mut APChat, pre_batch_len: usiz
                 ), true);
                 continue;
             }
-            if !chat.messages[*index].content.contains("**EDITABLE**") {
+            if !chat.messages[*index].text_only().contains("**EDITABLE**") {
                 print_heart_yellow(&format!(
                     "{} edit_item: message at index {} does not contain **EDITABLE** marker, skipping",
                     "⚠️".yellow(), index
@@ -56,7 +57,7 @@ pub(crate) fn apply_pending_context_edits(chat: &mut APChat, pre_batch_len: usiz
                 "{} Editing context item at index {} (role: {})",
                 "✏️".green(), index, chat.messages[*index].role
             ), true);
-            chat.messages[*index].content = new_content.clone();
+            chat.messages[*index].content = vec![ContentPart::Text(new_content.clone())];
             edits_applied += 1;
         }
     }
@@ -212,7 +213,7 @@ mod tests {
     fn make_msg(role: &str, content: &str) -> Message {
         Message {
             role: role.to_string(),
-            content: content.to_string(),
+            content: vec![ContentPart::Text(content.to_string())],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -224,7 +225,7 @@ mod tests {
         use apchat_models::{ToolCall, FunctionCall};
         Message {
             role: "assistant".to_string(),
-            content: String::new(),
+            content: vec![ContentPart::Text(String::new())],
             tool_calls: Some(tool_call_ids.iter().map(|id| ToolCall {
                 id: id.to_string(),
                 tool_type: "function".to_string(),
@@ -242,7 +243,7 @@ mod tests {
     fn make_tool_result(tool_call_id: &str, content: &str) -> Message {
         Message {
             role: "tool".to_string(),
-            content: content.to_string(),
+            content: vec![ContentPart::Text(content.to_string())],
             tool_calls: None,
             tool_call_id: Some(tool_call_id.to_string()),
             name: Some("test_tool".to_string()),

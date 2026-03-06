@@ -9,6 +9,7 @@ use crate::APChat;
 use crate::MAX_RETRIES;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, ChatResponse, ToolCall, FunctionCall};
+use apchat_models::types::ContentPart;
 use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file};
 use apchat_logging::safe_truncate;
@@ -102,7 +103,7 @@ pub(crate) async fn call_api_stateless(
         for msg in messages.iter() {
             if msg.role == "system" && !past_leading_systems {
                 // Collect leading system message contents
-                leading_system_contents.push(msg.content.clone());
+                leading_system_contents.push(msg.text_only());
             } else {
                 // Past the leading system messages
                 if !past_leading_systems {
@@ -110,7 +111,7 @@ pub(crate) async fn call_api_stateless(
                     if !leading_system_contents.is_empty() {
                         converted_messages.push(Message {
                             role: "system".to_string(),
-                            content: leading_system_contents.join("\n\n"),
+                            content: vec![ContentPart::Text(leading_system_contents.join("\n\n"))],
                             tool_calls: None,
                             tool_call_id: None,
                             name: None,
@@ -337,11 +338,11 @@ pub(crate) async fn call_api_stateless(
 
         // If no structured tool calls were received, check for XML format in content
         if message.tool_calls.is_none() {
-            if let Some(parsed_calls) = parse_xml_tool_calls(&message.content) {
+            if let Some(parsed_calls) = parse_xml_tool_calls(&message.text_only()) {
                 print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
                 message.tool_calls = Some(parsed_calls);
                 // Clear the XML from content to avoid displaying it
-                message.content = String::new();
+                message.content = vec![];
             }
         }
 

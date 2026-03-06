@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use apchat_logging::get_logs_dir;
+use apchat_models::types::ContentPart;
 
 /// Groq LLM client implementation (OpenAI-compatible API)
 #[derive(Debug)]
@@ -83,7 +84,7 @@ impl LlmClient for GroqLlmClient {
         } else {
             (ChatMessage {
                 role: "assistant".to_string(),
-                content: "No response generated".to_string(),
+                content: vec![ContentPart::Text("No response generated".to_string())],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -103,7 +104,7 @@ impl LlmClient for GroqLlmClient {
     }
 
     async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String> {
-        // Convert system messages to user messages for Mistral compatibility
+        // Convert messages to API format using helper method
         let converted_messages: Vec<serde_json::Value> = messages.iter().map(|msg| {
             let role = if msg.role == "system" {
                 "user"
@@ -112,7 +113,7 @@ impl LlmClient for GroqLlmClient {
             };
             serde_json::json!({
                 "role": role,
-                "content": &msg.content
+                "content": self.convert_content_for_api(&msg.content)
             })
         }).collect();
 
@@ -145,11 +146,29 @@ impl LlmClient for GroqLlmClient {
         let response_text = response.text().await?;
         let chat_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
-        if let Some(content) = chat_response["choices"][0]["message"]["content"].as_str() {
-            Ok(content.to_string())
+        // Handle both string and array content responses
+        let content_value = &chat_response["choices"][0]["message"]["content"];
+        let content = if let Some(s) = content_value.as_str() {
+            // String content (backward compatible)
+            s.to_string()
+        } else if let Some(arr) = content_value.as_array() {
+            // Array content - extract text parts
+            let text_parts: Vec<String> = arr
+                .iter()
+                .filter_map(|item| {
+                    if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            text_parts.join("")
         } else {
-            Err(anyhow::anyhow!("No content in response"))
-        }
+            return Err(anyhow::anyhow!("No content in response"));
+        };
+
+        Ok(content)
     }
 
     fn set_request_overrides(&self, overrides: Option<LlmRequestOverrides>) {
@@ -160,6 +179,21 @@ impl LlmClient for GroqLlmClient {
 }
 
 impl GroqLlmClient {
+    /// Convert Vec<ContentPart> to serde_json::Value for API requests.
+    /// Returns a plain string if there's only one Text content part (backward compatibility).
+    /// Returns an array of content parts otherwise.
+    fn convert_content_for_api(&self, content: &[ContentPart]) -> serde_json::Value {
+        // If there's only one Text content part, return a plain string for backward compatibility
+        if content.len() == 1 {
+            if let ContentPart::Text(text) = &content[0] {
+                return serde_json::json!(text);
+            }
+        }
+        
+        // Otherwise, return an array of content parts
+        serde_json::json!(content)
+    }
+
     fn log_request_to_file(&self, url: &str, request: &serde_json::Value) -> Result<()> {
         // Use centralized logs directory
         let logs_dir: PathBuf = get_logs_dir()?;

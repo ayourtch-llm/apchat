@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message};
+use apchat_models::types::ContentPart;
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
@@ -151,11 +152,12 @@ fn cmd_history(chat: &APChat) -> CommandResult {
         };
 
         // Truncate content to 80 chars to leave room for tool indicator
-        let content_preview = if msg.content.len() > 80 {
-            let content: String = msg.content.chars().take(77).collect();
+        let text_content = msg.text_only();
+        let content_preview = if text_content.len() > 80 {
+            let content: String = text_content.chars().take(77).collect();
             format!("{}...", &content)
         } else {
-            msg.content.clone()
+            text_content
         };
 
         // Replace newlines with spaces for single-line display
@@ -347,10 +349,10 @@ async fn cmd_skill_activate(
             Some(skill) => {
                 let skill_msg = Message {
                     role: "system".to_string(),
-                    content: format!(
+                    content: vec![ContentPart::Text(format!(
                         "<skill_invocation>\n🎯 USING SKILL: {}\n\n{}\n\n**YOU MUST follow this skill exactly as written.**\n</skill_invocation>",
                         skill.name, skill.content
-                    ),
+                    ))],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -359,7 +361,7 @@ async fn cmd_skill_activate(
                 chat.messages.push(skill_msg.clone());
 
                 if let Some(logger) = &mut chat.logger {
-                    logger.log("system", &skill_msg.content, None, false).await;
+                    logger.log("system", &skill_msg.text_only(), None, false).await;
                 }
 
                 print_heart_red(&format!("{} {} {} skill activated! {}", "✓".bright_green(), "Skill:".bright_cyan(), display_name, icon), true);

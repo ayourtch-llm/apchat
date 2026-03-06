@@ -6,6 +6,7 @@ mod llm_oneshot_tests {
     use std::path::PathBuf;
     use apchat_policy::PolicyManager;
     use apchat_models::types::ModelColor;
+    use apchat_models::types::ContentPart;
     use apchat_llm_api::client::{LlmClient, ChatMessage};
     use std::sync::Arc;
     use std::collections::HashMap;
@@ -24,8 +25,17 @@ mod llm_oneshot_tests {
         }
 
         async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String, anyhow::Error> {
-            // Check if the prompt contains the expected content
-            let prompt = &messages[0].content;
+            // Extract text content from ContentPart
+            let prompt = messages[0].content.iter()
+                .filter_map(|part| {
+                    if let ContentPart::Text(text) = part {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("");
             
             if prompt.contains("Original instruction") && prompt.contains("File contents:") && prompt.contains("File content to append") {
                 Ok("Mock response: I received the instruction with file contents".to_string())

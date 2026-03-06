@@ -19,6 +19,7 @@
 //! ```rust,no_run
 //! use apchat_llm_api::{ClientFactory, BackendType};
 //! use apchat_llm_api::client::{LlmClient, ChatMessage};
+//! use apchat_models::types::ContentPart;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
@@ -35,7 +36,7 @@
 //!     let messages = vec![
 //!         ChatMessage {
 //!             role: "user".to_string(),
-//!             content: "Hello!".to_string(),
+//!             content: vec![ContentPart::Text("Hello!".to_string())],
 //!             tool_calls: None,
 //!             tool_call_id: None,
 //!             name: None,
@@ -44,7 +45,7 @@
 //!     ];
 //!
 //!     let response = client.chat(messages, vec![]).await?;
-//!     println!("Response: {}", response.message.content);
+//!     println!("Response: {:?}", response.message.content);
 //!
 //!     Ok(())
 //! }

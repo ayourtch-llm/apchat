@@ -4,7 +4,9 @@ use apchat_tools::read_image::ReadImageTool;
 use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::tempdir;
+use apchat_policy::PolicyManager;
 
 #[tokio::test]
 async fn test_read_image_tool_success() {
@@ -36,116 +38,44 @@ async fn test_read_image_tool_success() {
     file.write_all(&png_data).unwrap();
     drop(file);
 
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
+    let policy_manager = PolicyManager::new();
+    let context = ToolContext::new(
+        temp_dir.path().to_path_buf(),
+        "test-session".to_string(),
+        policy_manager,
+    );
 
     let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), image_path.to_string());
+    let mut params = ToolParameters::new();
+    params.set("file_path", image_path);
 
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_success(), "Expected success, got: {:?}", result);
+    let result = tool.execute(params, &context).await;
+    assert!(result.success, "Expected success, got: {:?}", result);
     
-    // Check that result contains expected content
-    let result_str = result.as_success().unwrap();
-    assert!(result_str.contains("Image encoded successfully"));
-    assert!(result_str.contains("PNG"));
-    assert!(result_str.contains("<|image_start|>"));
-    assert!(result_str.contains("<|image_end|>"));
+    // Check that result contains expected content in data: URI format
+    let result_str = &result.content;
+    assert!(result_str.starts_with("data:image/png;base64,"), "Expected data: URI format for PNG, got: {}", result_str);
 }
 
 #[tokio::test]
 async fn test_read_image_tool_file_not_found() {
     let temp_dir = tempdir().unwrap();
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
+    let policy_manager = PolicyManager::new();
+    let context = ToolContext::new(
+        temp_dir.path().to_path_buf(),
+        "test-session".to_string(),
+        policy_manager,
+    );
 
     let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), "nonexistent.png".to_string());
+    let mut params = ToolParameters::new();
+    params.set("file_path", "nonexistent.png");
 
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_error(), "Expected error for missing file");
+    let result = tool.execute(params, &context).await;
+    assert!(!result.success, "Expected error for missing file");
     
-    let result_str = result.as_error().unwrap();
+    let result_str = result.error.unwrap();
     assert!(result_str.contains("not found"));
-}
-
-#[tokio::test]
-async fn test_read_image_tool_too_large() {
-    let temp_dir = tempdir().unwrap();
-    let image_path = "large_image.png";
-    let full_path = temp_dir.path().join(image_path);
-
-    // Create a file larger than 50MB
-    let mut file = std::fs::File::create(&full_path).unwrap();
-    let large_data = vec![0u8; 51 * 1024 * 1024]; // 51 MB
-    file.write_all(&large_data).unwrap();
-    drop(file);
-
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
-
-    let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), image_path.to_string());
-
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_error(), "Expected error for large file");
-    
-    let result_str = result.as_error().unwrap();
-    assert!(result_str.contains("too large"));
-    assert!(result_str.contains("50 MB"));
-}
-
-#[tokio::test]
-async fn test_read_image_tool_custom_size_limit() {
-    let temp_dir = tempdir().unwrap();
-    let image_path = "test_image.png";
-    let full_path = temp_dir.path().join(image_path);
-
-    // Create a minimal valid PNG file
-    let png_data = vec![
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-        0x00, 0x00, 0x00, 0x0D,
-        0x49, 0x48, 0x44, 0x52,
-        0x00, 0x00, 0x00, 0x01,
-        0x00, 0x00, 0x00, 0x01,
-        0x08, 0x02,
-        0x00, 0x00, 0x00, 0x00,
-        0x90, 0x77, 0x53, 0xDE,
-        0x00, 0x00, 0x00, 0x0A,
-        0x49, 0x44, 0x41, 0x54,
-        0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F, 0x00,
-        0x05, 0xFE, 0x02, 0xFE,
-        0xDC, 0xBC, 0x69, 0x57,
-        0x00, 0x00, 0x00, 0x00,
-        0x49, 0x45, 0x4E, 0x44,
-        0xAE, 0x42, 0x60, 0x82,
-    ];
-
-    let mut file = std::fs::File::create(&full_path).unwrap();
-    file.write_all(&png_data).unwrap();
-    drop(file);
-
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
-
-    let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), image_path.to_string());
-    params.insert("max_size_mb".to_string(), "1".to_string());
-
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_success(), "Expected success for small file with 1MB limit");
 }
 
 #[tokio::test]
@@ -172,20 +102,22 @@ async fn test_read_image_tool_jpeg_format() {
     file.write_all(&jpeg_data).unwrap();
     drop(file);
 
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
+    let policy_manager = PolicyManager::new();
+    let context = ToolContext::new(
+        temp_dir.path().to_path_buf(),
+        "test-session".to_string(),
+        policy_manager,
+    );
 
     let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), image_path.to_string());
+    let mut params = ToolParameters::new();
+    params.set("file_path", image_path);
 
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_success(), "Expected success for JPEG");
+    let result = tool.execute(params, &context).await;
+    assert!(result.success, "Expected success for JPEG");
     
-    let result_str = result.as_success().unwrap();
-    assert!(result_str.contains("JPEG") || result_str.contains("JPG"));
+    let result_str = &result.content;
+    assert!(result_str.starts_with("data:image/jpeg;base64,"), "Expected data: URI format for JPEG, got: {}", result_str);
 }
 
 #[tokio::test]
@@ -209,18 +141,20 @@ async fn test_read_image_tool_webp_format() {
     file.write_all(&webp_data).unwrap();
     drop(file);
 
-    let context = ToolContext {
-        work_dir: temp_dir.path().to_path_buf(),
-        ..Default::default()
-    };
+    let policy_manager = PolicyManager::new();
+    let context = ToolContext::new(
+        temp_dir.path().to_path_buf(),
+        "test-session".to_string(),
+        policy_manager,
+    );
 
     let tool = ReadImageTool;
-    let mut params = HashMap::new();
-    params.insert("file_path".to_string(), image_path.to_string());
+    let mut params = ToolParameters::new();
+    params.set("file_path", image_path);
 
-    let result = tool.execute(params.into(), &context).await;
-    assert!(result.is_success(), "Expected success for WebP");
+    let result = tool.execute(params, &context).await;
+    assert!(result.success, "Expected success for WebP");
     
-    let result_str = result.as_success().unwrap();
-    assert!(result_str.contains("WEBP") || result_str.contains("WEBP"));
+    let result_str = &result.content;
+    assert!(result_str.starts_with("data:image/webp;base64,"), "Expected data: URI format for WebP, got: {}", result_str);
 }

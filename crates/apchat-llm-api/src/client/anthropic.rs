@@ -10,6 +10,7 @@ use futures::StreamExt;
 use async_stream::stream;
 use apchat_logging::get_logs_dir;
 use apchat_vty::print_heart_yellow;
+use apchat_models::types::ContentPart;
 
 /// Anthropic LLM client implementation using native Anthropic API
 #[derive(Debug)]
@@ -61,6 +62,60 @@ impl AnthropicLlmClient {
         }
     }
 
+    /// Extract base64 data from a data URI like "data:image/jpeg;base64,abc123"
+    fn extract_base64_from_data_uri(&self, data_uri: &str) -> Option<(String, String)> {
+        // Expected format: data:<mime_type>;base64,<data>
+        if !data_uri.starts_with("data:") {
+            return None;
+        }
+
+        let parts: Vec<&str> = data_uri.splitn(2, ";base64,").collect();
+        if parts.len() != 2 {
+            return None;
+        }
+
+        // Extract media type from the first part (e.g., "data:image/jpeg" -> "image/jpeg")
+        let media_type_part = parts[0]; // "data:image/jpeg"
+        let media_type = media_type_part.strip_prefix("data:")?.to_string();
+        let base64_data = parts[1].to_string();
+
+        Some((media_type, base64_data))
+    }
+
+    /// Convert a single ContentPart to Anthropic's format
+    fn convert_content_part_to_anthropic(&self, part: &ContentPart) -> Value {
+        match part {
+            ContentPart::Text(text) => serde_json::json!({
+                "type": "text",
+                "text": text
+            }),
+            ContentPart::ImageUrl { url } => {
+                // Try to extract base64 from data URI
+                if let Some((media_type, base64_data)) = self.extract_base64_from_data_uri(url) {
+                    serde_json::json!({
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": base64_data
+                        }
+                    })
+                } else {
+                    // If not a data URI, return a placeholder (shouldn't happen in normal usage)
+                    serde_json::json!({
+                        "type": "text",
+                        "text": format!("[Image not supported: {}]", url)
+                    })
+                }
+            }
+        }
+    }
+
+    /// Convert content parts to Anthropic format
+    fn convert_content_parts_to_anthropic(&self, parts: &[ContentPart]) -> Vec<Value> {
+        parts.iter().map(|part| self.convert_content_part_to_anthropic(part)).collect()
+    }
+
     fn convert_messages_to_anthropic_format(&self, messages: Vec<ChatMessage>) -> Vec<Value> {
         messages.into_iter().filter_map(|msg| {
             // Skip system messages as they should be handled separately
@@ -78,21 +133,24 @@ impl AnthropicLlmClient {
 
             let content = if msg.role == "tool" {
                 // Tool result messages need special handling
+                // Convert content parts to Anthropic format
+                let content_parts = self.convert_content_parts_to_anthropic(&msg.content);
                 vec![
                     serde_json::json!({
                         "type": "tool_result",
                         "tool_use_id": msg.tool_call_id.unwrap_or_default(),
-                        "content": msg.content
+                        "content": content_parts
                     })
                 ]
             } else if let Some(tool_calls) = msg.tool_calls {
                 // Assistant message with tool calls
                 let mut content = vec![];
-                if !msg.content.is_empty() {
-                    content.push(serde_json::json!({
-                        "type": "text",
-                        "text": msg.content
-                    }));
+                // Convert text/image parts to Anthropic format
+                for part in &msg.content {
+                    if let ContentPart::Text(_) = part {
+                        content.push(self.convert_content_part_to_anthropic(part));
+                    }
+                    // Skip ImageUrl parts in assistant responses (they shouldn't have images)
                 }
                 for tool_call in tool_calls {
                     content.push(serde_json::json!({
@@ -105,11 +163,8 @@ impl AnthropicLlmClient {
                 }
                 content
             } else {
-                // Regular text message
-                vec![serde_json::json!({
-                    "type": "text",
-                    "text": msg.content
-                })]
+                // Regular message - convert all content parts to Anthropic format
+                self.convert_content_parts_to_anthropic(&msg.content)
             };
 
             Some(serde_json::json!({
@@ -133,7 +188,7 @@ impl AnthropicLlmClient {
         let empty_vec = vec![];
         let content = response["content"].as_array().unwrap_or(&empty_vec);
 
-        let mut text_content = String::new();
+        let mut content_parts = Vec::new();
         let mut tool_calls = Vec::new();
 
         for item in content {
@@ -141,7 +196,7 @@ impl AnthropicLlmClient {
                 match content_type {
                     "text" => {
                         if let Some(text) = item["text"].as_str() {
-                            text_content.push_str(text);
+                            content_parts.push(ContentPart::Text(text.to_string()));
                         }
                     }
                     "tool_use" => {
@@ -165,7 +220,7 @@ impl AnthropicLlmClient {
 
         ChatMessage {
             role: response["role"].as_str().unwrap_or("assistant").to_string(),
-            content: text_content,
+            content: content_parts,
             tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
             tool_call_id: None,
             name: None,
@@ -180,7 +235,16 @@ impl LlmClient for AnthropicLlmClient {
         // Extract system messages and combine them
         let system_messages: Vec<String> = messages.iter()
             .filter(|msg| msg.role == "system")
-            .map(|msg| msg.content.clone())
+            .map(|msg| msg.content.iter()
+                .filter_map(|part| {
+                    if let ContentPart::Text(ref text) = part {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "))
             .collect();
 
         let combined_system = if system_messages.is_empty() {
@@ -263,7 +327,16 @@ impl LlmClient for AnthropicLlmClient {
         // Extract system messages and combine them
         let system_messages: Vec<String> = messages.iter()
             .filter(|msg| msg.role == "system")
-            .map(|msg| msg.content.clone())
+            .map(|msg| msg.content.iter()
+                .filter_map(|part| {
+                    if let ContentPart::Text(ref text) = part {
+                        Some(text.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "))
             .collect();
 
         let combined_system = if system_messages.is_empty() {

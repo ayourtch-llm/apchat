@@ -6,6 +6,7 @@ use futures::StreamExt;
 use async_stream::stream;
 use serde_json::Value;
 use apchat_vty::print_heart_yellow;
+use apchat_models::types::ContentPart;
 
 /// llama.cpp server LLM client implementation with OpenAI-compatible API
 #[derive(Debug)]
@@ -103,7 +104,7 @@ impl LlmClient for LlamaCppClient {
         } else {
             (ChatMessage {
                 role: "assistant".to_string(),
-                content: "No response generated".to_string(),
+                content: vec![ContentPart::Text("No response generated".to_string())],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -123,7 +124,7 @@ impl LlmClient for LlamaCppClient {
     }
 
     async fn chat_completion(&self, messages: &[ChatMessage]) -> Result<String> {
-        // Convert system messages to user messages for Mistral compatibility
+        // Convert messages to API format using helper method
         let converted_messages: Vec<serde_json::Value> = messages.iter().map(|msg| {
             let role = if msg.role == "system" {
                 "user"
@@ -132,7 +133,7 @@ impl LlmClient for LlamaCppClient {
             };
             serde_json::json!({
                 "role": role,
-                "content": &msg.content
+                "content": self.convert_content_for_api(&msg.content)
             })
         }).collect();
 
@@ -160,11 +161,29 @@ impl LlmClient for LlamaCppClient {
         let response_text = response.text().await?;
         let chat_response: serde_json::Value = serde_json::from_str(&response_text)?;
 
-        if let Some(content) = chat_response["choices"][0]["message"]["content"].as_str() {
-            Ok(content.to_string())
+        // Handle both string and array content responses
+        let content_value = &chat_response["choices"][0]["message"]["content"];
+        let content = if let Some(s) = content_value.as_str() {
+            // String content (backward compatible)
+            s.to_string()
+        } else if let Some(arr) = content_value.as_array() {
+            // Array content - extract text parts
+            let text_parts: Vec<String> = arr
+                .iter()
+                .filter_map(|item| {
+                    if item.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            text_parts.join("")
         } else {
-            Err(anyhow::anyhow!("No content in response"))
-        }
+            return Err(anyhow::anyhow!("No content in response"));
+        };
+
+        Ok(content)
     }
 
     async fn chat_streaming(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<Box<dyn Stream<Item = Result<StreamingChunk>> + Send + Unpin>> {
@@ -429,6 +448,21 @@ impl LlamaCppClient {
 
         // Valid SSE event but no content to stream
         Ok(None)
+    }
+
+    /// Convert Vec<ContentPart> to serde_json::Value for API requests.
+    /// Returns a plain string if there's only one Text content part (backward compatibility).
+    /// Returns an array of content parts otherwise.
+    fn convert_content_for_api(&self, content: &[ContentPart]) -> serde_json::Value {
+        // If there's only one Text content part, return a plain string for backward compatibility
+        if content.len() == 1 {
+            if let ContentPart::Text(text) = &content[0] {
+                return serde_json::json!(text);
+            }
+        }
+        
+        // Otherwise, return an array of content parts
+        serde_json::json!(content)
     }
 
     async fn build_chat_request(&self, messages: Vec<ChatMessage>, tools: Vec<ToolDefinition>) -> Result<serde_json::Value> {

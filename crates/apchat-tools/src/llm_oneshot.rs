@@ -3,6 +3,7 @@ use apchat_toolcore::tool_context::ToolContext;
 use std::collections::HashMap;
 use apchat_models::types::ModelColor;
 use apchat_llm_api::client::{LlmClient, ChatMessage};
+use apchat_models::types::ContentPart;
 use async_trait::async_trait;
 use std::fs;
 
@@ -78,7 +79,7 @@ impl Tool for LlmCallTool {
         // Create chat message
         let message = ChatMessage {
             role: "user".to_string(),
-            content: full_prompt,
+            content: vec![ContentPart::Text(full_prompt)],
             tool_calls: None,
             tool_call_id: None,
             name: None,

@@ -214,21 +214,280 @@ where
     }
 }
 
+/// Image URL structure for multimodal content
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImageUrl {
+    pub url: String,
+}
+
+/// Content part for multimodal messages
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContentPart {
+    Text(String),
+    ImageUrl { url: String },
+}
+
+impl Serialize for ContentPart {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        
+        match self {
+            ContentPart::Text(text) => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("type", "text")?;
+                map.serialize_entry("text", text)?;
+                map.end()
+            }
+            ContentPart::ImageUrl { url } => {
+                // Create a helper struct for image_url serialization
+                #[derive(Serialize)]
+                struct ImageUrlHelper<'a> {
+                    url: &'a str,
+                }
+                
+                let image_url_helper = ImageUrlHelper { url };
+                
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("type", "image_url")?;
+                map.serialize_entry("image_url", &image_url_helper)?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ContentPart {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+        use std::fmt;
+
+        struct ContentPartVisitor;
+
+        impl<'de> Visitor<'de> for ContentPartVisitor {
+            type Value = ContentPart;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a content part object with 'type' field")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<ContentPart, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut content_type: Option<String> = None;
+                let mut text: Option<String> = None;
+                let mut image_url: Option<ImageUrl> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "type" => {
+                            content_type = Some(map.next_value()?);
+                        }
+                        "text" => {
+                            text = Some(map.next_value()?);
+                        }
+                        "image_url" => {
+                            image_url = Some(map.next_value()?);
+                        }
+                        _ => {
+                            // Skip unknown fields
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+
+                match content_type.as_deref() {
+                    Some("text") => {
+                        text.ok_or_else(|| de::Error::missing_field("text"))
+                            .map(ContentPart::Text)
+                    }
+                    Some("image_url") => {
+                        image_url
+                            .ok_or_else(|| de::Error::missing_field("image_url"))
+                            .map(|iu| ContentPart::ImageUrl { url: iu.url })
+                    }
+                    _ => Err(de::Error::missing_field("type")),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(ContentPartVisitor)
+    }
+}
+
 /// Message structure for chat API
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Message {
-    #[serde(default)]
     pub role: String,
-    #[serde(deserialize_with = "deserialize_string_or_null", default)]
-    pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub content: Vec<ContentPart>,
     pub tool_calls: Option<Vec<ToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub tool_call_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub reasoning: Option<String>,
+}
+
+impl Serialize for Message {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("role", &self.role)?;
+        map.serialize_entry("content", &self.content)?;
+        
+        if let Some(ref tool_calls) = self.tool_calls {
+            map.serialize_entry("tool_calls", tool_calls)?;
+        }
+        if let Some(ref tool_call_id) = self.tool_call_id {
+            map.serialize_entry("tool_call_id", tool_call_id)?;
+        }
+        if let Some(ref name) = self.name {
+            map.serialize_entry("name", name)?;
+        }
+        if let Some(ref reasoning) = self.reasoning {
+            map.serialize_entry("reasoning", reasoning)?;
+        }
+        
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Message {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+        use std::fmt;
+
+        struct MessageVisitor;
+
+        impl<'de> Visitor<'de> for MessageVisitor {
+            type Value = Message;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a message object")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Message, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut role = String::new();
+                let mut content = Vec::new();
+                let mut tool_calls: Option<Vec<ToolCall>> = None;
+                let mut tool_call_id: Option<String> = None;
+                let mut name: Option<String> = None;
+                let mut reasoning: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "role" => {
+                            role = map.next_value()?;
+                        }
+                        "content" => {
+                            // Try to deserialize as string first (backward compatibility)
+                            let content_value: serde_json::Value = map.next_value()?;
+                            match content_value {
+                                serde_json::Value::String(s) => {
+                                    // Backward compatible: string content becomes a text part
+                                    content.push(ContentPart::Text(s));
+                                }
+                                serde_json::Value::Array(arr) => {
+                                    // New format: array of content parts
+                                    for item in arr {
+                                        let part: ContentPart = serde_json::from_value(item)
+                                            .map_err(de::Error::custom)?;
+                                        content.push(part);
+                                    }
+                                }
+                                serde_json::Value::Null => {
+                                    // Empty content
+                                    content.push(ContentPart::Text(String::new()));
+                                }
+                                _ => {
+                                    // Try to deserialize directly as ContentPart
+                                    let part: ContentPart = serde_json::from_value(content_value)
+                                        .map_err(de::Error::custom)?;
+                                    content.push(part);
+                                }
+                            }
+                        }
+                        "tool_calls" => {
+                            tool_calls = Some(map.next_value()?);
+                        }
+                        "tool_call_id" => {
+                            tool_call_id = Some(map.next_value()?);
+                        }
+                        "name" => {
+                            name = Some(map.next_value()?);
+                        }
+                        "reasoning" => {
+                            reasoning = Some(map.next_value()?);
+                        }
+                        _ => {
+                            // Skip unknown fields
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+
+                Ok(Message {
+                    role,
+                    content,
+                    tool_calls,
+                    tool_call_id,
+                    name,
+                    reasoning,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(MessageVisitor)
+    }
+}
+
+impl std::fmt::Display for ContentPart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ContentPart::Text(text) => write!(f, "{}", text),
+            ContentPart::ImageUrl { url } => write!(f, "[image: {}]", url.chars().take(50).collect::<String>()),
+        }
+    }
+}
+
+impl Message {
+    /// Get text content concatenated
+    pub fn text_only(&self) -> String {
+        self.content
+            .iter()
+            .filter_map(|part| {
+                if let ContentPart::Text(ref text) = part {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Create a new message with text content
+    pub fn text(role: &str, content: &str) -> Self {
+        Message {
+            role: role.to_string(),
+            content: vec![ContentPart::Text(content.to_string())],
+            ..Default::default()
+        }
+    }
 }
 
 /// Tool call structure

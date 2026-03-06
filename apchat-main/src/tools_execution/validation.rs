@@ -5,6 +5,7 @@ use regex::Regex;
 use crate::APChat;
 use apchat_vty::{print_heart_yellow};
 use apchat_models::{ModelColor, Message, ToolCall, FunctionCall, ChatRequest, ChatResponse};
+use apchat_models::types::ContentPart;
 use apchat_logging::{log_request_to_file, log_response_to_file, log_raw_response_to_file};
 
 /// Repair a malformed tool call using AI to fix the JSON arguments
@@ -37,7 +38,7 @@ pub(crate) async fn repair_tool_call_with_model(
         messages: vec![
             Message {
                 role: "system".to_string(),
-                content: "You are a JSON repair assistant. Return only valid JSON, no explanations.".to_string(),
+                content: vec![ContentPart::Text("You are a JSON repair assistant. Return only valid JSON, no explanations.".to_string())],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -45,7 +46,7 @@ pub(crate) async fn repair_tool_call_with_model(
             },
             Message {
                 role: "user".to_string(),
-                content: repair_prompt,
+                content: vec![ContentPart::Text(repair_prompt)],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -94,7 +95,8 @@ pub(crate) async fn repair_tool_call_with_model(
     let api_response: ChatResponse = serde_json::from_str(&response_text)?;
 
     if let Some(choice) = api_response.choices.first() {
-        let repaired_json = choice.message.content.trim();
+        let text_content = choice.message.text_only();
+        let repaired_json = text_content.trim();
 
         // Validate the repaired JSON
         if let Ok(_) = serde_json::from_str::<serde_json::Value>(repaired_json) {

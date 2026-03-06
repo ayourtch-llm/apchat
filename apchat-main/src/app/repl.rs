@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use apchat_vty::{print_heart_yellow, print_heart_red, status_info};
 use apchat_models::{ModelColor, Message};
+use apchat_models::types::ContentPart;
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
@@ -330,7 +331,7 @@ pub async fn run_repl_mode(
                             // This helps the LLM continue when it produces empty responses
                             chat.messages.push(Message {
                                 role: "assistant".to_string(),
-                                content: "".to_string(),
+                                content: vec![ContentPart::Text("".to_string())],
                                 tool_calls: None,
                                 tool_call_id: None,
                                 name: None,
@@ -338,7 +339,7 @@ pub async fn run_repl_mode(
                             });
                             chat.messages.push(Message {
                                 role: "user".to_string(),
-                                content: "You are doing great, please continue!".to_string(),
+                                content: vec![ContentPart::Text("You are doing great, please continue!".to_string())],
                                 tool_calls: None,
                                 tool_call_id: None,
                                 name: None,
@@ -615,35 +616,31 @@ async fn add_msg_to_history(
         
         // Check if we have at least 2 messages (previous user + last assistant)
         if chat.messages.len() >= 2 {
-            // Clone the last assistant message content for comparison
-            let last_assistant_content = chat.messages.last().map(|m| m.content.clone());
-            
-            if let Some(ref last_assistant_content) = last_assistant_content {
-                if let Some(last_assistant_msg) = chat.messages.last() {
-                    if last_assistant_msg.role == "assistant" {
-                        // Remove spaces from last assistant message content for comparison
-                        let last_assistant_normalized: String = last_assistant_content.chars().filter(|c| !c.is_whitespace()).collect();
+            // Get the last assistant message for comparison
+            if let Some(last_assistant_msg) = chat.messages.last() {
+                if last_assistant_msg.role == "assistant" {
+                    // Remove spaces from last assistant message content for comparison
+                    let last_assistant_normalized: String = last_assistant_msg.text_only().chars().filter(|c| !c.is_whitespace()).collect();
+                    
+                    // Check if last assistant message matches bogus_ack (ignoring spaces)
+                    if last_assistant_normalized == bogus_ack_normalized {
+                        // Clone the previous user message content before we mutate
+                        let prev_user_content = chat.messages.get(chat.messages.len() - 2).map(|m| m.text_only());
                         
-                        // Check if last assistant message matches bogus_ack (ignoring spaces)
-                        if last_assistant_normalized == bogus_ack_normalized {
-                            // Clone the previous user message content before we mutate
-                            let prev_user_content = chat.messages.get(chat.messages.len() - 2).map(|m| m.content.clone());
-                            
-                            if let Some(ref prev_user_content) = prev_user_content {
-                                if prev_user_content == input {
-                                    // Deduplication condition met!
-                                    // Remove the last assistant message
-                                    chat.messages.pop();
-                                    
-                                    print_heart_yellow(&format!("🔄 [DEDUP] Deduplication triggered!"), true);
-                                    print_heart_yellow(&format!("   📝 Last assistant message (removed): {:?}", last_assistant_content), true);
-                                    print_heart_yellow(&format!("   📝 Previous user message (skipped): {:?}", prev_user_content), true);
-                                    print_heart_yellow(&format!("   🎯 Bogus ack pattern: {:?}", bogus_ack), true);
-                                    
-                                    // Don't add the new user message - skip to return early
-                                    let _ = crate::chat::history::summarize_and_trim_history(chat).await;
-                                    return;
-                                }
+                        if let Some(ref prev_user_content) = prev_user_content {
+                            if prev_user_content == input {
+                                // Deduplication condition met!
+                                // Remove the last assistant message
+                                chat.messages.pop();
+                                
+                                print_heart_yellow(&format!("🔄 [DEDUP] Deduplication triggered!"), true);
+                                print_heart_yellow(&format!("   📝 Last assistant message (removed): {:?}", last_assistant_normalized), true);
+                                print_heart_yellow(&format!("   📝 Previous user message (skipped): {:?}", prev_user_content), true);
+                                print_heart_yellow(&format!("   🎯 Bogus ack pattern: {:?}", bogus_ack), true);
+                                
+                                // Don't add the new user message - skip to return early
+                                let _ = crate::chat::history::summarize_and_trim_history(chat).await;
+                                return;
                             }
                         }
                     }
@@ -655,7 +652,7 @@ async fn add_msg_to_history(
     // Prepare for LLM call (add user message, summarize history)
     chat.messages.push(Message {
         role: "user".to_string(),
-        content: input.to_string(),
+        content: vec![ContentPart::Text(input.to_string())],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -690,7 +687,7 @@ async fn prep_and_send_request(
     if let Some(urgent_input) = maybe_urgent_input {
         chat.messages.push(Message {
             role: "assistant".to_string(),
-            content: "I notice there is some urgent messages from the user ?".to_string(),
+            content: vec![ContentPart::Text("I notice there is some urgent messages from the user ?".to_string())],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -698,7 +695,7 @@ async fn prep_and_send_request(
         });
         chat.messages.push(Message {
             role: "user".to_string(),
-            content: urgent_input,
+            content: vec![ContentPart::Text(urgent_input)],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -831,7 +828,7 @@ async fn process_llm_response(
                             "⚠️".yellow(), tool_call_iterations), true);
                         chat.messages.push(Message {
                             role: "assistant".to_string(),
-                            content: format!("[Stopped after {} tool calls]", tool_call_iterations),
+                            content: vec![ContentPart::Text(format!("[Stopped after {} tool calls]", tool_call_iterations))],
                             tool_calls: None,
                             tool_call_id: None,
                             name: None,
@@ -863,7 +860,7 @@ async fn process_llm_response(
                             "🔄".yellow()), true);
                         chat.messages.push(Message {
                             role: "assistant".to_string(),
-                            content: "[Detected tool call loop, stopping]".to_string(),
+                            content: vec![ContentPart::Text("[Detected tool call loop, stopping]".to_string())],
                             tool_calls: None,
                             tool_call_id: None,
                             name: None,
@@ -875,7 +872,7 @@ async fn process_llm_response(
                     // Execute tools
                     let assistant_message = Message {
                         role: "assistant".to_string(),
-                        content: String::new(), // Will be filled if there's also text content
+                        content: vec![ContentPart::Text(String::new())], // Will be filled if there's also text content
                         tool_calls: Some(calls.clone()),
                         tool_call_id: None,
                         name: None,
@@ -917,7 +914,7 @@ async fn process_llm_response(
 
                         let tool_response_message = Message {
                             role: "tool".to_string(),
-                            content: tool_result,
+                            content: vec![ContentPart::Text(tool_result)],
                             tool_calls: None,
                             tool_call_id: Some(tool_call.id.clone()),
                             name: Some(tool_call.function.name.clone()),
@@ -939,7 +936,10 @@ async fn process_llm_response(
                     return InferenceOutcome::ToolsContinue;
                 } else {
                     // No tool calls - this is the final response
-                    print_heart_yellow(&format!("📝 [DEBUG] No tool calls - final response with content length: {}", content.len()), true);
+                    let text_content = content.iter().filter_map(|p| {
+                        if let ContentPart::Text(t) = p { Some(t.as_str()) } else { None }
+                    }).collect::<Vec<_>>().join(" ");
+                    print_heart_yellow(&format!("📝 [DEBUG] No tool calls - final response with content length: {}", text_content.len()), true);
                     let final_message = Message {
                         role: "assistant".to_string(),
                         content: content.clone(),
@@ -950,7 +950,7 @@ async fn process_llm_response(
                     };
 
                     chat.messages.push(final_message);
-                    return InferenceOutcome::Response(content);
+                    return InferenceOutcome::Response(text_content);
                 }
             }
             LLMResponse::Interrupted => {
@@ -958,7 +958,7 @@ async fn process_llm_response(
                 print_heart_yellow(&format!("🚫 [DEBUG] Returning InferenceOutcome::Interrupted"), true);
                 chat.messages.push(Message {
                     role: "assistant".to_string(),
-                    content: "[Interrupted]".to_string(),
+                    content: vec![ContentPart::Text("[Interrupted]".to_string())],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -971,7 +971,7 @@ async fn process_llm_response(
                 print_heart_yellow(&format!("❌ [DEBUG] Returning InferenceOutcome::Error: {}", e), true);
                 chat.messages.push(Message {
                     role: "assistant".to_string(),
-                    content: format!("[Error: {}]", e),
+                    content: vec![ContentPart::Text(format!("[Error: {}]", e))],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -1040,7 +1040,7 @@ mod repl_compact_tests {
         // Add some messages to make compaction meaningful
         chat.messages.push(Message {
             role: "user".to_string(),
-            content: "Test message for compaction".repeat(100),
+            content: vec![ContentPart::Text("Test message for compaction".repeat(100))],
             tool_calls: None,
             tool_call_id: None,
             name: None,

@@ -7,6 +7,7 @@ use chrono;
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message, Usage, ChatRequest, StreamChunk, ToolCall, FunctionCall};
+use apchat_models::types::ContentPart;
 use apchat_llm_api::{ToolDefinition, ChatMessage};
 use apchat_llm_api::client::ToolCallEvent;
 use apchat_logging::{log_request, log_request_to_file, log_response, log_response_to_file, log_raw_response_to_file, log_stream_chunk};
@@ -161,7 +162,7 @@ pub(crate) async fn call_api_streaming_stateless(
 
         if msg.role == "system" && !past_leading_systems {
             // Collect leading system message contents
-            leading_system_contents.push(msg.content.clone());
+            leading_system_contents.push(msg.text_only());
         } else {
             // Past the leading system messages
             if !past_leading_systems {
@@ -169,7 +170,7 @@ pub(crate) async fn call_api_streaming_stateless(
                 if !leading_system_contents.is_empty() {
                     messages.push(Message {
                         role: "system".to_string(),
-                        content: leading_system_contents.join("\n\n"),
+                        content: vec![ContentPart::Text(leading_system_contents.join("\n\n"))],
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
@@ -614,7 +615,7 @@ pub(crate) async fn call_api_streaming_stateless(
     // Build the final message
     let mut message = Message {
         role: if role.is_empty() { "assistant".to_string() } else { role },
-        content: accumulated_content.clone(),
+        content: vec![ContentPart::Text(accumulated_content.clone())],
         tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
         tool_call_id: None,
         name: None,
@@ -627,7 +628,7 @@ pub(crate) async fn call_api_streaming_stateless(
             print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
             message.tool_calls = Some(parsed_calls);
             // Clear the XML from content to avoid displaying it
-            message.content = String::new();
+            message.content = vec![ContentPart::Text(String::new())];
         }
     }
 
@@ -828,7 +829,7 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
     // Convert the response back to the old format
     let message = Message {
         role: if role.is_empty() { "assistant".to_string() } else { role },
-        content: accumulated_content.clone(),
+        content: vec![ContentPart::Text(accumulated_content.clone())],
         tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
         tool_call_id: None,
         name: None,
@@ -842,7 +843,7 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
     // Log the final response for LlmClient streaming
     let response_body = format!("Role: {}\n\nContent:\n{}\n\nTool calls: {}\n\nUsage: {:?}",
         message.role,
-        message.content,
+        message.text_only(),
         message.tool_calls.as_ref().map_or("None".to_string(), |calls| {
             format!("{} calls", calls.len())
         }),

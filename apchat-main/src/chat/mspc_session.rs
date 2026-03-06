@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::APChat;
 use apchat_models::{ModelColor, Message};
+use apchat_models::types::ContentPart;
 use apchat_logging::safe_truncate;
 use crate::mspc::{MspcChannel, MspcMessage, HistoryError};
 use crate::input_router::TerminalInputRouter;
@@ -71,7 +72,7 @@ pub async fn chat_with_mspc(
                                 // Add interruption to message history
                                 chat.messages.push(Message {
                                     role: "user".to_string(),
-                                    content: format!("[INTERRUPTED] {}", content),
+                                    content: vec![ContentPart::Text(format!("[INTERRUPTED] {}", content))],
                                     tool_calls: None,
                                     tool_call_id: None,
                                     name: None,
@@ -257,7 +258,7 @@ async fn process_user_input(
     // Add user message to history
     chat.messages.push(Message {
         role: "user".to_string(),
-        content: user_message.to_string(),
+        content: vec![ContentPart::Text(user_message.to_string())],
         tool_calls: None,
         tool_call_id: None,
         name: None,

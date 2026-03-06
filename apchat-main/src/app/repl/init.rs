@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use apchat_vty::{print_heart_yellow, print_heart_red, status_info, IdleConfig};
 use apchat_logging::ConversationLogger;
 use apchat_models::{ModelColor, Message};
+use apchat_models::types::ContentPart;
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
@@ -94,7 +95,7 @@ pub async fn initialize_repl(
     if let Some(logger) = &mut chat.logger {
         if let Some(sys_msg) = chat.messages.first() {
             logger
-                .log("system", &sys_msg.content, None, false)
+                .log("system", &sys_msg.text_only(), None, false)
                 .await;
         }
     }
@@ -219,7 +220,7 @@ fn run_session_start_hook(chat: &mut APChat, verbose: bool) {
             if !hook_content.trim().is_empty() {
                 chat.messages.push(Message {
                     role: "system".to_string(),
-                    content: hook_content,
+                    content: vec![ContentPart::Text(hook_content)],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -291,7 +292,7 @@ async fn load_project_context(chat: &mut APChat) {
     if !kimi_context.is_empty() {
         let sys_msg = Message {
             role: "system".to_string(),
-            content: format!("Project context: {}", kimi_context),
+            content: vec![ContentPart::Text(format!("Project context: {}", kimi_context))],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -299,7 +300,7 @@ async fn load_project_context(chat: &mut APChat) {
         };
         if let Some(logger) = &mut chat.logger {
             logger
-                .log("system", &sys_msg.content, None, false)
+                .log("system", &sys_msg.text_only(), None, false)
                 .await;
         }
         chat.messages.push(sys_msg);

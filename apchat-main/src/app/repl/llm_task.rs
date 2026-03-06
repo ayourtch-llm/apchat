@@ -16,6 +16,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::api::{ApiCallParams, OutputChunk};
 use apchat_models::{ModelColor, Usage, ToolCall};
+use apchat_models::types::ContentPart;
 use apchat_vty::print_heart_yellow;
 
 /// A chunk of streaming output from the LLM (internal type)
@@ -41,12 +42,12 @@ pub struct LLMRequest {
 }
 
 /// Response from the LLM task after processing a request.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LLMResponse {
     /// Successful response with content and optional tool calls
     Success {
         /// The response content
-        content: String,
+        content: Vec<ContentPart>,
         /// Token usage statistics
         usage: Option<Usage>,
         /// Tool calls requested by the LLM

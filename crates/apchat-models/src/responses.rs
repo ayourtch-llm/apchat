@@ -2,7 +2,7 @@ use super::types::Message;
 use serde::{Deserialize, Serialize};
 
 /// Token usage information from API response
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Usage {
     pub prompt_tokens: usize,
     pub completion_tokens: usize,

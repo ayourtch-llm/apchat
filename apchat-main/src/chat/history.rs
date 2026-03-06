@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::APChat;
 use apchat_vty::{print_heart_yellow, print_heart_red};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
+use apchat_models::types::ContentPart;
 use apchat_logging::{log_request_to_file, safe_truncate};
 use apchat_common::ApChatPaths;
 use apchat_todo::{Task, TaskStatus};
@@ -173,7 +174,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
                 let tool_call_msg = messages[first_non_system_idx].clone();
                 let new_user_msg = Message {
                     role: "user".to_string(),
-                    content: String::new(),
+                    content: vec![ContentPart::Text(String::new())],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -192,7 +193,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
                 // need to add the empty assistant message to preserve the order
                 let new_assistant_msg = Message {
                     role: "assistant".to_string(),
-                    content: String::new(),
+                    content: vec![ContentPart::Text(String::new())],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
@@ -257,7 +258,7 @@ fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
         if message.role == "tool" && message.name.as_deref() == Some("todo_write") {
             // The tool result contains information about the updated todo list
             // Try to parse it to extract task information
-            let result = message.content.to_string();
+            let result = message.text_only();
             
             // Try to parse the JSON from the result
             if let Ok(result_value) = serde_json::from_str::<serde_json::Value>(&result) {
@@ -507,14 +508,14 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     // Build summary request
     let mut summary_history = vec![Message {
         role: "system".to_string(),
-        content: format!(
+        content: vec![ContentPart::Text(format!(
             "You are {} summarizing a conversation to reduce session size. \
             The conversation is at tool call iteration {}. Focus on preserving \
             key context, decisions, file changes, and task progress. This summary \
             will be used to continue the current work without losing important context.",
             summary_model.display_name(),
             current_tool_iteration
-        ),
+        ))],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -525,10 +526,11 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     let conversation_text = to_summarize.iter()
         .map(|m| {
             let role = &m.role;
-            let content = if m.content.chars().count() > 300 {
-                format!("{}... [truncated]", safe_truncate(&m.content, 300))
+            let content_str = m.text_only();
+            let content = if content_str.chars().count() > 300 {
+                format!("{}... [truncated]", safe_truncate(&content_str, 300))
             } else {
-                m.content.clone()
+                content_str
             };
             
             // Include tool call information if present
@@ -548,13 +550,13 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     
     summary_history.push(Message {
         role: "user".to_string(),
-        content: format!(
+        content: vec![ContentPart::Text(format!(
             "Create a concise summary of this conversation segment (tool iteration {}). \
             Focus on: 1) Key decisions made 2) Files modified 3) Current task status 4) \
             Important context needed to continue. Keep it under 200 words.\n\n{}",
             current_tool_iteration,
             conversation_text
-        ),
+        ))],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -611,7 +613,10 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
     let chat_response: ChatResponse = serde_json::from_str(&response_text)?;
     
     if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
-        let summary = summary_msg.content;
+        let summary_text = summary_msg.content.iter()
+            .filter_map(|p| if let ContentPart::Text(t) = p { Some(t.as_str()) } else { None })
+            .collect::<Vec<_>>()
+            .join(" ");
         
         // Rebuild history preserving all system messages
         let mut new_history = vec![];
@@ -622,7 +627,7 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         // Add a summary message to preserve context about what was compressed
         new_history.push(Message {
             role: "user".to_string(),
-            content: format!("CONVERSATION SUMMARY (previous context compressed at iteration {}):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", current_tool_iteration, summary),
+            content: vec![ContentPart::Text(format!("CONVERSATION SUMMARY (previous context compressed at iteration {}):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", current_tool_iteration, summary_text))],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -730,13 +735,13 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     // Build summary request
     let mut summary_history = vec![Message {
         role: "system".to_string(),
-        content: format!(
+        content: vec![ContentPart::Text(format!(
             "You are {}. You are being asked to summarize a conversation that was handled by {}. \
             After summarizing, you may recommend switching to yourself if you believe you would be \
             better suited for the ongoing work based on the context.",
             summary_model.display_name(),
             chat.current_model.display_name()
-        ),
+        ))],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -747,10 +752,11 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     let conversation_text = to_summarize.iter()
         .map(|m| {
             let role = &m.role;
-            let content = if m.content.chars().count() > 500 {
-                format!("{}... [truncated]", safe_truncate(&m.content, 500))
+            let content_str = m.text_only();
+            let content = if content_str.chars().count() > 500 {
+                format!("{}... [truncated]", safe_truncate(&content_str, 500))
             } else {
-                m.content.clone()
+                content_str
             };
             format!("{}: {}", role, content)
         })
@@ -759,12 +765,12 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
 
     summary_history.push(Message {
         role: "user".to_string(),
-        content: format!(
+        content: vec![ContentPart::Text(format!(
             "Summarize this conversation history in 2-3 concise sentences, focusing on key context, decisions, and file changes:\n\n{}\n\n\
             Then, based on the recent context and what seems to be the ongoing work, add a separate line starting with 'RECOMMENDATION: ' \
             followed by either 'STAY' (keep current model) or 'SWITCH' (switch to you) and briefly explain why in one sentence.",
             conversation_text
-        ),
+        ))],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -821,7 +827,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
     let chat_response: ChatResponse = serde_json::from_str(&response_text)?;
 
     if let Some(summary_msg) = chat_response.choices.into_iter().next().map(|c| c.message) {
-        let full_response = summary_msg.content;
+        let full_response = summary_msg.text_only();
 
         // Parse recommendation
         let (summary, recommendation_text) = if let Some(rec_pos) = full_response.find("RECOMMENDATION:") {
@@ -843,7 +849,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
         // Add a summary message to preserve context about what was compressed
         new_history.push(Message {
             role: "user".to_string(),
-            content: format!("CONVERSATION SUMMARY (previous context compressed):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", summary),
+            content: vec![ContentPart::Text(format!("CONVERSATION SUMMARY (previous context compressed):\n{}\n\nIMPORTANT: This summary contains the key context from earlier in the conversation. Use this to continue the work without losing important information.", summary))],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -893,10 +899,10 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
                 let decision_prompt = vec![
                     Message {
                         role: "system".to_string(),
-                        content: format!(
+                        content: vec![ContentPart::Text(format!(
                             "You are {}. You have been handling this conversation.",
                             chat.current_model.display_name()
-                        ),
+                        ))],
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
@@ -904,14 +910,14 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
                     },
                     Message {
                         role: "user".to_string(),
-                        content: format!(
+                        content: vec![ContentPart::Text(format!(
                             "{} has reviewed the conversation history and made the following recommendation:\n\n{}\n\n\
                             Based on this recommendation and your understanding of the current context, do you agree to switch to {}? \
                             Respond with only 'AGREE' or 'DECLINE' followed by a brief one-sentence explanation.",
                             summary_model.display_name(),
                             rec_text,
                             summary_model.display_name()
-                        ),
+                        ))],
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
@@ -950,7 +956,7 @@ pub(crate) async fn summarize_and_trim_history(chat: &mut APChat) -> Result<()> 
                     let decision_text = decision_response.text().await?;
                     if let Ok(decision_chat) = serde_json::from_str::<ChatResponse>(&decision_text) {
                         if let Some(decision_msg) = decision_chat.choices.into_iter().next().map(|c| c.message) {
-                            let decision = decision_msg.content;
+                            let decision = decision_msg.text_only();
                             print_heart_red(&format!("{} {} says: {}", "💬".bright_green(), chat.current_model.display_name(), decision), true);
 
                             if decision.to_uppercase().contains("AGREE") {

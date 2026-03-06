@@ -2,6 +2,7 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use apchat_models::types::ModelColor;
 use apchat_llm_api::client::ChatMessage;
+use apchat_models::types::ContentPart;
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -187,10 +188,10 @@ impl Tool for DiffFuzzTool {
 
         let context_derivation_msg = ChatMessage {
             role: "user".to_string(),
-            content: format!(
+            content: vec![ContentPart::Text(format!(
                 "{}\n\n## Specification\n{}\n\n## Generated Code\n```\n{}\n```",
                 CONTEXT_DERIVATION_PROMPT, spec, code
-            ),
+            ))],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -229,10 +230,10 @@ impl Tool for DiffFuzzTool {
 
             let fuzz_gen_msg = ChatMessage {
                 role: "user".to_string(),
-                content: format!(
+                content: vec![ContentPart::Text(format!(
                     "{}\n\n## Specification\n{}\n\n## Generated Code\n```\n{}\n```\n\n## Derived Context\n{}{}\n\nGenerate 5 test cases.",
                     FUZZ_GENERATION_PROMPT, spec, code, derived_context, previous_context
-                ),
+                ))],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,
@@ -255,10 +256,10 @@ impl Tool for DiffFuzzTool {
             // Stage 3: Divergence Analysis
             let analysis_msg = ChatMessage {
                 role: "user".to_string(),
-                content: format!(
+                content: vec![ContentPart::Text(format!(
                     "{}\n\n## Specification\n{}\n\n## Generated Code\n```\n{}\n```\n\n## Derived Context\n{}\n\n## Test Cases\n{}\n\nAnalyze these test cases against the code and derived context. Identify any divergences.",
                     DIVERGENCE_ANALYSIS_PROMPT, spec, code, derived_context, test_cases
-                ),
+                ))],
                 tool_calls: None,
                 tool_call_id: None,
                 name: None,

@@ -8,6 +8,7 @@ use serde_json;
 use apchat_vty::{print_heart_red, set_marquee, clear_marquee};
 use apchat_models::types::ModelColor;
 use apchat_llm_api::client::ChatMessage;
+use apchat_models::types::ContentPart;
 
 
 /// Summarize subagent output using an LLM call
@@ -26,7 +27,7 @@ async fn summarize_subagent_output(context: &ToolContext, task: &str, output: &s
 
     let message = ChatMessage {
         role: "user".to_string(),
-        content: prompt,
+        content: vec![ContentPart::Text(prompt)],
         tool_calls: None,
         tool_call_id: None,
         name: None,

@@ -23,6 +23,7 @@ use apchat_models::{
     SwitchModelArgs,
     Tool, FunctionDef,
 };
+use apchat_models::types::ContentPart;
 
 
 pub const MAX_CONTEXT_TOKENS: usize = 100_000; // Keep conversation under this to avoid rate limits
@@ -307,7 +308,7 @@ impl APChat {
 
         chat.messages.push(Message {
             role: "system".to_string(),
-            content: system_content,
+            content: vec![ContentPart::Text(system_content)],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -317,7 +318,7 @@ impl APChat {
         // Add initial model notification
         chat.messages.push(Message {
             role: "system".to_string(),
-            content: format!("Current model: {}", chat.current_model.display_name()),
+            content: vec![ContentPart::Text(format!("Current model: {}", chat.current_model.display_name()))],
             tool_calls: None,
             tool_call_id: None,
             name: None,

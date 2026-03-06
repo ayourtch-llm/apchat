@@ -4,6 +4,7 @@ use colored::Colorize;
 use crate::APChat;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use apchat_models::{ModelColor, Message};
+use apchat_models::types::ContentPart;
 use apchat_logging::safe_truncate;
 
 /// Prepare for an LLM call by adding the user message and summarizing history.
@@ -18,7 +19,7 @@ pub(crate) async fn prepare_for_llm_call(chat: &mut APChat, user_message: &str) 
     // Add user message to history
     chat.messages.push(Message {
         role: "user".to_string(),
-        content: user_message.to_string(),
+        content: vec![ContentPart::Text(user_message.to_string())],
         tool_calls: None,
         tool_call_id: None,
         name: None,
@@ -40,7 +41,7 @@ pub(crate) async fn chat(
 ) -> Result<String> {
         chat.messages.push(Message {
             role: "user".to_string(),
-            content: user_message.to_string(),
+            content: vec![ContentPart::Text(user_message.to_string())],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -278,12 +279,12 @@ pub(crate) async fn chat(
                     ), true);
                     chat.messages.push(Message {
                         role: "assistant".to_string(),
-                        content: format!(
+                        content: vec![ContentPart::Text(format!(
                             "I apologize, but I'm calling the same tool repeatedly without making progress. \
                             Pattern detected: {}. Please try breaking down your request into smaller, \
                             more specific steps, or provide additional guidance.",
                             pattern_type
-                        ),
+                        ))],
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
@@ -337,7 +338,7 @@ pub(crate) async fn chat(
                                     print_heart_red(&format!("{}", "🛑 Agent evaluation suggests stopping or changing strategy".yellow()), true);
                                     chat.messages.push(Message {
                                         role: "assistant".to_string(),
-                                        content: format!(
+                                        content: vec![ContentPart::Text(format!(
                                             "Based on progress evaluation: {}\n\nRecommendations:\n{}\n\nReasoning: {}",
                                             if evaluation.change_strategy {
                                                 "I should change my approach."
@@ -346,7 +347,7 @@ pub(crate) async fn chat(
                                             },
                                             evaluation.recommendations.join("\n"),
                                             evaluation.reasoning
-                                        ),
+                                        ))],
                                         tool_calls: None,
                                         tool_call_id: None,
                                         name: None,
@@ -393,11 +394,11 @@ pub(crate) async fn chat(
                     ), true);
                     chat.messages.push(Message {
                         role: "assistant".to_string(),
-                        content: format!(
+                        content: vec![ContentPart::Text(format!(
                             "I've made {} tool calls for this request. Despite intelligent progress evaluation, \
                             I've reached the safety limit. Please break this down into smaller tasks or provide more specific direction.",
                             tool_call_iterations
-                        ),
+                        ))],
                         tool_calls: None,
                         tool_call_id: None,
                         name: None,
@@ -431,7 +432,7 @@ pub(crate) async fn chat(
                     let model_name = chat.current_model.as_str_default();
                     logger.log_with_tool_calls(
                         "assistant",
-                        &response.content,
+                        &response.text_only(),
                         Some(&model_name),
                         tool_call_info,
                     ).await;
@@ -554,7 +555,7 @@ pub(crate) async fn chat(
 
                     chat.messages.push(Message {
                         role: "tool".to_string(),
-                        content: result,
+                        content: vec![ContentPart::Text(result)],
                         tool_calls: None,
                         tool_call_id: Some(tool_call.id.clone()),
                         name: Some(tool_call.function.name.clone()),
@@ -576,9 +577,9 @@ pub(crate) async fn chat(
                     if chat.should_show_debug(1) {
                         print_heart_red("🔧 DEBUG: Agent signaled completion via finish_reason: stop", true);
                     }
-                    return Ok(response.content);
+                    return Ok(response.text_only());
                 }
-                return Ok(response.content);
+                return Ok(response.text_only());
             }
         }
 }

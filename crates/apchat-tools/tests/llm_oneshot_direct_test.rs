@@ -6,6 +6,7 @@ mod llm_oneshot_direct_test {
     use apchat_toolcore::{ToolRegistry, ToolParameters, ToolContext};
     use apchat_tools::llm_oneshot::LlmCallTool;
     use apchat_models::types::ModelColor;
+    use apchat_models::types::ContentPart;
     use apchat_llm_api::client::{LlmClient, ChatMessage, ToolDefinition};
     use async_trait::async_trait;
 
@@ -20,7 +21,7 @@ mod llm_oneshot_direct_test {
             Ok(apchat_llm_api::client::LlmResponse {
                 message: ChatMessage {
                     role: "assistant".to_string(),
-                    content: "Test response from mock LLM".to_string(),
+                    content: vec![ContentPart::Text("Test response from mock LLM".to_string())],
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,

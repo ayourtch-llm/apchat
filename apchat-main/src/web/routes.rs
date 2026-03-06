@@ -15,6 +15,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use apchat_models::Message as ChatMessage;
+use apchat_models::types::ContentPart;
 use apchat_vty::{print_heart_red, print_heart_yellow, tool_counter::ToolGuard};
 use apchat_toolcore::ToolParameters;
 use serde_json::Value;
@@ -407,7 +408,7 @@ async fn handle_chat_with_broadcast(
                         // Add cancellation to history
                         session.apchat.lock().await.messages.push(ChatMessage {
                             role: "tool".to_string(),
-                            content: error_str,
+                            content: vec![ContentPart::Text(error_str)],
                             tool_calls: None,
                             tool_call_id: Some(tool_call.id.clone()),
                             name: Some(tool_call.function.name.clone()),
@@ -450,7 +451,7 @@ async fn handle_chat_with_broadcast(
                             // Add error to history
                             session.apchat.lock().await.messages.push(ChatMessage {
                                 role: "tool".to_string(),
-                                content: e.clone(),
+                                content: vec![ContentPart::Text(e.clone())],
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_call.function.name.clone()),
@@ -557,7 +558,7 @@ async fn handle_chat_with_broadcast(
                             // Add tool result to history
                             session.apchat.lock().await.messages.push(ChatMessage {
                                 role: "tool".to_string(),
-                                content: result_str,
+                                content: vec![ContentPart::Text(result_str)],
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_call.function.name.clone()),
@@ -587,7 +588,7 @@ async fn handle_chat_with_broadcast(
                             // Add tool result to history
                             session.apchat.lock().await.messages.push(ChatMessage {
                                 role: "tool".to_string(),
-                                content: result_str,
+                                content: vec![ContentPart::Text(result_str)],
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_call.function.name.clone()),
@@ -607,7 +608,7 @@ async fn handle_chat_with_broadcast(
                             // Add error to history
                             session.apchat.lock().await.messages.push(ChatMessage {
                                 role: "tool".to_string(),
-                                content: error_str,
+                                content: vec![ContentPart::Text(error_str)],
                                 tool_calls: None,
                                 tool_call_id: Some(tool_call.id.clone()),
                                 name: Some(tool_call.function.name.clone()),
@@ -634,7 +635,7 @@ async fn handle_chat_with_broadcast(
 
         // No tool calls - send final response and complete
         let msg = ServerMessage::AssistantMessage {
-            content: response.content,
+            content: response.text_only(),
             streaming: false,
         };
         session.broadcast(msg).await;
@@ -654,11 +655,11 @@ async fn generate_session_title(
     let title_prompt = vec![
         apchat_models::Message {
             role: "user".to_string(),
-            content: format!(
+            content: vec![ContentPart::Text(format!(
                 "Generate a concise, descriptive title (3-6 words) for a chat session that starts with this message. \
                 Only respond with the title, nothing else.\n\nMessage: {}",
                 first_message
-            ),
+            ))],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -670,7 +671,7 @@ async fn generate_session_title(
     let apchat = session.apchat.lock().await;
     match call_api(&apchat, &title_prompt).await {
         Ok((response, _, _, _)) => {
-            let title = response.content.trim().to_string();
+            let title = response.text_only().trim().to_string();
             // Remove quotes if present
             let title = title.trim_matches('"').trim_matches('\'').to_string();
             Some(title)
@@ -714,7 +715,7 @@ async fn handle_send_message(
     // Add user message
     apchat.messages.push(apchat_models::Message {
         role: "user".to_string(),
-        content: content.clone(),
+        content: vec![ContentPart::Text(content.clone())],
         tool_calls: None,
         tool_call_id: None,
         name: None,
