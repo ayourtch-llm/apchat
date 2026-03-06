@@ -912,9 +912,19 @@ async fn process_llm_response(
                         print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard dropped - counter decremented"), true);
                         print_heart_red(&format!("TOOL-RESULT: {}", &tool_result), true);
 
+                        // For read_image tool, the result is a data: URI that should be treated as an image
+                        let tool_result_content = if tool_call.function.name == "read_image" {
+                            vec![
+                                ContentPart::Text("Attached image(s) from tool result:".to_string()),
+                                ContentPart::ImageUrl { url: tool_result.clone() }
+                            ]
+                        } else {
+                            vec![ContentPart::Text(tool_result)]
+                        };
+
                         let tool_response_message = Message {
                             role: "tool".to_string(),
-                            content: vec![ContentPart::Text(tool_result)],
+                            content: tool_result_content,
                             tool_calls: None,
                             tool_call_id: Some(tool_call.id.clone()),
                             name: Some(tool_call.function.name.clone()),
