@@ -40,6 +40,8 @@ pub mod delete_webex_message;
 pub mod read_image;
 pub mod pptx_tool;
 pub mod pptx_edit;
+pub mod pptx_apply_style;
+pub mod template_impl;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -72,5 +74,6 @@ pub use delete_webex_message::*;
 pub use read_image::*;
 pub use pptx_tool::*;
 pub use pptx_edit::*;
+pub use pptx_apply_style::*;
 
 

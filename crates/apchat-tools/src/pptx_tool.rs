@@ -48,12 +48,19 @@ Accepts a JSON object with:
 - path: Output file path (e.g., 'presentation.pptx')
 - title: Presentation title
 - author: Author name
+- template: Optional path to an existing PPTX file to use as a template (preserves theme, slide masters, layouts, logos)
 - slides: Array of slide objects, each with:
   - type: 'title' or 'content'
   - title: Slide title
   - subtitle: Subtitle (for title slides)
   - bullets: Array of bullet points (for content slides)
   - background_color: Optional background color in hex format (e.g., '1A1A2E' or '#1A1A2E')
+
+When using a template, the presentation will inherit:
+- Theme colors and fonts
+- Slide masters and layouts
+- Logos and branding elements
+- Overall visual style
 
 The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
 - Multiple slide layouts (title, centered title, content, blank, etc.)
@@ -70,6 +77,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
             param!("path", "string", "Output file path for the PPTX presentation (e.g., 'presentation.pptx')", required),
             param!("title", "string", "Presentation title", required),
             param!("author", "string", "Author name", required),
+            param!("template", "string", "Optional path to an existing PPTX file to use as a template (preserves theme, slide masters, layouts, logos)", optional),
             param!("slides", "array", "Array of slide objects. Each slide has a 'type' ('title' or 'content'), 'title', and optionally 'subtitle' (for title slides) or 'bullets' (array of strings for content slides)", required),
         ])
     }
@@ -93,6 +101,9 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
             Err(e) => return ToolResult::error(e.to_string()),
         };
 
+        // Parse the optional template parameter
+        let template_path: Option<String> = params.data.get("template").and_then(|v| v.as_str().map(String::from));
+
         // Parse the slides parameter
         let slides: Vec<SlideType> = match params.get_required::<Vec<SlideType>>("slides") {
             Ok(s) => s,
@@ -101,6 +112,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
 
         // Build slides using ppt-rs
         let mut pptx_slides: Vec<ppt_rs::generator::SlideContent> = Vec::new();
+        let mut is_title_slide: Vec<bool> = Vec::new(); // Track which slides are title slides
         
         for slide in &slides {
             match slide {
@@ -122,6 +134,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
                     }
                     
                     pptx_slides.push(slide_content);
+                    is_title_slide.push(true);
                 }
                 SlideType::Content { title: slide_title, bullets, background_color } => {
                     let mut slide_content = ppt_rs::generator::SlideContent::new(slide_title)
@@ -137,12 +150,21 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
                     }
                     
                     pptx_slides.push(slide_content);
+                    is_title_slide.push(false);
                 }
             }
         }
 
-        // Create the presentation using ppt-rs
-        let pptx_data = match ppt_rs::generator::create_pptx_with_content(&title, pptx_slides) {
+        // Create the presentation using ppt-rs or template
+        let pptx_data: Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> = if let Some(template) = &template_path {
+            // Use template-based creation
+            create_presentation_from_template(&title, &author, &pptx_slides, &is_title_slide, template, context)
+        } else {
+            // Use default ppt-rs creation
+            ppt_rs::generator::create_pptx_with_content(&title, pptx_slides).map_err(|e| e.into())
+        };
+
+        let pptx_data = match pptx_data {
             Ok(data) => data,
             Err(e) => return ToolResult::error(format!("Failed to create presentation: {}", e)),
         };
@@ -161,6 +183,8 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
         }
     }
 }
+
+use crate::template_impl::create_presentation_from_template;
 
 #[cfg(test)]
 mod tests {

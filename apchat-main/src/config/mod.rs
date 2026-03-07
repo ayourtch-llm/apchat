@@ -343,6 +343,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string()],
         );
         print_heart_red("✓ PPTX remove slide tool enabled", true);
+
+        // Register PPTX apply style tool
+        registry.register_with_categories(
+            ApplyPptxStyleTool,
+            vec!["pptx".to_string(), "document".to_string(), "style".to_string()],
+        );
+        print_heart_red("✓ PPTX apply style tool enabled", true);
     }
 
     registry
