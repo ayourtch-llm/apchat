@@ -54,6 +54,7 @@ pub async fn initialize_repl(
         mcp_servers: cli.mcp_server.clone(),
         searxng_url: cli.searxng.clone(),
         image_processing: cli.image_processing,
+        pptx_tools: cli.pptx_tools,
     };
 
     let mut chat = APChat::new_with_config(

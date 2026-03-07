@@ -301,6 +301,11 @@ pub struct Cli {
     #[arg(long, value_name = "URL")]
     pub searxng: Option<String>,
 
+    /// Enable PPTX presentation creation tool
+    /// When enabled, the create_presentation tool can be used to create PowerPoint presentations
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub pptx_tools: bool,
+
     /// Path to a saved state file to load at startup (one-shot context loading)
     /// This flag loads the state immediately after startup and is then consumed
     #[arg(long, value_name = "PATH")]

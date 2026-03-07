@@ -37,6 +37,7 @@ pub struct FeatureFlags {
     pub mcp_servers: Vec<String>,
     pub searxng_url: Option<String>,
     pub image_processing: bool,
+    pub pptx_tools: bool,
 }
 
 /// Configuration for APChat client
@@ -301,6 +302,15 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
         // Also enable load_full_state tool when save is enabled
         registry.register_with_categories(LoadFullStateTool, vec!["state".to_string()]);
         print_heart_red("✓ State load tool enabled", true);
+    }
+
+    // Register PPTX presentation creation tool (only if --pptx-tools flag is enabled)
+    if flags.pptx_tools {
+        registry.register_with_categories(
+            CreatePresentationTool,
+            vec!["pptx".to_string(), "document".to_string()],
+        );
+        print_heart_red("✓ PPTX presentation creation tool enabled", true);
     }
 
     registry

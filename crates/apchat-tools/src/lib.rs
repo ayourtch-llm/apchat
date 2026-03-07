@@ -38,6 +38,7 @@ pub mod load_full_state;
 pub mod send_webex_message;
 pub mod delete_webex_message;
 pub mod read_image;
+pub mod pptx_tool;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -68,5 +69,6 @@ pub use load_full_state::*;
 pub use send_webex_message::*;
 pub use delete_webex_message::*;
 pub use read_image::*;
+pub use pptx_tool::*;
 
 

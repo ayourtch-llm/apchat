@@ -20,6 +20,8 @@ pub struct SessionConfig {
     pub early_superpowers: bool,
     #[serde(default)]
     pub image_processing: bool,
+    #[serde(default)]
+    pub pptx_tools: bool,
 }
 
 fn default_stream() -> bool {

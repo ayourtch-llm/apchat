@@ -257,6 +257,7 @@ impl SessionManager {
             FeatureFlags {
                 early_superpowers: config.early_superpowers,
                 image_processing: config.image_processing,
+                pptx_tools: config.pptx_tools,
                 ..FeatureFlags::default()
             },
         );
