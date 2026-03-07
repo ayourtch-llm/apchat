@@ -119,6 +119,19 @@ fn get_urgent_input(urgent_messages: &mut Vec<String>) -> String {
     urgent_input
 }
 
+fn get_pending_input(pending_messages: &mut Vec<String>) -> Option<String> {
+    if pending_messages.is_empty() {
+        return None;
+    }
+    let mut pending_input = format!("START PENDING:\n");
+    while let Some(pending_msg) = pending_messages.pop() {
+      print_heart_yellow(&format!("Injecting pending message: {:?}", &pending_msg), true);
+      pending_input.push_str(&format!("    {}\n", pending_msg));
+    }
+    pending_input.push_str("END PENDING\n");
+    Some(pending_input)
+}
+
 /// Run interactive REPL mode.
 ///
 /// Orchestrates the full lifecycle: initialization, Ctrl-C handler, MSPC
@@ -238,7 +251,7 @@ pub async fn run_repl_mode(
                 add_msg_to_history(&mut chat, &mut llm_channels, &urgent_input, &cancel_token).await;
 		tool_call_iterations = 0;
                 total_tokens_start = chat.total_tokens_used;
-        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
+        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, None, webex_sink.as_ref()).await {
             if chat.get_inference_debug() {
                 print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
             }
@@ -258,7 +271,7 @@ pub async fn run_repl_mode(
 		tool_call_iterations = 0;
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;
-                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, webex_sink.as_ref()).await {
+                if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, None, webex_sink.as_ref()).await {
                     if chat.get_inference_debug() {
                         print_heart_yellow(&format!("✅ [DEBUG] Request sent successfully - creating RequestGuard"), true);
                     }
@@ -326,6 +339,7 @@ pub async fn run_repl_mode(
                             } else {
                                 Some(get_urgent_input(&mut urgent_messages))
                             };
+                            let maybe_pending_input = get_pending_input(&mut queued_messages);
                             
                             // Add a bogus assistant message and encouragement before retry
                             // This helps the LLM continue when it produces empty responses
@@ -354,7 +368,7 @@ pub async fn run_repl_mode(
                                 }
                             }
                             
-                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, webex_sink.as_ref()).await {
+                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, maybe_pending_input, webex_sink.as_ref()).await {
                                 print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - request sent successfully", empty_response_retries), true);
                                 llm_running = true;
                                 request_guard = Some(RequestGuard::new());
@@ -416,8 +430,9 @@ pub async fn run_repl_mode(
                         } else {
                             Some(get_urgent_input(&mut urgent_messages))
                         };
+                        let maybe_pending_input = get_pending_input(&mut queued_messages);
 
-                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, webex_sink.as_ref()).await {
+                        if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, maybe_urgent_input, maybe_pending_input, webex_sink.as_ref()).await {
                             if chat.debug_level > 0 {
                                 print_heart_yellow(&format!("✅ [DEBUG] Repeat inference request sent successfully - creating RequestGuard"), true);
                             }
@@ -463,8 +478,13 @@ pub async fn run_repl_mode(
                 if line.starts_with("!") {
                     // Preserve the ! prefix for urgent messages
                     urgent_messages.push(line.to_string());
+                    print_heart_yellow(&format!("📢 Urgent message queued (will be processed after current operation)"), true);
                 } else {
                     queued_messages.push(line.to_string());
+                    // If we're in a tool loop, acknowledge the pending message
+                    if llm_running || tool_call_iterations > 0 {
+                        print_heart_yellow(&format!("📨 Pending message received (will be processed after current tool operations complete)"), true);
+                    }
                 }
             },
         }
@@ -668,6 +688,7 @@ async fn prep_and_send_request(
     llm_channels: &mut LLMTaskChannels,
     cancel_token: &tokio_util::sync::CancellationToken,
     maybe_urgent_input: Option<String>,
+    maybe_pending_input: Option<String>,
     webex_sink: Option<&std::sync::Arc<apchat_webex::WebexOutputSink>>,
 ) -> bool {
     use apchat_vty::print_heart_yellow;
@@ -685,9 +706,10 @@ async fn prep_and_send_request(
         }
     }
     if let Some(urgent_input) = maybe_urgent_input {
+        let assistant_msg = "I notice there is some urgent messages from the user ?";
         chat.messages.push(Message {
             role: "assistant".to_string(),
-            content: vec![ContentPart::Text("I notice there is some urgent messages from the user ?".to_string())],
+            content: vec![ContentPart::Text(assistant_msg.to_string())],
             tool_calls: None,
             tool_call_id: None,
             name: None,
@@ -702,6 +724,26 @@ async fn prep_and_send_request(
             reasoning: None,
         });
     }
+    if let Some(pending_input) = maybe_pending_input {
+        let assistant_msg = "I notice there is some pending messages from the user.";
+        chat.messages.push(Message {
+            role: "assistant".to_string(),
+            content: vec![ContentPart::Text(assistant_msg.to_string())],
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
+        chat.messages.push(Message {
+            role: "user".to_string(),
+            content: vec![ContentPart::Text(pending_input)],
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            reasoning: None,
+        });
+    }
+
 
     // Create API call parameters
     let params = crate::api::ApiCallParams {
