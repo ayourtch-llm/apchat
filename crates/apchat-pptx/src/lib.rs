@@ -18,6 +18,29 @@ impl Presentation {
             theme: Theme::default(),
         }
     }
+    
+    pub fn title(mut self, title: &str) -> Self {
+        self.title = Some(title.to_string());
+        self
+    }
+    
+    pub fn author(mut self, author: &str) -> Self {
+        self.author = Some(author.to_string());
+        self
+    }
+    
+    pub fn theme(mut self, theme: Theme) -> Self {
+        self.theme = theme;
+        self
+    }
+    
+    pub fn get_title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+    
+    pub fn get_author(&self) -> Option<&str> {
+        self.author.as_deref()
+    }
 }
 
 pub struct Slide {
