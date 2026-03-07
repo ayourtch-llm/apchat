@@ -25,7 +25,7 @@ apchat-common = { path = "../apchat-common" }
 apchat-toolcore = { path = "../apchat-toolcore" }
 apchat-vty = { path = "../apchat-vty" }
 apchat-webex = { path = "../apchat-webex" }
-apchat-pptx = { path = "../apchat-pptx" }
+ppt-rs = { path = "../apchat-pptx" }
 regex = "*"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
