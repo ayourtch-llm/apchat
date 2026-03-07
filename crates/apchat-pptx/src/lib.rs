@@ -41,6 +41,26 @@ impl Presentation {
     pub fn get_author(&self) -> Option<&str> {
         self.author.as_deref()
     }
+    
+    pub fn slides_count(&self) -> usize {
+        self.slides.len()
+    }
+    
+    pub fn add_title_slide(&mut self, title: &str, subtitle: &str) {
+        self.slides.push(Slide {
+            slide_type: SlideType::Title,
+            title: Some(title.to_string()),
+            content: vec![subtitle.to_string()],
+        });
+    }
+    
+    pub fn add_content_slide(&mut self, title: &str, bullets: Vec<&str>) {
+        self.slides.push(Slide {
+            slide_type: SlideType::Content,
+            title: Some(title.to_string()),
+            content: bullets.into_iter().map(|s| s.to_string()).collect(),
+        });
+    }
 }
 
 pub struct Slide {
