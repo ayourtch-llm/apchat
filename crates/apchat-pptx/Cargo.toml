@@ -1,0 +1,16 @@
+[package]
+name = "apchat-pptx"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Rust PPTX presentation creation library"
+license = "MIT"
+
+[dependencies]
+zip = "0.6"
+quick-xml = { version = "0.31", features = ["serialize"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+thiserror = "1.0"
+
+[dev-dependencies]
+tempfile = "3.0"

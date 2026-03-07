@@ -21,6 +21,7 @@ members = [
     "crates/apchat-finserv",
     "crates/apchat-ocr",
     "crates/apchat-types",
+    "crates/apchat-pptx",
 ]
 resolver = "2"
 
