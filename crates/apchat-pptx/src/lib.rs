@@ -1,4 +1,5 @@
 mod error;
+pub mod xml;
 
 pub use error::{PptxError, Result};
 
