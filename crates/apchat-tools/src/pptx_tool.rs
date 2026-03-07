@@ -17,11 +17,13 @@ pub enum SlideType {
     Title {
         title: String,
         subtitle: Option<String>,
+        background_color: Option<String>,
     },
     #[serde(rename = "content")]
     Content {
         title: String,
         bullets: Vec<String>,
+        background_color: Option<String>,
     },
 }
 
@@ -51,6 +53,7 @@ Accepts a JSON object with:
   - title: Slide title
   - subtitle: Subtitle (for title slides)
   - bullets: Array of bullet points (for content slides)
+  - background_color: Optional background color in hex format (e.g., '1A1A2E' or '#1A1A2E')
 
 The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
 - Multiple slide layouts (title, centered title, content, blank, etc.)
@@ -101,7 +104,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
         
         for slide in &slides {
             match slide {
-                SlideType::Title { title: slide_title, subtitle } => {
+                SlideType::Title { title: slide_title, subtitle, background_color } => {
                     // For title slides, use CenteredTitle layout
                     // If there's a subtitle, add it as the first content item
                     let mut slide_content = ppt_rs::generator::SlideContent::new(slide_title)
@@ -114,15 +117,23 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
                         slide_content = slide_content.add_bullet(sub);
                     }
                     
+                    if let Some(bg_color) = background_color {
+                        slide_content = slide_content.background_color(bg_color);
+                    }
+                    
                     pptx_slides.push(slide_content);
                 }
-                SlideType::Content { title: slide_title, bullets } => {
+                SlideType::Content { title: slide_title, bullets, background_color } => {
                     let mut slide_content = ppt_rs::generator::SlideContent::new(slide_title)
                         .title_size(32)
                         .title_bold(true);
                     
                     for bullet in bullets {
                         slide_content = slide_content.add_bullet(bullet);
+                    }
+                    
+                    if let Some(bg_color) = background_color {
+                        slide_content = slide_content.background_color(bg_color);
                     }
                     
                     pptx_slides.push(slide_content);

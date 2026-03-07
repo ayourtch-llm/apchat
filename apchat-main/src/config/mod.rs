@@ -304,13 +304,45 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
         print_heart_red("✓ State load tool enabled", true);
     }
 
-    // Register PPTX presentation creation tool (only if --pptx-tools flag is enabled)
+    // Register PPTX presentation tools (only if --pptx-tools flag is enabled)
     if flags.pptx_tools {
         registry.register_with_categories(
             CreatePresentationTool,
             vec!["pptx".to_string(), "document".to_string()],
         );
         print_heart_red("✓ PPTX presentation creation tool enabled", true);
+
+        // Register PPTX reader tool
+        registry.register_with_categories(
+            ReadPptxTool,
+            vec!["pptx".to_string(), "document".to_string(), "read".to_string()],
+        );
+        print_heart_red("✓ PPTX reader tool enabled", true);
+
+        // Register PPTX editor tools
+        registry.register_with_categories(
+            SetSlideBackgroundTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string()],
+        );
+        print_heart_red("✓ PPTX slide background editor tool enabled", true);
+
+        registry.register_with_categories(
+            EditPptxSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string()],
+        );
+        print_heart_red("✓ PPTX slide content editor tool enabled", true);
+
+        registry.register_with_categories(
+            AddSlideToPptxTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string()],
+        );
+        print_heart_red("✓ PPTX add slide tool enabled", true);
+
+        registry.register_with_categories(
+            RemoveSlideFromPptxTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string()],
+        );
+        print_heart_red("✓ PPTX remove slide tool enabled", true);
     }
 
     registry

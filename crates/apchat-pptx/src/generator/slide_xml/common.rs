@@ -5,9 +5,11 @@ pub const SLIDE_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8" standalon
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld>
 <p:bg>
-<p:bgRef idx="1001">
-<a:schemeClr val="bg1"/>
-</p:bgRef>
+<p:bgPr>
+<a:solidFill>
+<a:srgbClr val="FFFFFF"/>
+</a:solidFill>
+</p:bgPr>
 </p:bg>
 <p:spTree>
 <p:nvGrpSpPr>
@@ -30,11 +32,11 @@ pub fn create_slide_header_with_bg(color: &str) -> String {
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld>
 <p:bg>
-<p:bgFill>
+<p:bgPr>
 <a:solidFill>
 <a:srgbClr val="{color}"/>
 </a:solidFill>
-</p:bgFill>
+</p:bgPr>
 </p:bg>
 <p:spTree>
 <p:nvGrpSpPr>
@@ -108,4 +110,3 @@ pub fn generate_title_shape(
 </p:sp>"#
     )
 }
-
