@@ -2685,15 +2685,18 @@ impl Readline {
         mut readline_receiver: Option<&mut tokio::sync::broadcast::Receiver<apchat_mspc::output::TextOutput>>,
         idle_config: Option<IdleConfig>,
     ) -> io::Result<ReadlineResult> {
+        // Start with a mutable prompt that can be updated via RefreshPrompt signals
+        let mut current_prompt = prompt.to_string();
+
         // Calculate and store the visible prompt width for auto-wrapping
         // IMPORTANT: The prompt displayed includes a [PID] prefix that's added in redraw()
         // We need to account for this when calculating the available width
-        let full_prompt = format!("[{}]{}", std::process::id(), prompt);
+        let full_prompt = format!("[{}]{}", std::process::id(), current_prompt);
         let prompt_visible = strip_ansi_codes(&full_prompt);
         self.prompt_width = prompt_visible.chars().count();
 
         // Display the initial prompt
-        self.redraw(prompt);
+        self.redraw(&current_prompt);
 
         // Initialize idle timeout state
         self.idle_command = idle_config.as_ref().map(|c| c.input_text.clone());
@@ -2726,7 +2729,7 @@ impl Readline {
                     Event::Resize(_width, _height) => {
                         // Clear the screen width cache on terminal resize
                         self.clear_screen_width_cache();
-                        self.redraw(prompt);
+                        self.redraw(&current_prompt);
                     }
                     Event::Key(key) => {
                         // Reset idle timer on any key press
@@ -2741,11 +2744,11 @@ impl Readline {
                         match self.handle_key_event(key) {
                             KeyResult::Continue => {}
                             KeyResult::Redraw => {
-                                self.redraw(prompt);
+                                self.redraw(&current_prompt);
                             }
                             KeyResult::Return(result) => {
                                 // Redraw to clear the line and redraw the title bar before returning
-                                self.redraw(prompt);
+                                self.redraw(&current_prompt);
                                 return Ok(result);
                             }
                         }
@@ -2753,7 +2756,7 @@ impl Readline {
                     Event::Paste(content) => {
                         // Handle paste events from bracketed paste mode
                         if self.handle_paste(content) {
-                            self.redraw(prompt);
+                            self.redraw(&current_prompt);
                         }
                     }
                     _ => {
@@ -2763,7 +2766,7 @@ impl Readline {
             }
             counter -= 1;
             if counter == 0 {
-                self.redraw(prompt);
+                self.redraw(&current_prompt);
                 counter = COUNTDOWN;
             }
 
@@ -2832,7 +2835,13 @@ impl Readline {
                             }
                             stdout.flush().ok();
                             // Restore cursor position and redraw prompt
-                            self.redraw(prompt);
+                            self.redraw(&current_prompt);
+                            continue;
+                        }
+                        MspcMessage::RefreshPrompt(new_prompt) => {
+                            // Update the current prompt and redraw (e.g., after model switch)
+                            current_prompt = new_prompt.clone();
+                            self.redraw(&current_prompt);
                             continue;
                         }
                         _ => {
@@ -2912,7 +2921,7 @@ impl Readline {
                     }
                     stdout.flush().ok();
                     // Restore cursor position and redraw prompt
-                    self.redraw(prompt);
+                    self.redraw(&current_prompt);
                     continue;
                 }
             }

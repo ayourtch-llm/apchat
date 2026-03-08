@@ -29,6 +29,8 @@ pub enum MspcMessage {
         content: String,
         newline: bool,
     },
+    /// Signal to refresh the prompt with a new prompt string (e.g., after model switch)
+    RefreshPrompt(String),
 }
 
 /// Pair of user and agent messages for history

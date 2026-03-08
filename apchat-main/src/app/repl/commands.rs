@@ -7,6 +7,7 @@ use apchat_models::types::ContentPart;
 use apchat_policy::PolicyManager;
 
 use crate::APChat;
+use crate::mspc::MspcMessage;
 use crate::chat::history::{intelligent_compaction, calculate_conversation_size};
 
 /// Result of attempting to handle a slash command.
@@ -104,6 +105,19 @@ fn cmd_model(chat: &mut APChat, line: &str, current_model_shared: &Arc<std::sync
             {
                 let mut model_guard = current_model_shared.write().unwrap();
                 *model_guard = chat.current_model;
+            }
+
+            // Build the new prompt string and send RefreshPrompt signal
+            // We need to access client_config to build the prompt, so we use chat's config
+            let client_config = chat.client_config.clone();
+            let current_model = chat.current_model.clone();
+            let model_name = crate::app::repl::get_model_name_for_prompt(&current_model, &client_config);
+            let model_indicator = format!("[{} ({})]", current_model.display_name(), model_name).bright_magenta();
+            let request_count = apchat_vty::request_counter::get_count();
+            let new_prompt = format!("{}[{}] {}", model_indicator, request_count, "You:".bright_green().bold());
+
+            if let Some(ref signal_sender) = chat.signal_sender {
+                let _ = signal_sender.try_send(MspcMessage::RefreshPrompt(new_prompt));
             }
         }
         Err(e) => {
