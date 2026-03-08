@@ -110,28 +110,7 @@ fn clear_edit_plan(work_dir: &PathBuf) {
     let _ = fs::remove_file(&plan_path); // Ignore errors if file doesn't exist
 }
 
-// Helper function to show unified diff using the similar crate
-fn show_unified_diff(old_content: &str, new_content: &str) -> String {
-    let diff = TextDiff::from_lines(old_content, new_content);
-    let mut output = String::new();
 
-    for (idx, group) in diff.grouped_ops(2).iter().enumerate() {
-        if idx > 0 {
-            output.push_str(&format!("{}\n", "---".bright_black()));
-        }
-        for op in group {
-            for change in diff.iter_inline_changes(op) {
-                let (sign, color_fn): (&str, fn(&str) -> colored::ColoredString) = match change.tag() {
-                    ChangeTag::Delete => ("-", |s: &str| s.red()),
-                    ChangeTag::Insert => ("+", |s: &str| s.green()),
-                    ChangeTag::Equal => (" ", |s: &str| s.normal()),
-                };
-                output.push_str(&format!("{}{}", sign, color_fn(&change.to_string())));
-            }
-        }
-    }
-    output
-}
 
 // Helper function to visualize whitespace characters for better debugging
 fn show_whitespace(s: &str) -> String {
@@ -574,7 +553,7 @@ impl Tool for PlanEditsTool {
             }
 
             // Show unified diff preview
-            let diff_output = show_unified_diff(&edit.old_content, &edit.new_content);
+            let diff_output = crate::diff_utils::generate_unified_diff(&edit.old_content, &edit.new_content);
             if !diff_output.is_empty() {
                 for line in diff_output.lines() {
                     print_heart_red(&format!("  {}", line), true);
