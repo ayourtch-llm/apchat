@@ -267,16 +267,9 @@ impl Tool for EditFileTool {
         print_heart_red(&format!("{} {}", "📝 Editing:".bright_cyan().bold(), file_path.bright_white()), true);
         print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
-        // Simple diff display
-        print_heart_red(&format!("{}", "─ Old content:".red()), true);
-        for line in old_content.lines() {
-            print_heart_red(&format!("{} {}", "-".red(), line), true);
-        }
-        print_heart_red(&format!(""), true);
-        print_heart_red(&format!("{}", "+ New content:".green()), true);
-        for line in new_content.lines() {
-            print_heart_red(&format!("{} {}", "+".green(), line), true);
-        }
+        // Unified diff display
+        let diff = crate::diff_utils::generate_unified_diff(&old_content, &new_content);
+        print_heart_red(&format!("{}\n", diff), true);
         print_heart_red(&format!("{}", "═".repeat(60).bright_black()), true);
 
         if occurrences > 1 {
