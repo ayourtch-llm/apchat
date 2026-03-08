@@ -555,11 +555,19 @@ pub(crate) async fn chat(
 
                     // Determine content type based on tool name
                     // For read_image tool, the result is a data: URI that should be treated as an image
+                    // However, if the tool failed (e.g., file not found), the result will be an error message
+                    // In that case, we should treat it as plain text, not as an image URL
                     let content_parts = if tool_call.function.name == "read_image" {
-                        vec![
-                            ContentPart::Text("Attached image(s) from tool result:".to_string()),
-                            ContentPart::ImageUrl { url: result.clone() }
-                        ]
+                        // Check if the result is a valid data: URL (not an error message)
+                        if result.starts_with("data:image/") && result.contains(";base64,") {
+                            vec![
+                                ContentPart::Text("Attached image(s) from tool result:".to_string()),
+                                ContentPart::ImageUrl { url: result.clone() }
+                            ]
+                        } else {
+                            // Tool failed, treat as plain text error
+                            vec![ContentPart::Text(result)]
+                        }
                     } else {
                         vec![ContentPart::Text(result)]
                     };
