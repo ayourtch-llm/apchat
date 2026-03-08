@@ -16,28 +16,59 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **Automatic Backend Detection**: Smart provider selection from API URLs
 - **Unified Model Syntax**: `model@backend[url]` syntax for easy configuration
 
-### 🛠️ Comprehensive Tool System (40+ Tools)
+### 🛠️ Comprehensive Tool System (67+ Tools)
 
 #### File Operations
 - **read_file** - Display file contents with optional line ranges
 - **peek_file_top_10_lines** - Quick file preview (first 10 lines)
 - **write_file** - Create and write files to workspace
-- **edit_file** - Edit files with old/new content replacement
+- **edit_file** - Edit files with old/new content replacement (with unified diff preview)
 - **list_files** - List files matching glob patterns
 - **file_curly_glance** - Quick structural overview of source files
+- **plan_edits** - Plan batch edits with unified diff format previews
+- **apply_edit_plan** - Apply pre-planned edit operations atomically
+- **diff_fuzz** - Generate fuzz tests based on code analysis
+
+#### Document Processing
 - **read_pdf** - Extract text from PDF files
-- **plan_edits** - Plan batch edits with diff previews
-- **apply_edit_plan** - Apply pre-planned edit operations
+- **read_image** - Encode images to base64 for multimodal LLMs (JPEG, PNG, WebP, BMP)
+- **read_pptx** - Read existing PowerPoint presentations and extract content
+- **rlm_context_chunk** - Split large files/directories for Recursive Language Model processing
+
+#### PowerPoint/PPTX Tools
+- **create_presentation** - Create new PowerPoint presentations from scratch
+- **edit_pptx_slide** - Edit slide content (text, bullets, layouts)
+- **set_slide_background** - Set background colors for slides
+- **add_slide_to_pptx** - Add new slides to existing presentations
+- **remove_slide_from_pptx** - Remove slides from presentations
+- **apply_pptx_style** - Apply templates and styling to presentations
+- **clone_pptx_template** - Clone presentations using templates
 
 #### Search & Analysis
 - **search_files** - Full-text search with regex, glob patterns, and `.gitignore` support
+- **web_search** - Web search via SearXNG metasearch engine
 - **project_analysis** - Analyze project structure, dependencies, and file types
 
 #### Web
-- **fetch_url** - Fetch content from URLs
+- **fetch_url** - Fetch content from URLs (auto, raw, JSON, markdown formats)
 
-#### LLM
+#### LLM & AI
 - **llm_oneshot** - One-shot LLM calls for simple tasks without agent overhead
+- **python_sandbox** - Execute Python code in sandboxed environment (ouros)
+- **forecast** - Time series forecasting and prediction (Reverso)
+- **mcp_client** - MCP (Model Context Protocol) client for tool integration
+
+#### Metacognition
+- **become** - Transform into specialized expert persona
+- **drugs** - Apply cognitive enhancement patterns
+- **ritual** - Execute structured workflows and ceremonies
+- **self_regulate** - Self-monitoring and adjustment
+
+#### Context Management
+- **save_full_state** - Save complete conversation and workspace state
+- **load_full_state** - Restore previously saved state
+- **edit_item** - Edit conversation items
+- **delete_items** - Remove conversation items
 
 #### Terminal Management (PTY-based)
 - **pty_launch** - Launch new terminal sessions
@@ -58,12 +89,17 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - Multiple backend support (native PTY, tmux)
 - Session logging
 
-#### Memory
+#### Memory & Knowledge
 - **store_memory** - Store key-value pairs in persistent memory
 - **query_memory** - Query stored memories
 - **update_memory** - Update existing memories
 - **delete_memory** - Delete memories
 - **list_memories** - List all stored memories
+
+#### Scheduled Instructions
+- **add_scheduled_instruction** - Create time-based instructions
+- **list_scheduled_instructions** - List scheduled instructions
+- **delete_scheduled_instruction** - Remove scheduled instructions
 
 #### Task & Workflow Management
 - **todo_write** - Create and manage task lists with status tracking (pending, in_progress, completed)
@@ -72,17 +108,23 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **list_skills** - Discover available skills
 - **find_relevant_skills** - AI-powered skill discovery with semantic search
 
-**Available Skills** (22 curated workflows):
-- Brainstorming, Commands, Condition-based Waiting
+**Available Skills** (37 curated workflows):
+- Brainstorming, Clarify Before Coding, Coding Conventions
+- Commands, Condition-based Waiting, Context Management
+- Convening Experts, Crafting Instructions
 - Defense-in-Depth, Dispatching Parallel Agents
 - Executing Plans, Finishing a Development Branch
-- Receiving/Requesting Code Review, Refactoring for Clarity
-- Root Cause Tracing, Sharing Skills
-- Subagent-Driven Development, Systematic Debugging
-- Test-Driven Development, Testing Anti-Patterns
-- Testing Skills with Subagents
-- Using Git Worktrees, Using Superpowers
-- Verification Before Completion, Writing Plans, Writing Skills
+- Forecasting Reverso, Learning Opportunities
+- Receiving Code Review, Recursive Context Processing
+- Refactoring for Clarity, Requesting Code Review
+- Reverse Socratic Examination, Reviewing AI Papers
+- Root Cause Tracing, Sharing Skills, Skill Creator
+- Socratic, Specification, Subagent-Driven Development
+- Systematic Debugging, Test-Driven Development
+- Testing Anti-Patterns, Testing Skills with Subagents
+- Tiling Tree, Using Git Worktrees, Using Superpowers
+- Verification Before Completion, Writing Clearly and Concisely
+- Writing Plans, Writing Skills
 
 #### Subagents
 - **launch_subagent** - Launch specialized subagents for delegated tasks
@@ -92,7 +134,11 @@ APChat is a production-ready AI assistant that seamlessly integrates multiple LL
 - **run_command** - Execute shell commands with security checks
 - **switch_model** - Request model switching with justification
 - **request_more_iterations** - Request additional processing iterations
-- **long_wait** - Wait for a specified duration
+- **long_wait** - Wait for a specified duration with progress updates
+
+#### Webex Integration
+- **send_webex_message** - Send messages to Webex rooms
+- **delete_webex_message** - Delete Webex messages
 
 ### 🌐 Web Server & API
 
@@ -440,6 +486,7 @@ Find relevant skills:
 Comprehensive documentation for individual tools is available in the `docs/tools/` directory:
 
 - **[llm_oneshot](docs/tools/llm_oneshot.md)** - One-shot LLM calls for simple tasks without agent overhead
+- **[curly_glance_usage](docs/tools/curly_glance_usage.md)** - Drill-down pattern for exploring code structure
 
 For information on how to add new tools to the system, see [docs/dev/how_to_new_tool.md](docs/dev/how_to_new_tool.md).
 
@@ -506,12 +553,13 @@ apchat/
 │   ├── apchat-terminal/    # PTY session management
 │   ├── apchat-todo/        # Task tracking
 │   ├── apchat-toolcore/    # Tool execution framework
-│   ├── apchat-tools/       # 40+ implemented tools
+│   ├── apchat-tools/       # 67+ implemented tools
 │   ├── apchat-vty/         # VTY/readline abstractions
 │   ├── apchat-wasm/        # WebAssembly frontend
-│   └── apchat-webex/       # Webex bot integration
-├── agents/configs/         # Agent JSON configurations (7 agents)
-└── skills/                 # Skill definitions (22 SKILL.md files)
+│   ├── apchat-webex/       # Webex bot integration
+│   └── apchat-pptx/        # PowerPoint/PPTX library
+├── agents/configs/         # Agent JSON configurations (8 agents)
+└── skills/                 # Skill definitions (37 SKILL.md files)
 ```
 
 ### Component Overview
@@ -544,11 +592,13 @@ Contributions are welcome! Areas for enhancement:
 
 ## Code Metrics
 
-- **44,900+ lines** of Rust code
+- **79,877 lines** of Rust code (106,345 total lines)
+- **134,931 lines** of code across all languages (177,852 total lines)
+- **451 Rust files** across the codebase
 - **15 modular crates** for clean separation
-- **40+ tools** for diverse operations
-- **22 curated skills** for proven workflows
-- **7 specialized agents** for multi-agent orchestration
+- **67+ tools** for diverse operations
+- **37 curated skills** for proven workflows
+- **8 specialized agents** for multi-agent orchestration
 - **4 LLM providers** supported
 - **15 concurrent** terminal sessions
 - **Full test coverage** (in progress)
