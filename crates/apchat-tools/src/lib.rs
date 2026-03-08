@@ -29,6 +29,7 @@ pub mod metacog;
 pub mod self_regulate;
 pub mod context_edit;
 pub mod diff_fuzz;
+pub mod diff_utils;
 pub mod rlm;
 pub mod mcp_client;
 pub mod searxng;
