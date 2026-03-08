@@ -16,6 +16,7 @@ struct EditOperation {
     file_path: String,
     old_content: String,
     new_content: String,
+    #[serde(default)]
     description: String,
 }
 
@@ -400,7 +401,7 @@ impl Tool for PlanEditsTool {
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
-            param!("edits", "string", "JSON array of edit operations with file_path, old_content, new_content, and description fields", required),
+            param!("edits", "string", "JSON array of edit operations with file_path, old_content, new_content, and description (optional) fields", required),
         ])
     }
 
