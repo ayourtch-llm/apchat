@@ -508,20 +508,20 @@ impl WebexWebSocketRouter {
                             last_data_received = Instant::now();
                             messages_received += 1;
                             let age = connected_at.elapsed().as_secs();
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Received WebSocket text message ({} bytes, conn age {}s, msg #{})",
                                 text.len(), age, messages_received
-                            ), true);
+                            ));
                             self.handle_mercury_message(&text).await;
                         }
                         Some(Ok(Message::Binary(data))) => {
                             last_data_received = Instant::now();
                             messages_received += 1;
                             let age = connected_at.elapsed().as_secs();
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Received binary message ({} bytes, conn age {}s, msg #{})",
                                 data.len(), age, messages_received
-                            ), true);
+                            ));
                             // Mercury sends messages as UTF-8 encoded binary
                             match String::from_utf8(data) {
                                 Ok(text) => {
@@ -534,10 +534,10 @@ impl WebexWebSocketRouter {
                         }
                         Some(Ok(Message::Close(frame))) => {
                             let age = connected_at.elapsed().as_secs();
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 WebSocket closed by server (age {}s, msgs {}, pings {}/{}) frame: {:?}",
                                 age, messages_received, pings_sent, pongs_received, frame
-                            ), true);
+                            ));
                             return Ok(ReconnectReason::ServerClose);
                         }
                         Some(Ok(Message::Ping(data))) => {
@@ -550,10 +550,10 @@ impl WebexWebSocketRouter {
                         Some(Ok(Message::Pong(data))) => {
                             last_data_received = Instant::now();
                             pongs_received += 1;
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Received pong ({} bytes, {}/{})",
                                 data.len(), pongs_received, pings_sent
-                            ), true);
+                            ));
                         }
                         Some(Ok(msg)) => {
                             last_data_received = Instant::now();
@@ -568,10 +568,10 @@ impl WebexWebSocketRouter {
                         }
                         None => {
                             let age = connected_at.elapsed().as_secs();
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 WebSocket stream ended (age {}s, msgs {})",
                                 age, messages_received
-                            ), true);
+                            ));
                             return Ok(ReconnectReason::ServerClose);
                         }
                     }
@@ -585,10 +585,10 @@ impl WebexWebSocketRouter {
                     // Check connection age for proactive reconnect
                     if let Some(max_age) = self.reconnect_interval {
                         if connected_at.elapsed() >= max_age {
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Connection age {}s >= max {}s, triggering proactive reconnect (msgs {}, pings {}/{})",
                                 age, max_age.as_secs(), messages_received, pings_sent, pongs_received
-                            ), true);
+                            ));
                             return Ok(ReconnectReason::MaxAgeExceeded { age_secs: age });
                         }
                     }
@@ -607,10 +607,10 @@ impl WebexWebSocketRouter {
                     let ping_data = format!("apchat-ping-{}", pings_sent);
                     match write.send(Message::Ping(ping_data.into_bytes())).await {
                         Ok(_) => {
-                            print_heart_yellow(&format!(
+                            self.debug_log(&format!(
                                 "🔍 Sent ping #{} (conn age {}s, last data {}s ago)",
                                 pings_sent, age, silent_secs
-                            ), true);
+                            ));
                         }
                         Err(e) => {
                             print_heart_yellow(&format!(
