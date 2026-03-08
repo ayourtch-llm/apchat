@@ -237,7 +237,9 @@ pub fn create_model_client(
                 .or_else(|| env::var(format!("ANTHROPIC_AUTH_TOKEN_{}", model_name_upper)).ok())
                 .or_else(|| env::var("ANTHROPIC_AUTH_TOKEN").ok())
                 .unwrap_or_default();
-            print_heart_red(&format!("{} Using Anthropic API for '{}_model' at: {}", "🧠".cyan(), model_name, url), true);
+            if verbose {
+                print_heart_red(&format!("{} Using Anthropic API for '{}_model' at: {}", "🧠".cyan(), model_name, url), true);
+            }
             Arc::new(AnthropicLlmClient::new_with_verbose(
                 key,
                 model_str,
@@ -248,7 +250,9 @@ pub fn create_model_client(
         }
         BackendType::Llama => {
             let url = normalize_api_url(&api_url.expect(&format!("llama.cpp backend requires api_url_{}_model", model_name)));
-            print_heart_red(&format!("{} Using llama.cpp for '{}_model' at: {}", "🦙".cyan(), model_name, url), true);
+            if verbose {
+                print_heart_red(&format!("{} Using llama.cpp for '{}_model' at: {}", "🦙".cyan(), model_name, url), true);
+            }
             Arc::new(LlamaCppClient::new_with_verbose(
                 url,
                 model_str,
@@ -261,7 +265,9 @@ pub fn create_model_client(
                 .or_else(|| env::var(format!("GROQ_API_KEY_{}", model_name_upper)).ok())
                 .or_else(|| env::var("GROQ_API_KEY").ok())
                 .unwrap_or_else(|| default_api_key.to_string());
-            print_heart_red(&format!("{} Using Groq API for '{}_model' at: {}", "🚀".cyan(), model_name, url), true);
+            if verbose {
+                print_heart_red(&format!("{} Using Groq API for '{}_model' at: {}", "🚀".cyan(), model_name, url), true);
+            }
             Arc::new(GroqLlmClient::new(
                 key,
                 model_str,
@@ -272,7 +278,9 @@ pub fn create_model_client(
         BackendType::OpenAI => {
             let url = normalize_api_url(&api_url.unwrap_or_else(|| "https://api.openai.com/v1/chat/completions".to_string()));
             let key = api_key.unwrap_or_else(|| default_api_key.to_string());
-            print_heart_red(&format!("{} Using OpenAI API for '{}_model' at: {}", "🤖".cyan(), model_name, url), true);
+            if verbose {
+                print_heart_red(&format!("{} Using OpenAI API for '{}_model' at: {}", "🤖".cyan(), model_name, url), true);
+            }
             // Use GroqLlmClient as it's OpenAI-compatible
             Arc::new(GroqLlmClient::new(
                 key,
