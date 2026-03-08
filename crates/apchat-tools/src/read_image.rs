@@ -18,7 +18,7 @@ impl Tool for ReadImageTool {
     }
 
     fn description(&self) -> &str {
-        "Encode an image file to base64 for use with multimodal LLMs (Qwen3.5, Qwen3-VL). Supports JPEG, PNG, WebP, BMP formats. Returns base64-encoded image data in data: URI format. Automatically bypasses content length limits to send full image data to the LLM."
+        "Encode an image file to base64 for use with multimodal LLMs (Qwen3.5, Qwen3-VL). Supports JPEG, PNG, WebP, BMP formats. Returns base64-encoded image data in data: URI format. IMPORTANT: This tool produces large base64 output that consumes significant context window. ALWAYS use this tool inside a fresh subagent with a focused instruction to work on the image, rather than in the main conversation context."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
