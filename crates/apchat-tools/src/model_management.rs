@@ -477,7 +477,13 @@ impl Tool for PlanEditsTool {
 
         // Validate and preview each edit
         let mut validated_edits = Vec::new();
+        let mut missing_descriptions = Vec::new();
         for (idx, edit) in edits.iter().enumerate() {
+            // Track edits without descriptions
+            if edit.description.is_empty() {
+                missing_descriptions.push(idx + 1);
+            }
+
             print_heart_red(&format!("\n{} {} - {}",
                 format!("Edit #{}", idx + 1).bright_yellow(),
                 edit.file_path.cyan(),
@@ -585,16 +591,35 @@ impl Tool for PlanEditsTool {
         print_heart_red(&format!("\n{}", "Use apply_edit_plan to execute all edits atomically.".bright_yellow()), true);
         print_heart_red(&format!("{}", "The plan will be cleared after application or if you create a new plan.".bright_black()), true);
 
+        // Warn about missing descriptions
+        if !missing_descriptions.is_empty() {
+            print_heart_red(&format!("\n{} Warning: Edit(s) #{} missing description(s)",
+                "⚠".yellow(),
+                missing_descriptions.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+            ), true);
+            print_heart_red(&format!("{} Please include a description field in future plan_edits calls", "ℹ".bright_blue()), true);
+        }
+
         // Store the plan
         if let Err(e) = save_edit_plan(&context.work_dir, &validated_edits) {
             return ToolResult::error(e);
         }
 
-        ToolResult::success(format!(
+        // Add warning to the result message if descriptions are missing
+        let mut result_msg = format!(
             "Edit plan created successfully with {} operation(s). All edits have been validated. \
             Use apply_edit_plan to execute all changes atomically.",
             validated_edits.len()
-        ))
+        );
+        if !missing_descriptions.is_empty() {
+            result_msg.push_str(&format!(
+                " ⚠ WARNING: Edit(s) #{} missing description(s). \
+                Please include a 'description' field for each edit in future plan_edits calls.",
+                missing_descriptions.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+            ));
+        }
+
+        ToolResult::success(result_msg)
     }
 }
 
