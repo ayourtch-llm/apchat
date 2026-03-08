@@ -931,17 +931,23 @@ async fn process_llm_response(
 
                     // Execute each tool call
                     for tool_call in &calls {
-                        print_heart_red(&format!("🔧 [DEBUG] Executing tool: {} with args: {}", &tool_call.function.name, &tool_call.function.arguments), true);
+                        if chat.get_inference_debug() {
+                            print_heart_red(&format!("🔧 [DEBUG] Executing tool: {} with args: {}", &tool_call.function.name, &tool_call.function.arguments), true);
+                        }
                         print_heart_red(&format!("TOOL: {} {}", &tool_call.function.name, &tool_call.function.arguments), true);
                         let tool_result = {
                           let _tool_guard = apchat_vty::ToolGuard::new_with_tool_name(&tool_call.function.name);
-                          print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard created - counter incremented"), true);
+                          if chat.get_inference_debug() {
+                            print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard created - counter incremented"), true);
+                          }
                           match chat.execute_tool(
                             &tool_call.function.name,
                             &tool_call.function.arguments,
                           ).await {
                             Ok(r) => {
-                              print_heart_yellow(&format!("✅ [DEBUG] Tool '{}' executed successfully", &tool_call.function.name), true);
+                              if chat.get_inference_debug() {
+                                print_heart_yellow(&format!("✅ [DEBUG] Tool '{}' executed successfully", &tool_call.function.name), true);
+                              }
                               r
                             },
                             Err(e) => {
@@ -951,7 +957,9 @@ async fn process_llm_response(
                             }
                           }
                         };
-                        print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard dropped - counter decremented"), true);
+                        if chat.get_inference_debug() {
+                            print_heart_yellow(&format!("🔧 [DEBUG] ToolGuard dropped - counter decremented"), true);
+                        }
                         print_heart_red(&format!("TOOL-RESULT: {}", &tool_result), true);
 
                         // For read_image tool, the result is a data: URI that should be treated as an image
