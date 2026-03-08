@@ -11,6 +11,7 @@ use crate::mspc::MspcMessage;
 use crate::chat::history::{intelligent_compaction, calculate_conversation_size};
 
 /// Result of attempting to handle a slash command.
+#[derive(Debug, PartialEq)]
 pub enum CommandResult {
     /// Command was handled; continue to next loop iteration.
     Handled,
@@ -40,6 +41,7 @@ pub async fn dispatch_command(
     if line == "/execute-plan"                                            { return cmd_skill_activate(chat, "executing-plans", "Executing-plans",  "🚀", "I'll execute the plan in batches with review checkpoints.").await; }
     if line == "/compact"                                                 { return cmd_compact(chat).await; }
     if line == "/confirm"                                                 { return cmd_confirm(chat); }
+    if line.starts_with("/set model url")                                 { return cmd_set_model_url(chat, line, current_model_shared).await; }
 
     CommandResult::NotACommand
 }
@@ -422,4 +424,85 @@ fn cmd_confirm(chat: &mut APChat) -> CommandResult {
     let current_state = chat.policy_manager.is_allow_all();
     print_heart_red(&format!("{} Auto-confirm: {}", "📋".bright_cyan(), if current_state {"enabled"} else {"disabled"}), true);
     CommandResult::Handled
+}
+
+/// Handle /set model url command
+/// Syntax:
+///   /set model url              - Show current URLs for all models
+///   /set model url <url>        - Set URL for all models
+///   /set model url <color> <url> - Set URL for specific model (blu/grn/red)
+async fn cmd_set_model_url(
+    chat: &mut APChat,
+    line: &str,
+    _current_model_shared: &Arc<std::sync::RwLock<ModelColor>>,
+) -> CommandResult {
+    // Remove "/set model url" prefix and trim
+    let args = line.strip_prefix("/set model url").unwrap_or(line).trim();
+
+    if args.is_empty() {
+        // "/set model url" - show current URLs
+        print_heart_red(&format!("{} Current API URLs:", "🔗".bright_cyan()), true);
+        print_heart_red(&format!("  blu: {}", display_url(chat.client_config.get_api_url(ModelColor::BluModel))), true);
+        print_heart_red(&format!("  grn: {}", display_url(chat.client_config.get_api_url(ModelColor::GrnModel))), true);
+        print_heart_red(&format!("  red: {}", display_url(chat.client_config.get_api_url(ModelColor::RedModel))), true);
+        return CommandResult::Handled;
+    }
+
+    if args == "help" || args == "--help" || args == "-h" {
+        // "/set model url help" - show help
+        print_heart_red(&format!("{} Set model API URL commands:", "🔗".bright_cyan()), true);
+        print_heart_red(&format!("  /set model url              - Show current URLs"), true);
+        print_heart_red(&format!("  /set model url <url>        - Set URL for all models"), true);
+        print_heart_red(&format!("  /set model url <color> <url> - Set URL for specific model"), true);
+        print_heart_red(&format!("  Available colors: blu, grn, red"), true);
+        print_heart_red(&format!("  Examples:"), true);
+        print_heart_red(&format!("    /set model url http://localhost:8080/v1"), true);
+        print_heart_red(&format!("    /set model url blu http://localhost:8080/v1"), true);
+        return CommandResult::Handled;
+    }
+
+    let parts: Vec<&str> = args.split_whitespace().collect();
+
+    if parts.len() == 1 {
+        // "/set model url <url>" - set URL for all models
+        let url = parts[0];
+        chat.client_config.set_api_url(ModelColor::BluModel, Some(url.to_string()));
+        chat.client_config.set_api_url(ModelColor::GrnModel, Some(url.to_string()));
+        chat.client_config.set_api_url(ModelColor::RedModel, Some(url.to_string()));
+        print_heart_red(&format!("{} API URL set for all models: {}", "✓".bright_green(), url), true);
+    } else if parts.len() >= 2 {
+        // "/set model url <color> <url>" - set URL for specific model
+        let color_str = parts[0].to_lowercase();
+        let url = parts[1];
+
+        match color_str.as_str() {
+            "blu" | "blue" => {
+                chat.client_config.set_api_url(ModelColor::BluModel, Some(url.to_string()));
+                print_heart_red(&format!("{} API URL set for blu model: {}", "✓".bright_green(), url), true);
+            }
+            "grn" | "green" => {
+                chat.client_config.set_api_url(ModelColor::GrnModel, Some(url.to_string()));
+                print_heart_red(&format!("{} API URL set for grn model: {}", "✓".bright_green(), url), true);
+            }
+            "red" => {
+                chat.client_config.set_api_url(ModelColor::RedModel, Some(url.to_string()));
+                print_heart_red(&format!("{} API URL set for red model: {}", "✓".bright_green(), url), true);
+            }
+            _ => {
+                print_heart_yellow(&format!("{} Invalid model color: '{}'. Available: blu, grn, red", "❌".bright_red(), color_str), true);
+            }
+        }
+    } else {
+        print_heart_yellow(&format!("{} Invalid command syntax. Use /set model url help for usage.", "❌".bright_red()), true);
+    }
+
+    CommandResult::Handled
+}
+
+/// Helper function to display URL in a user-friendly format
+fn display_url(url: Option<&String>) -> String {
+    match url {
+        Some(u) => format!("{}", u.bright_blue()),
+        None => "not set".bright_black().to_string(),
+    }
 }

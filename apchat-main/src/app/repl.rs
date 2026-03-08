@@ -1,6 +1,7 @@
 #![deny(unused_must_use)]
 mod init;
 mod commands;
+mod commands_tests;
 mod input_router;
 pub mod llm_task;
 
@@ -1046,6 +1047,7 @@ async fn process_llm_response(
 mod repl_compact_tests {
     use crate::APChat;
     use apchat_models::{Message, ModelColor};
+    use apchat_models::types::ContentPart;
     use std::sync::Arc;
     use tokio::sync::Mutex;
     use tempfile::TempDir;
@@ -1053,6 +1055,7 @@ mod repl_compact_tests {
     use apchat_toolcore::ToolRegistry;
     use apchat_terminal::TerminalManager;
     use apchat_todo::TodoManager;
+    use crate::config::FeatureFlags;
 
     async fn create_test_chat() -> APChat {
         let temp_dir = TempDir::new().unwrap();
@@ -1069,13 +1072,15 @@ mod repl_compact_tests {
             tool_registry: ToolRegistry::new(),
             client_config: crate::config::ClientConfig::new(),
             policy_manager: PolicyManager::new(),
-            terminal_manager: Arc::new(Mutex::new(TerminalManager::new(work_dir))),
+            terminal_manager: Arc::new(Mutex::new(TerminalManager::new(work_dir.clone()))),
             skill_registry: None,
             non_interactive: false,
             todo_manager: Arc::new(TodoManager::new()),
             stream_responses: false,
             verbose: false,
             debug_level: 0,
+            inference_debug: false,
+            webex_debug: false,
             process_id: 12345, // Fixed for testing
             readline_history: None,
             content_limiter: None,
@@ -1087,6 +1092,8 @@ mod repl_compact_tests {
             context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
             summarize_subagents: true,
             mcp_clients: Vec::new(),
+            feature_flags: FeatureFlags::default(),
+            bogus_ack_msg: None,
         }
     }
 
