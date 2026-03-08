@@ -39,6 +39,7 @@ impl AnthropicLlmClient {
             .tcp_nodelay(true)  // Disable Nagle's algorithm for immediate transmission
             .pool_max_idle_per_host(0)  // Disable connection pooling to avoid stale connections
             .timeout(std::time::Duration::from_secs(300))  // 5 minute timeout for long streams
+            .user_agent("apchat/1.0.0 (https://github.com/ayourtch-llm/apchat)")
             .build()
             .expect("Failed to build HTTP client");
 

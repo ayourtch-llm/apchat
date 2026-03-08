@@ -20,12 +20,17 @@ pub struct GroqLlmClient {
 
 impl GroqLlmClient {
     pub fn new(api_key: String, model: String, api_url: String, agent_name: String) -> Self {
+        let client = reqwest::Client::builder()
+            .user_agent("apchat/1.0.0 (https://github.com/ayourtch-llm/apchat)")
+            .build()
+            .expect("Failed to build HTTP client");
+
         Self {
             api_key,
             model,
             api_url,
             agent_name,
-            client: reqwest::Client::new(),
+            client,
             request_overrides: std::sync::Mutex::new(None),
         }
     }
