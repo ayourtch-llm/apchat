@@ -400,6 +400,19 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "layout".to_string()],
         );
         print_heart_red("✓ PPTX delete element tool enabled", true);
+
+        // Register text formatting tools (Priority 2 from wishlist)
+        registry.register_with_categories(
+            FormatTextOnSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "formatting".to_string()],
+        );
+        print_heart_red("✓ PPTX text formatting tool enabled", true);
+
+        registry.register_with_categories(
+            SetBulletStyleTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "formatting".to_string()],
+        );
+        print_heart_red("✓ PPTX bullet style tool enabled", true);
     }
 
     registry
