@@ -191,42 +191,30 @@ fn generate_transition_xml(
         _ => "p:fade", // Default to fade
     };
 
-    let duration_ms = (duration * 1000.0) as u32;
-
-    let mut xml = format!(r#"<p:transition{}"#, transition_elem);
-
+    // Build transition element with proper nested structure
+    let mut inner_elem = format!("<{}", transition_elem);
+    
     // Add transition-specific attributes
     match transition_type.to_lowercase().as_str() {
         "push" | "wipe" => {
-            xml.push_str(r#" dir="l""#); // Default direction: from left
+            inner_elem.push_str(r#" dir="l""#); // Default direction: from left
         }
         "split" => {
-            xml.push_str(r#" splice="1""#); // Split from center
+            inner_elem.push_str(r#" splice="1""#); // Split from center
         }
         _ => {}
     }
-
-    // Add auto-advance timing
-    if let Some(after) = advance_after {
-        let after_ms = (after * 1000.0) as u32;
-        xml.push_str(&format!(r#" auto="1"><p:tm dur="{}" xmlns=""/></p:transition>"#, after_ms));
-    } else {
-        xml.push('>');
-    }
-
-    // Add duration if specified
+    
+    // Add duration attribute
+    let duration_ms = (duration * 1000.0) as u32;
     if duration > 0.0 {
-        // Note: Duration is handled by PowerPoint viewer based on transition type
+        inner_elem.push_str(&format!(r#" dur="{}""#, duration_ms));
     }
+    
+    inner_elem.push_str("/>");
 
-    // Add advance settings
-    if !advance_on_click {
-        xml.push_str(r#"<p:advTm p:advClick="0"/>"#);
-    }
-
-    if !xml.ends_with("</p:transition>") {
-        xml.push_str("</p:transition>");
-    }
+    // Build complete transition structure
+    let mut xml = format!(r#"<p:transition>{}</p:transition>"#, inner_elem);
 
     xml
 }
