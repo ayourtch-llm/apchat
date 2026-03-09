@@ -38,3 +38,7 @@ current_instruction.md
 .DS_Store
 Thumbs.db
 logs/terminals/
+
+# PowerPoint presentations (generated files)
+*.pptx
+*.pptm
