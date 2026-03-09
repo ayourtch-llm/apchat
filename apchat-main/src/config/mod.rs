@@ -413,6 +413,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "formatting".to_string()],
         );
         print_heart_red("✓ PPTX bullet style tool enabled", true);
+
+        // Register presentation operations tools (Priority 6 from wishlist)
+        registry.register_with_categories(
+            CopySlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "operations".to_string()],
+        );
+        print_heart_red("✓ PPTX copy slide tool enabled", true);
     }
 
     registry
