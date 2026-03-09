@@ -2869,20 +2869,26 @@ fn generate_chart_xml(
             s.values.len(), values_xml
         );
 
-        series_xml.push_str(&format!(
-            r#"<c:ser>
+        // Build series name cache
+let series_name_cache = format!(
+    r#"<c:strCache><c:ptCount val="1"><c:pt idx="0"><c:v>{}</c:v></c:pt></c:strCache>"#,
+    escape_xml(&s.name)
+);
+
+series_xml.push_str(&format!(
+    r#"<c:ser>
 <c:idx val="{}"/>
 <c:order val="{}"/>
 <c:tx><c:strRef>{}</c:strRef></c:tx>
 <c:cat><c:strRef>{}</c:strRef></c:cat>
 <c:val><c:numRef>{}</c:numRef></c:val>
 </c:ser>"#,
-            idx,
-            idx,
-            cat_cache,
-            cat_cache,
-            val_cache
-        ));
+    idx,
+    idx,
+    series_name_cache,
+    cat_cache,
+    val_cache
+));
     }
 
     format!(
