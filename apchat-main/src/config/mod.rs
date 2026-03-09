@@ -427,6 +427,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "shapes".to_string()],
         );
         print_heart_red("✓ PPTX add shape tool enabled", true);
+
+        // Register advanced layout tools (Priority 4 from wishlist)
+        registry.register_with_categories(
+            SetElementZOrderTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "layout".to_string()],
+        );
+        print_heart_red("✓ PPTX z-order tool enabled", true);
     }
 
     registry
