@@ -2850,7 +2850,7 @@ fn generate_chart_xml(
         ));
     }
     let cat_cache = format!(
-        r#"<c:strCache><c:ptCount val="{}">{}</c:strCache>"#,
+        r#"<c:strCache><c:ptCount val="{}"/>{}</c:strCache>"#,
         categories.len(), cats_xml
     );
 
@@ -2865,13 +2865,13 @@ fn generate_chart_xml(
             ));
         }
         let val_cache = format!(
-            r#"<c:numCache><c:ptCount val="{}">{}</c:numCache>"#,
+            r#"<c:numCache><c:ptCount val="{}"/>{}</c:numCache>"#,
             s.values.len(), values_xml
         );
 
         // Build series name cache
 let series_name_cache = format!(
-    r#"<c:strCache><c:ptCount val="1"><c:pt idx="0"><c:v>{}</c:v></c:pt></c:strCache>"#,
+    r#"<c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>{}</c:v></c:pt></c:strCache>"#,
     escape_xml(&s.name)
 );
 
