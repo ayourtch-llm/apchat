@@ -387,6 +387,19 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "animation".to_string()],
         );
         print_heart_red("✓ PPTX element animation tool enabled", true);
+
+        // Register element editing tools (Priority 1 from wishlist)
+        registry.register_with_categories(
+            EditElementPropertiesTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "layout".to_string()],
+        );
+        print_heart_red("✓ PPTX edit element properties tool enabled", true);
+
+        registry.register_with_categories(
+            DeleteElementFromSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "layout".to_string()],
+        );
+        print_heart_red("✓ PPTX delete element tool enabled", true);
     }
 
     registry

@@ -46,6 +46,7 @@ pub mod template_impl;
 pub mod pptx_advanced_reader;
 pub mod pptx_image_tools;
 pub mod pptx_transitions;
+pub mod pptx_element_edit;
 
 #[cfg(feature = "forecasting")]
 pub mod forecasting;
@@ -82,5 +83,6 @@ pub use pptx_apply_style::*;
 pub use pptx_advanced_reader::*;
 pub use pptx_image_tools::*;
 pub use pptx_transitions::*;
+pub use pptx_element_edit::*;
 
 
