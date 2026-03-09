@@ -627,34 +627,32 @@ fn extract_transition(
         let content = String::from_utf8_lossy(data).to_string();
 
         use regex::Regex;
-        if let Some(transition_match) = Regex::new(r#"<p:transition[^>]*>"#)
+        // Look for <p:transition>...</p:transition> block
+        if let Some(transition_match) = Regex::new(r#"(?s)<p:transition>(.*?)</p:transition>"#)
             .unwrap()
             .captures(&content)
         {
-            let transition_xml = transition_match.get(0).unwrap().as_str();
+            let transition_inner = transition_match.get(1).unwrap().as_str();
 
-            // Extract transition type from attributes
-            let transition_type = Regex::new(r#"p:transition\s+([^>\s]+)"#)
+            // Extract transition type from child element (e.g., <p:fade dur="800"/>)
+            let transition_type = Regex::new(r#"<p:(\w+)"#)
                 .unwrap()
-                .captures(transition_xml)
+                .captures(transition_inner)
                 .and_then(|c| c.get(1))
                 .map(|m| m.as_str().to_string())
                 .unwrap_or_else(|| "none".to_string());
 
-            // Extract duration
-            let duration = Regex::new(r#"<p:tm>[^>]*dur="([^"]*)""#)
+            // Extract duration from dur attribute
+            let duration = Regex::new(r#"dur="(\d+)"#)
                 .unwrap()
-                .captures(transition_xml)
+                .captures(transition_inner)
                 .and_then(|c| c.get(1))
-                .and_then(|m| m.as_str().parse().ok());
+                .and_then(|m| m.as_str().parse::<f64>().ok())
+                .map(|ms| ms / 1000.0); // Convert ms to seconds
 
-            // Extract advance settings
-            let advance_on_click = !transition_xml.contains("auto");
-            let advance_after_time = Regex::new(r#"<p:tm>[^>]*dur="([^"]*)""#)
-                .unwrap()
-                .captures(transition_xml)
-                .and_then(|c| c.get(1))
-                .and_then(|m| m.as_str().parse().ok());
+            // Check for auto-advance
+            let advance_on_click = !transition_inner.contains("auto=\"1\"");
+            let advance_after_time = None; // Not currently supported in our implementation
 
             return Ok(Some(TransitionInfo {
                 transition_type,
