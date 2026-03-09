@@ -434,6 +434,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "layout".to_string()],
         );
         print_heart_red("✓ PPTX z-order tool enabled", true);
+
+        // Register charts & tables tools (Priority 5 from wishlist)
+        registry.register_with_categories(
+            AddTableToSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "data".to_string()],
+        );
+        print_heart_red("✓ PPTX add table tool enabled", true);
     }
 
     registry
