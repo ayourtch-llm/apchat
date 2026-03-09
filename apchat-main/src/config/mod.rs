@@ -448,6 +448,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "operations".to_string()],
         );
         print_heart_red("✓ PPTX merge presentations tool enabled", true);
+
+        // Register THE FINAL BOSS - charts! (Priority 5)
+        registry.register_with_categories(
+            AddChartToSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "data".to_string(), "charts".to_string()],
+        );
+        print_heart_red("✓ PPTX add chart tool enabled - 100% COMPLETE! 🏆", true);
     }
 
     registry
