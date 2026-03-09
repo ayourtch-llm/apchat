@@ -10,7 +10,6 @@ pub fn create_presentation_from_template(
     template_path: &str,
     context: &ToolContext,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-
     // Read template
     let template_full_path = context.work_dir.join(template_path);
     if !template_full_path.exists() {
@@ -21,14 +20,14 @@ pub fn create_presentation_from_template(
 
     // Create new archive
     let mut new_archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
-    let options = zip::write::FileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let options =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     // Copy all template files except slides and [Content_Types].xml
     for i in 0..template_archive.len() {
         let mut entry = template_archive.by_index(i)?;
         let entry_name = entry.name().to_string();
-        
+
         // Skip template slide XML files (we'll create new ones)
         if entry_name.starts_with("ppt/slides/slide") && entry_name.ends_with(".xml") {
             continue;
@@ -52,10 +51,8 @@ pub fn create_presentation_from_template(
         new_archive.write_all(&buf)?;
     }
 
-    // Find appropriate slide layouts from template
-    // Typically: layout 1 = content slide, layout 2 = title slide (based on Cisco template)
-    let title_layout_id = 2;
-    let content_layout_id = 1;
+    // Find appropriate slide layouts from template by reading slideLayouts XML
+    let (title_layout_id, content_layout_id) = find_layout_ids(&mut template_archive)?;
 
     // Generate new presentation.xml with correct slide references
     let mut pres_content = format!(
@@ -66,22 +63,22 @@ pub fn create_presentation_from_template(
 </p:sldMasterIdLst>
 <p:sldIdLst>"#
     );
-    
+
     for (idx, _) in slides.iter().enumerate() {
         pres_content.push_str(&format!(
-            r#"<p:sldId id="{}" r:id="rId{}"/>"#, 
-            256 + idx, 
+            r#"<p:sldId id="{}" r:id="rId{}"/>"#,
+            256 + idx,
             2 + idx
         ));
     }
-    
+
     pres_content.push_str(
         r#"</p:sldIdLst>
 <p:sldSz cx="9144000" cy="5143500" type="screen16x9"/>
 <p:notesSz cx="6858000" cy="9144000"/>
-</p:presentation>"#
+</p:presentation>"#,
     );
-    
+
     new_archive.start_file("ppt/presentation.xml", options.clone())?;
     new_archive.write_all(pres_content.as_bytes())?;
 
@@ -90,8 +87,9 @@ pub fn create_presentation_from_template(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
-"#);
-    
+"#
+    );
+
     for (idx, _) in slides.iter().enumerate() {
         rels_content.push_str(&format!(
             r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{}.xml"/>"#,
@@ -99,9 +97,9 @@ pub fn create_presentation_from_template(
         ));
         rels_content.push('\n');
     }
-    
+
     rels_content.push_str("</Relationships>");
-    
+
     new_archive.start_file("ppt/_rels/presentation.xml.rels", options.clone())?;
     new_archive.write_all(rels_content.as_bytes())?;
 
@@ -114,28 +112,34 @@ pub fn create_presentation_from_template(
         } else {
             content_layout_id
         };
-        
+
         // Extract title and bullets from slide
         let title_text = &slide.title;
         let bullets: Vec<&str> = slide.bullets.iter().map(|s| s.text.as_str()).collect();
-        
+
         // Build slide XML
         let slide_xml = build_slide_xml(idx, title_text, &bullets, layout_id, title_layout_id);
-        
-        new_archive.start_file(&format!("ppt/slides/slide{}.xml", slide_num), options.clone())?;
+
+        new_archive.start_file(
+            &format!("ppt/slides/slide{}.xml", slide_num),
+            options.clone(),
+        )?;
         new_archive.write_all(slide_xml.as_bytes())?;
-        
+
         // Create slide relationships (referencing the layout)
         let slide_rels = format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout{}.xml"/>
 </Relationships>
-"#, 
+"#,
             layout_id
         );
-        
-        new_archive.start_file(&format!("ppt/slides/_rels/slide{}.xml.rels", slide_num), options.clone())?;
+
+        new_archive.start_file(
+            &format!("ppt/slides/_rels/slide{}.xml.rels", slide_num),
+            options.clone(),
+        )?;
         new_archive.write_all(slide_rels.as_bytes())?;
     }
 
@@ -143,23 +147,24 @@ pub fn create_presentation_from_template(
     if let Ok(mut ct_entry) = template_archive.by_name("[Content_Types].xml") {
         let mut ct_content = String::new();
         ct_entry.read_to_string(&mut ct_content)?;
-        
+
         // Remove all old slide references (slide1.xml through slideN.xml)
         use regex::Regex;
-        let slide_re = Regex::new(r#"<Override PartName="/ppt/slides/slide\d+\.xml"[^>]*/>"#).unwrap();
+        let slide_re =
+            Regex::new(r#"<Override PartName="/ppt/slides/slide\d+\.xml"[^>]*/>"#).unwrap();
         ct_content = slide_re.replace_all(&ct_content, "").to_string();
-        
+
         // Add override entries for our new slides
         for (idx, _) in slides.iter().enumerate() {
             let slide_num = idx + 1;
-            let slide_entry = format!(r#"<Override PartName="/ppt/slides/slide{}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>"#, slide_num);
-            // Insert before closing tag
-            ct_content = ct_content.replace(
-                "</Types>",
-                &format!("{}\n</Types>", slide_entry)
+            let slide_entry = format!(
+                r#"<Override PartName="/ppt/slides/slide{}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>"#,
+                slide_num
             );
+            // Insert before closing tag
+            ct_content = ct_content.replace("</Types>", &format!("{}\n</Types>", slide_entry));
         }
-        
+
         new_archive.start_file("[Content_Types].xml", options.clone())?;
         new_archive.write_all(ct_content.as_bytes())?;
     }
@@ -195,12 +200,16 @@ fn build_slide_xml(
 <a:chExt cx="0" cy="0"/>
 </a:xfrm>
 </p:grpSpPr>
-"#, 
+"#,
         256 + idx
     );
-    
+
     // Add title placeholder
-    let ph_type = if layout_id == title_layout_id { "ctrTitle" } else { "title" };
+    let ph_type = if layout_id == title_layout_id {
+        "ctrTitle"
+    } else {
+        "title"
+    };
     slide_content.push_str(&format!(
         r#"<p:sp>
 <p:nvSpPr>
@@ -221,11 +230,10 @@ fn build_slide_xml(
 </a:p>
 </p:txBody>
 </p:sp>
-"#, 
-        ph_type,
-        title_text
+"#,
+        ph_type, title_text
     ));
-    
+
     // Add subtitle or bullets
     if layout_id == title_layout_id && !bullets.is_empty() {
         // Add subtitle for title slides
@@ -249,7 +257,7 @@ fn build_slide_xml(
 </a:p>
 </p:txBody>
 </p:sp>
-"#, 
+"#,
             bullets[0]
         ));
     } else if !bullets.is_empty() {
@@ -265,9 +273,9 @@ fn build_slide_xml(
 <p:txBody>
 <a:bodyPr lIns="914400" tIns="914400" rIns="914400" bIns="914400"/>
 <a:lstStyle/>
-"#
+"#,
         );
-        
+
         for bullet in bullets {
             slide_content.push_str(&format!(
                 r#"<a:p>
@@ -277,18 +285,18 @@ fn build_slide_xml(
 <a:t>{}</a:t>
 </a:r>
 </a:p>
-"#, 
+"#,
                 bullet
             ));
         }
-        
+
         slide_content.push_str(
             r#"</p:txBody>
 </p:sp>
-"#
+"#,
         );
     }
-    
+
     slide_content.push_str(
         r#"</p:spTree>
 </p:cSld>
@@ -296,8 +304,90 @@ fn build_slide_xml(
 <a:masterClrMapping/>
 </p:clrMapOvr>
 </p:sld>
-"#
+"#,
     );
-    
+
     slide_content
+}
+
+/// Discover slide layout IDs from template by examining slideLayout files
+fn find_layout_ids(
+    template_archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
+) -> Result<(i32, i32), Box<dyn std::error::Error + Send + Sync>> {
+    let mut title_layout_id = 2; // Default fallback
+    let mut content_layout_id = 1; // Default fallback
+
+    // Read presentation.xml to get layout references
+    let mut pres_layout_ids = Vec::new();
+    if let Ok(mut entry) = template_archive.by_name("ppt/presentation.xml") {
+        let mut xml = String::new();
+        entry.read_to_string(&mut xml)?;
+
+        // Extract layout IDs from presentation.xml relationships
+        let layout_re =
+            regex::Regex::new(r#"<p:sldLayoutIdLst[^>]*>(.*?)</p:sldLayoutIdLst>"#).unwrap();
+        if let Some(caps) = layout_re.captures(&xml) {
+            if let Some(layouts) = caps.get(1) {
+                let id_re =
+                    regex::Regex::new(r#"<p:sldLayoutId id="(\d+)"[^>]*type="([^"]*)""#).unwrap();
+                for cap in id_re.captures_iter(layouts.as_str()) {
+                    if let (Some(id_match), Some(type_match)) = (cap.get(1), cap.get(2)) {
+                        if let Ok(id) = id_match.as_str().parse::<i32>() {
+                            let layout_type = type_match.as_str();
+                            pres_layout_ids.push((id, layout_type.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Find title and content layout IDs from discovered layouts
+    for (id, layout_type) in &pres_layout_ids {
+        if layout_type == "title" || layout_type == "ctrTitle" {
+            title_layout_id = *id;
+        } else if layout_type == "body" || layout_type == "obj" {
+            content_layout_id = *id;
+        }
+    }
+
+    // If not found in presentation.xml, try reading individual layout files
+    if title_layout_id == 2 && content_layout_id == 1 {
+        // First, collect all layout file names and numbers
+        let mut layout_files: Vec<(String, i32)> = Vec::new();
+        for i in 0..template_archive.len() {
+            let entry = template_archive.by_index(i)?;
+            let entry_name = entry.name().to_string();
+
+            if entry_name.starts_with("ppt/slideLayouts/slideLayout")
+                && entry_name.ends_with(".xml")
+            {
+                // Extract layout number from filename
+                if let Some(num_str) = entry_name
+                    .strip_prefix("ppt/slideLayouts/slideLayout")
+                    .and_then(|s| s.strip_suffix(".xml"))
+                {
+                    if let Ok(num) = num_str.parse::<i32>() {
+                        layout_files.push((entry_name, num));
+                    }
+                }
+            }
+        }
+
+        // Now read each layout file separately
+        for (entry_name, num) in layout_files {
+            let mut layout_xml = String::new();
+            let mut layout_entry = template_archive.by_name(&entry_name)?;
+            layout_entry.read_to_string(&mut layout_xml)?;
+
+            // Check for title placeholder
+            if layout_xml.contains(r#"type="title""#) || layout_xml.contains(r#"type="ctrTitle""#) {
+                title_layout_id = num;
+            } else if layout_xml.contains(r#"type="body""#) {
+                content_layout_id = num;
+            }
+        }
+    }
+
+    Ok((title_layout_id, content_layout_id))
 }

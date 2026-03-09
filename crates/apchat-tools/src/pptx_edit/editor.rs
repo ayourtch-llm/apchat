@@ -230,13 +230,184 @@ At least one of title or bullets must be provided."
             return ToolResult::error(format!("File not found: {}", path));
         }
 
-        // For now, this is a placeholder - full implementation would require
-        // more complex XML manipulation
+        // Read the PPTX as ZIP
+        let file_data = match std::fs::read(&full_path) {
+            Ok(data) => data,
+            Err(e) => return ToolResult::error(format!("Failed to read file: {}", e)),
+        };
+
+        let mut archive = match zip::ZipArchive::new(Cursor::new(&file_data)) {
+            Ok(a) => a,
+            Err(e) => return ToolResult::error(format!("Failed to open ZIP: {}", e)),
+        };
+
+        let slide_path = format!("ppt/slides/slide{}.xml", slide_number);
+        
+        // Read and modify the slide XML
+        let mut slide_xml = {
+            let mut slide_file = match archive.by_name(&slide_path) {
+                Ok(f) => f,
+                Err(e) => return ToolResult::error(format!("Slide {} not found: {}", slide_number, e)),
+            };
+            let mut xml = String::new();
+            if let Err(e) = slide_file.read_to_string(&mut xml) {
+                return ToolResult::error(format!("Failed to read slide: {}", e));
+            }
+            xml
+        };
+
+        // Modify title if provided
+        if let Some(new_title) = &title {
+            slide_xml = update_slide_title(&slide_xml, new_title);
+        }
+
+        // Modify bullets if provided
+        if let Some(new_bullets) = &bullets {
+            slide_xml = update_slide_bullets(&slide_xml, new_bullets);
+        }
+
+        // Rebuild the ZIP with modified slide
+        let mut new_archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::FileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Collect all entries first to avoid borrow issues
+        let entries: Vec<(String, Vec<u8>)> = (0..archive.len())
+            .filter_map(|i| {
+                let mut entry = archive.by_index(i).ok()?;
+                let entry_name = entry.name().to_string();
+                
+                if entry_name == slide_path {
+                    // Use modified slide
+                    Some((entry_name, slide_xml.as_bytes().to_vec()))
+                } else {
+                    // Copy original entry
+                    let mut buf = Vec::new();
+                    entry.read_to_end(&mut buf).ok()?;
+                    Some((entry_name, buf))
+                }
+            })
+            .collect();
+
+        // Write all entries
+        for (name, data) in entries {
+            if let Err(e) = new_archive.start_file(&name, options) {
+                return ToolResult::error(format!("Failed to start file: {}", e));
+            }
+            if let Err(e) = new_archive.write_all(&data) {
+                return ToolResult::error(format!("Failed to write data: {}", e));
+            }
+        }
+
+        let cursor = match new_archive.finish() {
+            Ok(c) => c,
+            Err(e) => return ToolResult::error(format!("Failed to finish archive: {}", e)),
+        };
+        let new_data = cursor.into_inner();
+
+        // Save the modified PPTX
+        if let Err(e) = std::fs::write(&full_path, &new_data) {
+            return ToolResult::error(format!("Failed to save file: {}", e));
+        }
+
         ToolResult::success(format!(
-            "Edit slide {} in '{}' - title: {:?}, bullets: {:?}",
-            slide_number, path, title, bullets.as_ref().map(|b| b.len())
+            "Successfully updated slide {} in '{}'",
+            slide_number, path
         ))
     }
+}
+
+/// Update the title text in slide XML
+fn update_slide_title(slide_xml: &str, new_title: &str) -> String {
+    let escaped_title = xml_escape(new_title);
+    
+    // Find title placeholder and update its text
+    // Pattern: <a:t>old_text</a:t> within title section
+    if let Some(title_start) = slide_xml.find(r#"<p:ph type="title""#) {
+        // Find the next <a:t> tag after the title placeholder
+        if let Some(text_start) = slide_xml[title_start..].find("<a:t>") {
+            let abs_text_start = title_start + text_start;
+            if let Some(text_end) = slide_xml[abs_text_start..].find("</a:t>") {
+                let abs_text_end = abs_text_start + text_end + "</a:t>".len();
+                return format!("{}{}{}", 
+                    &slide_xml[..abs_text_start + "<a:t>".len()],
+                    escaped_title,
+                    &slide_xml[abs_text_end..]
+                );
+            }
+        }
+    }
+    
+    // Fallback: try to find any title text (ctrTitle)
+    if let Some(title_start) = slide_xml.find(r#"<p:ph type="ctrTitle""#) {
+        if let Some(text_start) = slide_xml[title_start..].find("<a:t>") {
+            let abs_text_start = title_start + text_start;
+            if let Some(text_end) = slide_xml[abs_text_start..].find("</a:t>") {
+                let abs_text_end = abs_text_start + text_end + "</a:t>".len();
+                return format!("{}{}{}", 
+                    &slide_xml[..abs_text_start + "<a:t>".len()],
+                    escaped_title,
+                    &slide_xml[abs_text_end..]
+                );
+            }
+        }
+    }
+    
+    slide_xml.to_string()
+}
+
+/// Update the bullet points in slide XML
+fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> String {
+    use regex::Regex;
+    
+    // Find body/content placeholder section
+    let body_section = if let Some(idx) = slide_xml.find(r#"<p:ph type="body""#) {
+        idx
+    } else if let Some(idx) = slide_xml.find(r#"<p:ph idx="1""#) {
+        idx
+    } else {
+        return slide_xml.to_string(); // No body placeholder found
+    };
+    
+    // Find all bullet paragraphs in body section
+    let bullet_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
+    let mut bullet_matches: Vec<_> = bullet_re.find_iter(&slide_xml[body_section..]).collect();
+    
+    if bullet_matches.is_empty() {
+        return slide_xml.to_string();
+    }
+    
+    // Skip first paragraph (usually has title text)
+    if bullet_matches.len() == 1 {
+        return slide_xml.to_string();
+    }
+    
+    let mut result = slide_xml.to_string();
+    
+    // Replace existing bullets
+    for (i, bullet_match) in bullet_matches.iter().enumerate().skip(1) {
+        if i - 1 < new_bullets.len() {
+            let new_bullet_xml = format!(r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>{}</a:t></a:r></a:p>"#, xml_escape(&new_bullets[i - 1]));
+            let start = body_section + bullet_match.start();
+            let end = body_section + bullet_match.end();
+            result = format!("{}{}{}", &result[..start], new_bullet_xml, &result[end..]);
+        }
+    }
+    
+    // Add additional bullets if we have more than existing
+    if new_bullets.len() >= bullet_matches.len() - 1 {
+        // Find position to insert new bullets (before closing </p:txBody>)
+        if let Some(txbody_close) = result[body_section..].find("</p:txBody>") {
+            let insert_pos = body_section + txbody_close;
+            let mut additional_bullets = String::new();
+            for i in (bullet_matches.len() - 1)..new_bullets.len() {
+                additional_bullets.push_str(&format!(r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>{}</a:t></a:r></a:p>"#, xml_escape(&new_bullets[i])));
+            }
+            result = format!("{}{}{}", &result[..insert_pos], additional_bullets, &result[insert_pos..]);
+        }
+    }
+    
+    result
 }
 
 /// Tool for adding a new slide to a PPTX
@@ -337,29 +508,52 @@ Returns the slide number of the newly added slide."
             xml
         };
 
-        // Generate new slide XML based on template structure
-        let bullets_xml = bullets.as_ref().map(|b| {
-            b.iter().map(|text| {
-                format!("<a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr/><a:t>{}</a:t></a:r></a:p>", xml_escape(text))
-            }).collect::<Vec<_>>().join("\n")
-        }).unwrap_or_default();
-
         let title_xml = xml_escape(&title);
 
-        // Create new slide XML - use content layout structure
-        let new_slide_xml = format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        // Create new slide XML with proper structure
+        let new_slide_xml = if let Some(bullet_list) = bullets.as_ref() {
+            // Build title shape
+            let mut shape_xml = format!(r#"<p:sp><a:xfrm><a:off x="914400" y="1746250"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><p:nvSpPr><p:cNvPr id="1" name="Title 1"/><p:cNvSpPr><a:spLocks noGrp="1" noOffDuplx="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3200"/><a:t>{}</a:t></a:r></a:p></p:txBody></p:sp>"#, title_xml);
+            
+            // Build body shape with bullets if present
+            if !bullet_list.is_empty() {
+                let bullets_content = bullet_list.iter()
+                    .map(|text| {
+                        format!(r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>{}</a:t></a:r></a:p>"#, xml_escape(text))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                
+                shape_xml.push_str(&format!(r#"<p:sp><a:xfrm><a:off x="914400" y="3200000"/><a:ext cx="7314960" cy="3500000"/></a:xfrm><p:nvSpPr><p:cNvPr id="2" name="Content Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph idx="1" type="body"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="7314960" cy="3500000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>{}<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:endParaRPr lang="en-US" sz="1800"/></a:p></p:txBody></p:sp>"#, bullets_content));
+            }
+            
+            format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld>
-<p:nvGrpSpPr><p:spId id="2147484624"/><p:nvPr id="2147484625" name=""/></p:nvGrpSpPr>
-<p:grpSp><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:grpSp>
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
 <p:spTree>
-<p:sp><a:xfrm><a:off x="914400" y="1746250"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><p:nvSpPr><p:cNvPr id="1" name="Title 1"/><p:cNvSpPr><a:spLocks noGrp="1" noOffDuplx="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3200"/><a:t>{}</a:t></a:r></a:p></p:txBody></p:sp>
-{}<p:extLst><p:ext uri="{{5E9A0869-5B78-4363-8311-35661356694B}}"><p14:creationId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" id="{{9B997C9E-4786-414C-8634-82D6794E7D0F}}"/></p:ext></p:extLst>
+{}
 </p:spTree>
 <p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
 </p:cSld>
 <p:clrSchemeMap><p:clrMap bg1="phClr0" tx1="phClr1" bg2="phClr2" tx2="phClr3" accEnt="phClr4" hlink="phClr5" folHlink="phClr6"/></p:clrSchemeMap>
-</p:sld>"#, bullets_xml, title_xml);
+</p:sld>"#, shape_xml)
+        } else {
+            // Title-only slide
+            format!(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+<p:spTree>
+<p:sp><a:xfrm><a:off x="914400" y="1746250"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><p:nvSpPr><p:cNvPr id="1" name="Title 1"/><p:cNvSpPr><a:spLocks noGrp="1" noOffDuplx="1"/></p:cNvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="7314960" cy="1378125"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="3200"/><a:t>{}</a:t></a:r></a:p></p:txBody></p:sp>
+</p:spTree>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:cSld>
+<p:clrSchemeMap><p:clrMap bg1="phClr0" tx1="phClr1" bg2="phClr2" tx2="phClr3" accEnt="phClr4" hlink="phClr5" folHlink="phClr6"/></p:clrSchemeMap>
+</p:sld>"#, title_xml)
+        };
 
         // Build new presentation.xml with updated slide references
         let pres_xml_path = "ppt/presentation.xml";

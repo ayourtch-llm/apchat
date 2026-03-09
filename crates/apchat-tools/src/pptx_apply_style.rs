@@ -221,34 +221,77 @@ fn extract_bullets_from_body(xml: &str) -> Vec<String> {
     use regex::Regex;
 
     let mut bullets = Vec::new();
-    let mut first_para_skipped = false;
     
-    // Find all bullet paragraphs
-    // Use (?s) flag to make . match newlines (DOTALL mode)
-    let bullet_re = Regex::new(r#"(?s)<a:p[^>]*>(.*?)</a:p>"#).unwrap();
+    // Find body placeholder section first
+    let body_start = if let Some(idx) = xml.find(r#"<p:ph type="body""#) {
+        idx
+    } else if let Some(idx) = xml.find(r#"<p:ph idx="1""#) {
+        idx
+    } else {
+        // No body placeholder found, try to extract from first content area
+        return extract_all_text_paragraphs(xml, true);
+    };
     
-    for captures in bullet_re.captures_iter(xml) {
-        if let Some(para) = captures.get(1) {
-            // Skip the first paragraph (which is typically the title)
-            if !first_para_skipped {
-                first_para_skipped = true;
-                continue;
+    // Extract text from paragraphs within body section
+    let body_section = &xml[body_start..];
+    
+    // Find all paragraphs in body section
+    let para_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
+    
+    for captures in para_re.captures_iter(body_section) {
+        let para = captures.get(0).unwrap().as_str();
+        
+        // Extract all text runs from this paragraph
+        let text_re = Regex::new(r#"<a:t>([^<]*)</a:t>"#).unwrap();
+        let mut para_text = String::new();
+        
+        for text_match in text_re.captures_iter(para) {
+            if let Some(text) = text_match.get(1) {
+                para_text.push_str(text.as_str());
             }
-            
-            // Extract text from <a:t> tags within this paragraph
-            let text_re = Regex::new(r#"<a:t>([^<]+)</a:t>"#).unwrap();
-            for text_capture in text_re.captures_iter(para.as_str()) {
-                if let Some(text) = text_capture.get(1) {
-                    let text = text.as_str().trim();
-                    if !text.is_empty() {
-                        bullets.push(text.to_string());
-                    }
-                }
-            }
+        }
+        
+        let para_text = para_text.trim();
+        if !para_text.is_empty() {
+            bullets.push(para_text.to_string());
         }
     }
 
     bullets
+}
+
+/// Extract all text paragraphs from XML
+fn extract_all_text_paragraphs(xml: &str, skip_first: bool) -> Vec<String> {
+    use regex::Regex;
+    
+    let mut paragraphs = Vec::new();
+    let para_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
+    
+    for (i, captures) in para_re.captures_iter(xml).enumerate() {
+        // Skip first paragraph if requested (usually title)
+        if skip_first && i == 0 {
+            continue;
+        }
+        
+        let para = captures.get(0).unwrap().as_str();
+        
+        // Extract all text runs from this paragraph (handles multi-run text)
+        let text_re = Regex::new(r#"<a:t>([^<]*)</a:t>"#).unwrap();
+        let mut para_text = String::new();
+        
+        for text_match in text_re.captures_iter(para) {
+            if let Some(text) = text_match.get(1) {
+                para_text.push_str(text.as_str());
+            }
+        }
+        
+        let para_text = para_text.trim();
+        if !para_text.is_empty() {
+            paragraphs.push(para_text.to_string());
+        }
+    }
+    
+    paragraphs
 }
 
 /// Extract presentation title from docProps/core.xml
