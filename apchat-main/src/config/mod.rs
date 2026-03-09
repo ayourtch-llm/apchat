@@ -350,6 +350,43 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "style".to_string()],
         );
         print_heart_red("✓ PPTX apply style tool enabled", true);
+
+        // Register advanced PPTX tools
+        registry.register_with_categories(
+            ReadSlideDetailedTool,
+            vec!["pptx".to_string(), "document".to_string(), "read".to_string(), "advanced".to_string()],
+        );
+        print_heart_red("✓ PPTX detailed slide reader tool enabled", true);
+
+        registry.register_with_categories(
+            AddImageToSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "image".to_string()],
+        );
+        print_heart_red("✓ PPTX add image tool enabled", true);
+
+        registry.register_with_categories(
+            RemoveImageFromSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "image".to_string()],
+        );
+        print_heart_red("✓ PPTX remove image tool enabled", true);
+
+        registry.register_with_categories(
+            SetSlideTransitionTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "transition".to_string()],
+        );
+        print_heart_red("✓ PPTX slide transition tool enabled", true);
+
+        registry.register_with_categories(
+            RemoveSlideTransitionTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "transition".to_string()],
+        );
+        print_heart_red("✓ PPTX remove transition tool enabled", true);
+
+        registry.register_with_categories(
+            SetElementAnimationTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "animation".to_string()],
+        );
+        print_heart_red("✓ PPTX element animation tool enabled", true);
     }
 
     registry
