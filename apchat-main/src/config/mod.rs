@@ -420,6 +420,13 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
             vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "operations".to_string()],
         );
         print_heart_red("✓ PPTX copy slide tool enabled", true);
+
+        // Register shapes & drawing tools (Priority 3 from wishlist)
+        registry.register_with_categories(
+            AddShapeToSlideTool,
+            vec!["pptx".to_string(), "document".to_string(), "edit".to_string(), "shapes".to_string()],
+        );
+        print_heart_red("✓ PPTX add shape tool enabled", true);
     }
 
     registry
