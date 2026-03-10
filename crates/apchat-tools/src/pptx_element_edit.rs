@@ -308,7 +308,27 @@ fn element_matches_selector(
             for attr in event.attributes().flatten() {
                 if attr.key.as_ref() == b"name" {
                     let elem_name = String::from_utf8_lossy(&attr.value);
-                    return elem_name.to_lowercase() == name.to_lowercase();
+                    let elem_name_lower = elem_name.to_lowercase();
+                    
+                    // Exact or case-insensitive match
+                    if elem_name_lower == name.to_lowercase() {
+                        return true;
+                    }
+                    
+                    // For "body" or "content", also match any text-containing shape
+                    // that isn't a title
+                    if (name == "content" || name == "body") {
+                        // Match if name contains "content"
+                        if elem_name_lower.contains("content") {
+                            return true;
+                        }
+                        // Match shapes that aren't titles (fallback for slides without Content element)
+                        if elem_name_lower.contains("shape") && !elem_name_lower.contains("title") {
+                            return true;
+                        }
+                    }
+                    
+                    return false;
                 }
             }
             false
@@ -902,9 +922,22 @@ fn format_text_in_element(
                             let elem_name = String::from_utf8_lossy(&attr.value);
                             let elem_type = get_element_type_from_name(&elem_name);
                             
+                            let elem_name_lower = elem_name.to_lowercase();
+                            let name_lower = match &selector_type {
+                                SelectorType::Name(n) => n.to_lowercase(),
+                                _ => String::new(),
+                            };
+                            
                             let matches = match &selector_type {
                                 SelectorType::Index(idx) => candidate_element_index == *idx,
-                                SelectorType::Name(name) => elem_name.to_lowercase() == name.to_lowercase(),
+                                SelectorType::Name(name) => {
+                                    elem_name_lower == name_lower ||
+                                    // For "body" or "content", also match shapes that aren't titles
+                                    ((name == "content" || name == "body") && (
+                                        elem_name_lower.contains("content") ||
+                                        (elem_name_lower.contains("shape") && !elem_name_lower.contains("title"))
+                                    ))
+                                },
                                 SelectorType::TypeWithIndex(type_prefix, idx) => {
                                     let matches_type = match type_prefix.as_str() {
                                         "textbox" | "text" => elem_type == "text",
@@ -1561,6 +1594,45 @@ mod text_tests {
         assert!(result.is_ok(), "Should find first textbox: {:?}", result.err());
         let modified = result.unwrap();
         assert!(modified.contains(r#"val="FF0000""#), "Should have red color: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_body_matches_shapes() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:rPr sz="3200"/><a:t>Title</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="100" name="roundedRectangle Shape"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:rPr sz="1800"/><a:t>Content Text</a:t></a:r></a:p></p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "body",
+            None,
+            &None,
+            None,
+            None,
+            None,
+            &Some("FFFFFF".to_string()),
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should find shape with 'body' selector: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="FFFFFF""#), "Should have white color: {}", modified);
     }
 
     #[test]
