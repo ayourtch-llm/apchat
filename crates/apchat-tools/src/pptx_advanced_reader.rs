@@ -387,42 +387,74 @@ fn extract_background_info(xml: &str) -> (bool, Option<String>) {
 }
 
 fn extract_transition(xml: &str) -> Option<TransitionInfo> {
-    use regex::Regex;
-    
-    // Look for <p:transition>...</p:transition> block
-    if let Some(transition_match) = Regex::new(r#"(?s)<p:transition>(.*?)</p:transition>"#)
-        .unwrap()
-        .captures(xml)
-    {
-        let transition_inner = transition_match.get(1).unwrap().as_str();
+    let mut reader = Reader::from_str(xml);
+    reader.trim_text(true);
 
-        // Extract transition type from child element
-        let transition_type = Regex::new(r#"<p:(\w+)"#)
-            .unwrap()
-            .captures(transition_inner)
-            .and_then(|c| c.get(1))
-            .map(|m| m.as_str().to_string())
-            .unwrap_or_else(|| "none".to_string());
+    let mut buf = Vec::new();
+    let mut in_transition = false;
+    let mut transition_type = String::new();
+    let mut duration: Option<f64> = None;
+    let mut has_auto = false;
 
-        // Extract duration
-        let duration = Regex::new(r#"dur="(\d+)"#)
-            .unwrap()
-            .captures(transition_inner)
-            .and_then(|c| c.get(1))
-            .and_then(|m| m.as_str().parse::<f64>().ok())
-            .map(|ms| ms / 1000.0);
-
-        let advance_on_click = !transition_inner.contains("auto=\"1\"");
-
-        return Some(TransitionInfo {
-            transition_type,
-            duration,
-            advance_on_click,
-            advance_after_time: None,
-        });
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                
+                // Check for transition element
+                if name.as_ref() == b"p:transition" {
+                    in_transition = true;
+                    // Check for auto attribute
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"auto" {
+                            if String::from_utf8_lossy(&attr.value) == "1" {
+                                has_auto = true;
+                            }
+                        }
+                    }
+                }
+                
+                // Extract transition type from child element (p:fade, p:push, etc.)
+                if in_transition && name.as_ref().starts_with(b"p:") {
+                    let tag_name = String::from_utf8_lossy(name.as_ref());
+                    if tag_name != "p:transition" {
+                        transition_type = tag_name.trim_start_matches("p:").to_string();
+                    }
+                }
+                
+                // Extract duration attribute
+                if in_transition {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"dur" {
+                            if let Ok(dur_ms) = String::from_utf8_lossy(&attr.value).parse::<f64>() {
+                                duration = Some(dur_ms / 1000.0);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if e.name().as_ref() == b"p:transition" {
+                    in_transition = false;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
     }
 
-    None
+    if transition_type.is_empty() {
+        return None;
+    }
+
+    Some(TransitionInfo {
+        transition_type,
+        duration,
+        advance_on_click: !has_auto,
+        advance_after_time: None,
+    })
 }
 
 #[cfg(test)]
