@@ -225,7 +225,7 @@ fn parse_slide_detailed(
                         }
                         if let Some(ref mut elem) = current_element {
                             elem.position = Some(ElementPosition { x, y });
-                        }
+                                                }
                     }
                     b"a:ext" => {
                         // Extract size
@@ -262,6 +262,40 @@ fn parse_slide_detailed(
             Ok(Event::Text(ref e)) => {
                 if in_text_element {
                     current_text.push_str(&String::from_utf8_lossy(e));
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                // Handle self-closing tags like <a:off x="100" y="200"/>
+                match e.name().as_ref() {
+                    b"a:off" => {
+                        let mut x = 0i64;
+                        let mut y = 0i64;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"x" => x = parse_emu(&attr.value),
+                                b"y" => y = parse_emu(&attr.value),
+                                _ => {}
+                            }
+                        }
+                        if let Some(ref mut elem) = current_element {
+                            elem.position = Some(ElementPosition { x, y });
+                        }
+                    }
+                    b"a:ext" => {
+                        let mut cx = 0i64;
+                        let mut cy = 0i64;
+                        for attr in e.attributes().flatten() {
+                            match attr.key.as_ref() {
+                                b"cx" => cx = parse_emu(&attr.value),
+                                b"cy" => cy = parse_emu(&attr.value),
+                                _ => {}
+                            }
+                        }
+                        if let Some(ref mut elem) = current_element {
+                            elem.size = Some(ElementSize { width: cx, height: cy });
+                        }
+                    }
+                    _ => {}
                 }
             }
             Ok(Event::End(ref e)) => {
@@ -466,5 +500,16 @@ mod tests {
         let tool = ReadSlideDetailedTool;
         assert_eq!(tool.name(), "read_slide_detailed");
         assert!(!tool.description().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_emu() {
+        assert_eq!(parse_emu(b"457200"), 457200);
+        assert_eq!(parse_emu(b"0"), 0);
     }
 }
