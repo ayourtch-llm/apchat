@@ -370,7 +370,7 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> String {
     };
     
     // Find all bullet paragraphs in body section
-    let bullet_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
+    let bullet_re = Regex::new(r#"(?s)<a:p[^>]*>.*?</a:p>"#).unwrap();
     let mut bullet_matches: Vec<_> = bullet_re.find_iter(&slide_xml[body_section..]).collect();
     
     if bullet_matches.is_empty() {
