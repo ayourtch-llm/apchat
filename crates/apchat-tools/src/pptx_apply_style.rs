@@ -8,6 +8,8 @@ use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
+use quick_xml::events::Event;
+use quick_xml::Reader;
 
 /// Tool for applying a template style to an existing presentation
 pub struct ApplyPptxStyleTool;
@@ -75,7 +77,7 @@ Parameters:
             Err(e) => return ToolResult::error(format!("Failed to open input presentation: {}", e)),
         };
 
-        // Extract slides from input
+        // Extract slides from input using quick-xml
         let slides = match extract_slides_from_pptx(&mut input_archive) {
             Ok(slides) => slides,
             Err(e) => return ToolResult::error(format!("Failed to extract slides: {}", e)),
@@ -99,54 +101,37 @@ Parameters:
 
         let is_title_slide: Vec<bool> = vec![false; pptx_slides.len()];
 
-        // Get presentation title from metadata or first slide
-        let title = extract_title_from_pptx(&mut input_archive).unwrap_or_else(|_| {
-            slides.first().map(|s| s.title.clone()).unwrap_or_else(|| "Presentation".to_string())
-        });
+        // Read and parse the template
+        let template_full_path = context.work_dir.join(&template_path);
+        if !template_full_path.exists() {
+            return ToolResult::error(format!("Template not found: {}", template_path));
+        }
 
-        let author = extract_author_from_pptx(&mut input_archive).unwrap_or_else(|_| "Unknown".to_string());
+        let template_data = match std::fs::read(&template_full_path) {
+            Ok(data) => data,
+            Err(e) => return ToolResult::error(format!("Failed to read template: {}", e)),
+        };
 
-        // Apply template using the existing function
+        // Extract metadata from template using quick-xml
+        let mut template_archive = match zip::ZipArchive::new(Cursor::new(&template_data)) {
+            Ok(archive) => archive,
+            Err(e) => return ToolResult::error(format!("Failed to open template: {}", e)),
+        };
+
+        let (title, author) = match extract_template_metadata(&mut template_archive) {
+            Ok(metadata) => metadata,
+            Err(e) => return ToolResult::error(format!("Failed to extract template metadata: {}", e)),
+        };
+
+        // Generate new presentation using ppt-rs
         match apply_template_to_slides(&title, &author, &pptx_slides, &is_title_slide, &template_path, context) {
-            Ok(pptx_data) => {
-                let output_full_path = context.work_dir.join(&output_path);
-                match std::fs::write(&output_full_path, &pptx_data) {
-                    Ok(()) => ToolResult::success(format!(
-                        "Successfully applied template '{}' to '{}' and saved to '{}'",
-                        template_path, input_path, output_path
-                    )),
-                    Err(e) => ToolResult::error(format!("Failed to save output presentation: {}", e)),
-                }
-            }
+            Ok(_) => ToolResult::success(format!(
+                "Successfully applied template style from '{}' to '{}', output: '{}'",
+                template_path, input_path, output_path
+            )),
             Err(e) => ToolResult::error(format!("Failed to apply template: {}", e)),
         }
     }
-}
-
-/// Extract slide information from a PPTX archive
-fn extract_slides_from_pptx(
-    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
-) -> Result<Vec<ExtractedSlide>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut slides = Vec::new();
-
-    // Find all slide files
-    for i in 0..archive.len() {
-        let entry_name = archive.by_index(i)?.name().to_string();
-        if entry_name.starts_with("ppt/slides/slide") && entry_name.ends_with(".xml") {
-            let mut entry = archive.by_index(i)?;
-            let mut xml_content = String::new();
-            entry.read_to_string(&mut xml_content)?;
-
-            // Parse slide XML to extract title and bullets
-            let slide = parse_slide_xml(&xml_content)?;
-            slides.push(slide);
-        }
-    }
-
-    // Sort slides by number
-    slides.sort_by_key(|s| s.slide_number);
-
-    Ok(slides)
 }
 
 /// Extracted slide data
@@ -157,23 +142,129 @@ struct ExtractedSlide {
     bullets: Vec<String>,
 }
 
-/// Parse slide XML to extract title and bullet points
+/// Extract all slides from a PPTX using quick-xml for XML parsing
+fn extract_slides_from_pptx(
+    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
+) -> Result<Vec<ExtractedSlide>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut slides = Vec::new();
+
+    // Collect slide files
+    let mut slide_files: Vec<String> = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i)?;
+        let name = entry.name().to_string();
+        if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
+            slide_files.push(name);
+        }
+    }
+
+    slide_files.sort();
+
+    // Parse each slide
+    for slide_file in slide_files {
+        let mut entry = archive.by_name(&slide_file)?;
+        let mut xml_content = String::new();
+        entry.read_to_string(&mut xml_content)?;
+
+        match parse_slide_xml(&xml_content) {
+            Ok(slide) => slides.push(slide),
+            Err(e) => eprintln!("Warning: Failed to parse {}: {}", slide_file, e),
+        }
+    }
+
+    Ok(slides)
+}
+
+/// Parse slide XML using quick-xml to extract title and bullet points
 fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Error + Send + Sync>> {
-    use regex::Regex;
+    let mut reader = Reader::from_str(xml);
+    reader.trim_text(true);
 
-    // Extract slide number from the XML
-    let id_re = Regex::new(r#"<p:sldId id="(\d+)""#).unwrap();
-    let slide_number = id_re
-        .captures(xml)
-        .and_then(|c| c.get(1))
-        .and_then(|m| m.as_str().parse::<usize>().ok())
-        .unwrap_or(0);
+    let mut buf = Vec::new();
+    let mut title = String::new();
+    let mut bullets: Vec<String> = Vec::new();
+    let mut in_title_ph = false;
+    let mut in_body_ph = false;
+    let mut in_text = false;
+    let mut current_text = String::new();
+    let mut depth = 0;
+    let mut slide_number = 0usize;
 
-    // Extract title - look for title placeholder
-    let title = extract_text_from_placeholder(xml, "title", "ctrTitle");
-
-    // Extract bullets - look for body placeholder content
-    let bullets = extract_bullets_from_body(xml);
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                
+                // Check for slide ID attribute
+                if name.as_ref() == b"p:sldId" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"id" {
+                            if let Ok(num) = String::from_utf8_lossy(&attr.value).parse::<usize>() {
+                                slide_number = num;
+                            }
+                        }
+                    }
+                }
+                
+                // Check for placeholder elements
+                if name.as_ref() == b"p:ph" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"type" {
+                            let t = String::from_utf8_lossy(&attr.value);
+                            if t == "title" || t == "ctrTitle" {
+                                in_title_ph = true;
+                                depth = 1;
+                            } else if t == "body" || t == "obj" {
+                                in_body_ph = true;
+                                depth = 1;
+                            }
+                            break;
+                        }
+                    }
+                }
+                
+                if in_title_ph || in_body_ph {
+                    depth += 1;
+                }
+                
+                // Track text elements
+                if name.as_ref() == b"a:t" && (in_title_ph || in_body_ph) {
+                    in_text = true;
+                    current_text.clear();
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                if in_text {
+                    current_text.push_str(&String::from_utf8_lossy(e));
+                }
+            }
+            Ok(Event::End(ref e)) => {
+                if in_title_ph || in_body_ph {
+                    depth -= 1;
+                    if depth == 0 {
+                        in_title_ph = false;
+                        in_body_ph = false;
+                    }
+                }
+                
+                if e.name().as_ref() == b"a:t" && in_text {
+                    in_text = false;
+                    let t = current_text.trim().to_string();
+                    if !t.is_empty() {
+                        if in_title_ph && title.is_empty() {
+                            title = t;
+                        } else if in_body_ph {
+                            bullets.push(t);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Eof) => break,
+            Err(e) => return Err(format!("XML parsing error: {}", e).into()),
+            _ => {}
+        }
+        buf.clear();
+    }
 
     Ok(ExtractedSlide {
         slide_number,
@@ -182,156 +273,65 @@ fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Erro
     })
 }
 
-/// Extract text from a placeholder by type
-fn extract_text_from_placeholder(xml: &str, placeholder_type: &str, _alt_type: &str) -> String {
-    use regex::Regex;
+/// Extract template metadata (title, author) using quick-xml
+fn extract_template_metadata(
+    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
+) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
+    let mut title = String::from("Presentation");
+    let mut author = String::from("pptx-rs");
 
-    // Find the placeholder section
-    let ph_re = Regex::new(&format!(r#"<p:ph type="{}"/>([^<]*(?:<[^/][^>]*>[^<]*)*)</p:nvPr>"#, placeholder_type)).unwrap();
-    
-    if let Some(captures) = ph_re.captures(xml) {
-        if let Some(section) = captures.get(1) {
-            // Extract text from the following <p:txBody> section
-            let start_pos = section.end() + xml[section.range()].len();
-            let remaining = &xml[start_pos..];
-            
-            // Find the text within <a:t> tags following this placeholder
-            let text_re = Regex::new(r#"<a:t>([^<]*)</a:t>"#).unwrap();
-            if let Some(text_match) = text_re.captures(remaining) {
-                if let Some(text) = text_match.get(1) {
-                    return text.as_str().trim().to_string();
+    // Try to read core.xml for metadata
+    if let Ok(mut entry) = archive.by_name("docProps/core.xml") {
+        let mut xml_content = String::new();
+        if entry.read_to_string(&mut xml_content).is_ok() {
+            let mut reader = Reader::from_str(&xml_content);
+            reader.trim_text(true);
+            let mut buf = Vec::new();
+            let mut in_title = false;
+            let mut in_creator = false;
+            let mut current_text = String::new();
+
+            loop {
+                match reader.read_event_into(&mut buf) {
+                    Ok(Event::Start(ref e)) => {
+                        let name = e.name();
+                        if name.as_ref() == b"dc:title" {
+                            in_title = true;
+                            current_text.clear();
+                        } else if name.as_ref() == b"dc:creator" {
+                            in_creator = true;
+                            current_text.clear();
+                        }
+                    }
+                    Ok(Event::Text(ref e)) => {
+                        if in_title || in_creator {
+                            current_text.push_str(&String::from_utf8_lossy(e));
+                        }
+                    }
+                    Ok(Event::End(ref e)) => {
+                        let name = e.name();
+                        if name.as_ref() == b"dc:title" && in_title {
+                            in_title = false;
+                            if !current_text.trim().is_empty() {
+                                title = current_text.trim().to_string();
+                            }
+                        } else if name.as_ref() == b"dc:creator" && in_creator {
+                            in_creator = false;
+                            if !current_text.trim().is_empty() {
+                                author = current_text.trim().to_string();
+                            }
+                        }
+                    }
+                    Ok(Event::Eof) => break,
+                    Err(_) => break,
+                    _ => {}
                 }
+                buf.clear();
             }
         }
     }
 
-    // Fallback: try to find any text in <a:t> tags
-    let text_re = Regex::new(r#"<a:t>([^<]+)</a:t>"#).unwrap();
-    if let Some(captures) = text_re.captures(xml) {
-        if let Some(text) = captures.get(1) {
-            return text.as_str().trim().to_string();
-        }
-    }
-
-    String::new()
-}
-
-/// Extract bullet points from body placeholder
-fn extract_bullets_from_body(xml: &str) -> Vec<String> {
-    use regex::Regex;
-
-    let mut bullets = Vec::new();
-    
-    // Find body placeholder section first
-    let body_start = if let Some(idx) = xml.find(r#"<p:ph type="body""#) {
-        idx
-    } else if let Some(idx) = xml.find(r#"<p:ph idx="1""#) {
-        idx
-    } else {
-        // No body placeholder found, try to extract from first content area
-        return extract_all_text_paragraphs(xml, true);
-    };
-    
-    // Extract text from paragraphs within body section
-    let body_section = &xml[body_start..];
-    
-    // Find all paragraphs in body section
-    let para_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
-    
-    for captures in para_re.captures_iter(body_section) {
-        let para = captures.get(0).unwrap().as_str();
-        
-        // Extract all text runs from this paragraph
-        let text_re = Regex::new(r#"<a:t>([^<]*)</a:t>"#).unwrap();
-        let mut para_text = String::new();
-        
-        for text_match in text_re.captures_iter(para) {
-            if let Some(text) = text_match.get(1) {
-                para_text.push_str(text.as_str());
-            }
-        }
-        
-        let para_text = para_text.trim();
-        if !para_text.is_empty() {
-            bullets.push(para_text.to_string());
-        }
-    }
-
-    bullets
-}
-
-/// Extract all text paragraphs from XML
-fn extract_all_text_paragraphs(xml: &str, skip_first: bool) -> Vec<String> {
-    use regex::Regex;
-    
-    let mut paragraphs = Vec::new();
-    let para_re = Regex::new(r#"<a:p[^>]*>.*?</a:p>"#).unwrap();
-    
-    for (i, captures) in para_re.captures_iter(xml).enumerate() {
-        // Skip first paragraph if requested (usually title)
-        if skip_first && i == 0 {
-            continue;
-        }
-        
-        let para = captures.get(0).unwrap().as_str();
-        
-        // Extract all text runs from this paragraph (handles multi-run text)
-        let text_re = Regex::new(r#"<a:t>([^<]*)</a:t>"#).unwrap();
-        let mut para_text = String::new();
-        
-        for text_match in text_re.captures_iter(para) {
-            if let Some(text) = text_match.get(1) {
-                para_text.push_str(text.as_str());
-            }
-        }
-        
-        let para_text = para_text.trim();
-        if !para_text.is_empty() {
-            paragraphs.push(para_text.to_string());
-        }
-    }
-    
-    paragraphs
-}
-
-/// Extract presentation title from docProps/core.xml
-fn extract_title_from_pptx(
-    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    if let Ok(mut entry) = archive.by_name("docProps/core.xml") {
-        let mut content = String::new();
-        entry.read_to_string(&mut content)?;
-        
-        use regex::Regex;
-        let title_re = Regex::new(r#"<cp:title[^>]*>([^<]*)</cp:title>"#).unwrap();
-        if let Some(captures) = title_re.captures(&content) {
-            if let Some(title) = captures.get(1) {
-                return Ok(title.as_str().trim().to_string());
-            }
-        }
-    }
-    
-    Err("Title not found".into())
-}
-
-/// Extract author from docProps/core.xml
-fn extract_author_from_pptx(
-    archive: &mut zip::ZipArchive<Cursor<&Vec<u8>>>,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    if let Ok(mut entry) = archive.by_name("docProps/core.xml") {
-        let mut content = String::new();
-        entry.read_to_string(&mut content)?;
-        
-        use regex::Regex;
-        let author_re = Regex::new(r#"<cp:creator[^>]*>([^<]*)</cp:creator>"#).unwrap();
-        if let Some(captures) = author_re.captures(&content) {
-            if let Some(author) = captures.get(1) {
-                return Ok(author.as_str().trim().to_string());
-            }
-        }
-    }
-    
-    Err("Author not found".into())
+    Ok((title, author))
 }
 
 /// Apply template to slides using the existing template implementation
@@ -342,7 +342,11 @@ fn apply_template_to_slides(
     is_title_slide: &[bool],
     template_path: &str,
     context: &ToolContext,
-) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use crate::template_impl::create_presentation_from_template;
-    create_presentation_from_template(title, author, slides, is_title_slide, template_path, context)
+    
+    match create_presentation_from_template(title, author, slides, is_title_slide, template_path, context) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Template application failed: {}", e).into()),
+    }
 }
