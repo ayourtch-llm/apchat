@@ -245,6 +245,18 @@ fn parse_slide_detailed(
                     b"a:t" => {
                         in_text_element = true;
                     }
+                    b"a:srgbClr" => {
+                        // Extract color from a:srgbClr val attribute
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"val" {
+                                let color_val = String::from_utf8_lossy(&attr.value).to_string();
+                                if let Some(ref mut elem) = current_element {
+                                    elem.properties.insert("color".to_string(), color_val);
+                                }
+                                break;
+                            }
+                        }
+                    }
                     b"p:ph" => {
                         // Check placeholder type
                         for attr in e.attributes().flatten() {
@@ -370,6 +382,7 @@ struct SlideElementBuilder {
     position: Option<ElementPosition>,
     size: Option<ElementSize>,
     content: Option<String>,
+    properties: HashMap<String, String>,
 }
 
 impl SlideElementBuilder {
@@ -380,6 +393,7 @@ impl SlideElementBuilder {
             position: None,
             size: None,
             content: None,
+            properties: HashMap::new(),
         }
     }
 
@@ -394,7 +408,7 @@ impl SlideElementBuilder {
             position: self.position,
             size: self.size,
             content: self.content,
-            properties: HashMap::new(),
+            properties: self.properties,
         })
     }
 }
