@@ -284,7 +284,8 @@ fn element_matches_selector(
             for attr in event.attributes().flatten() {
                 if attr.key.as_ref() == b"name" {
                     let elem_name = String::from_utf8_lossy(&attr.value);
-                    return elem_name == *name;
+                    // Case-insensitive comparison
+                    return elem_name.to_lowercase() == name.to_lowercase();
                 }
             }
             false
@@ -763,6 +764,19 @@ fn format_text_in_element(
                             e, font_size, font_family, bold, italic, underline, color
                         );
                         writer.write_event(Event::Start(modified))?;
+                        
+                        // If color is specified, write solidFill element
+                        if let Some(ref color_val) = color {
+                            let mut solid_fill = BytesStart::new("a:solidFill");
+                            writer.write_event(Event::Start(solid_fill))?;
+                            
+                            let mut srgb_clr = BytesStart::new("a:srgbClr");
+                            srgb_clr.push_attribute(("val", color_val.as_str()));
+                            writer.write_event(Event::Empty(srgb_clr))?;
+                            
+                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
+                        }
+                        
                         buf.clear();
                         continue;
                     }
