@@ -6,6 +6,9 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io::{Read, Write, Cursor};
 use serde::Deserialize;
+use quick_xml::events::{Event, BytesStart, BytesEnd, BytesText};
+use quick_xml::Reader;
+use quick_xml::Writer;
 
 /// Tool for setting slide background color
 pub struct SetSlideBackgroundTool;
@@ -258,12 +261,18 @@ At least one of title or bullets must be provided."
 
         // Modify title if provided
         if let Some(new_title) = &title {
-            slide_xml = update_slide_title(&slide_xml, new_title);
+            match update_slide_title(&slide_xml, new_title) {
+                Ok(xml) => slide_xml = xml,
+                Err(e) => return ToolResult::error(format!("Failed to update title: {}", e)),
+            }
         }
 
         // Modify bullets if provided
         if let Some(new_bullets) = &bullets {
-            slide_xml = update_slide_bullets(&slide_xml, new_bullets);
+            match update_slide_bullets(&slide_xml, new_bullets) {
+                Ok(xml) => slide_xml = xml,
+                Err(e) => return ToolResult::error(format!("Failed to update bullets: {}", e)),
+            }
         }
 
         // Rebuild the ZIP with modified slide
@@ -317,97 +326,191 @@ At least one of title or bullets must be provided."
     }
 }
 
-/// Update the title text in slide XML
-fn update_slide_title(slide_xml: &str, new_title: &str) -> String {
+/// Update the title text in slide XML using quick-xml
+fn update_slide_title(slide_xml: &str, new_title: &str) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut reader = Reader::from_str(slide_xml);
+    reader.trim_text(true);
+
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+    
+    let mut in_title_placeholder = false;
+    let mut placeholder_depth = 0;
+    let mut found_title = false;
     let escaped_title = xml_escape(new_title);
-    
-    // Find title placeholder and update its text
-    // Pattern: <a:t>old_text</a:t> within title section
-    if let Some(title_start) = slide_xml.find(r#"<p:ph type="title""#) {
-        // Find the next <a:t> tag after the title placeholder
-        if let Some(text_start) = slide_xml[title_start..].find("<a:t>") {
-            let abs_text_start = title_start + text_start;
-            if let Some(text_end) = slide_xml[abs_text_start..].find("</a:t>") {
-                let abs_text_end = abs_text_start + text_end + "</a:t>".len();
-                return format!("{}{}{}", 
-                    &slide_xml[..abs_text_start + "<a:t>".len()],
-                    escaped_title,
-                    &slide_xml[abs_text_end..]
-                );
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                
+                // Check if entering title placeholder
+                if name.as_ref() == b"p:ph" && !in_title_placeholder {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"type" {
+                            let ph_type = String::from_utf8_lossy(&attr.value);
+                            if ph_type == "title" || ph_type == "ctrTitle" {
+                                in_title_placeholder = true;
+                                placeholder_depth = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if in_title_placeholder {
+                    placeholder_depth += 1;
+                }
+                
+                writer.write_event(Event::Start(e.to_owned()))?;
             }
-        }
-    }
-    
-    // Fallback: try to find any title text (ctrTitle)
-    if let Some(title_start) = slide_xml.find(r#"<p:ph type="ctrTitle""#) {
-        if let Some(text_start) = slide_xml[title_start..].find("<a:t>") {
-            let abs_text_start = title_start + text_start;
-            if let Some(text_end) = slide_xml[abs_text_start..].find("</a:t>") {
-                let abs_text_end = abs_text_start + text_end + "</a:t>".len();
-                return format!("{}{}{}", 
-                    &slide_xml[..abs_text_start + "<a:t>".len()],
-                    escaped_title,
-                    &slide_xml[abs_text_end..]
-                );
+            Ok(Event::End(ref e)) => {
+                if in_title_placeholder {
+                    placeholder_depth -= 1;
+                    if placeholder_depth == 0 {
+                        in_title_placeholder = false;
+                    }
+                }
+                writer.write_event(Event::End(e.to_owned()))?;
             }
+            Ok(Event::Text(ref e)) => {
+                // Replace text if we're inside title placeholder's text element
+                if in_title_placeholder && placeholder_depth >= 2 && !found_title {
+                    writer.write_event(Event::Text(BytesText::new(&escaped_title)))?;
+                    found_title = true;
+                } else {
+                    writer.write_event(Event::Text(e.to_owned()))?;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(e) => writer.write_event(e.to_owned())?,
+            Err(e) => return Err(format!("XML parsing error: {}", e).into()),
         }
+        buf.clear();
     }
-    
-    slide_xml.to_string()
+
+    if !found_title {
+        return Err("Title element not found".into());
+    }
+
+    let result = writer.into_inner();
+    Ok(String::from_utf8_lossy(&result.into_inner()).to_string())
 }
 
-/// Update the bullet points in slide XML
-fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> String {
-    use regex::Regex;
+/// Update the bullet points in slide XML using quick-xml
+fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let mut reader = Reader::from_str(slide_xml);
+    reader.trim_text(true);
+
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
     
-    // Find body/content placeholder section
-    let body_section = if let Some(idx) = slide_xml.find(r#"<p:ph type="body""#) {
-        idx
-    } else if let Some(idx) = slide_xml.find(r#"<p:ph idx="1""#) {
-        idx
-    } else {
-        return slide_xml.to_string(); // No body placeholder found
-    };
-    
-    // Find all bullet paragraphs in body section
-    let bullet_re = Regex::new(r#"(?s)<a:p[^>]*>.*?</a:p>"#).unwrap();
-    let mut bullet_matches: Vec<_> = bullet_re.find_iter(&slide_xml[body_section..]).collect();
-    
-    if bullet_matches.is_empty() {
-        return slide_xml.to_string();
-    }
-    
-    // Skip first paragraph (usually has title text)
-    if bullet_matches.len() == 1 {
-        return slide_xml.to_string();
-    }
-    
-    let mut result = slide_xml.to_string();
-    
-    // Replace existing bullets
-    for (i, bullet_match) in bullet_matches.iter().enumerate().skip(1) {
-        if i - 1 < new_bullets.len() {
-            let new_bullet_xml = format!(r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>{}</a:t></a:r></a:p>"#, xml_escape(&new_bullets[i - 1]));
-            let start = body_section + bullet_match.start();
-            let end = body_section + bullet_match.end();
-            result = format!("{}{}{}", &result[..start], new_bullet_xml, &result[end..]);
-        }
-    }
-    
-    // Add additional bullets if we have more than existing
-    if new_bullets.len() >= bullet_matches.len() - 1 {
-        // Find position to insert new bullets (before closing </p:txBody>)
-        if let Some(txbody_close) = result[body_section..].find("</p:txBody>") {
-            let insert_pos = body_section + txbody_close;
-            let mut additional_bullets = String::new();
-            for i in (bullet_matches.len() - 1)..new_bullets.len() {
-                additional_bullets.push_str(&format!(r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>{}</a:t></a:r></a:p>"#, xml_escape(&new_bullets[i])));
+    let mut in_body_placeholder = false;
+    let mut placeholder_depth = 0;
+    let mut in_paragraph = false;
+    let mut bullet_index = 0;
+    let mut found_body = false;
+    let mut skip_content = false;
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(ref e)) => {
+                let name = e.name();
+                
+                // Check if entering body placeholder
+                if name.as_ref() == b"p:ph" && !in_body_placeholder {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"type" {
+                            let ph_type = String::from_utf8_lossy(&attr.value);
+                            if ph_type == "body" || ph_type == "obj" {
+                                in_body_placeholder = true;
+                                placeholder_depth = 1;
+                                found_body = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if in_body_placeholder {
+                    placeholder_depth += 1;
+                    
+                    // Check if this is a paragraph element
+                    if name.as_ref() == b"a:p" {
+                        in_paragraph = true;
+                        skip_content = false;
+                        
+                        // Replace this paragraph with new bullet if we have one
+                        if bullet_index < new_bullets.len() {
+                            let escaped = xml_escape(&new_bullets[bullet_index]);
+                            
+                            // Write new complete paragraph
+                            let mut p_start = BytesStart::new("a:p");
+                            writer.write_event(Event::Start(p_start))?;
+                            
+                            let mut ppr = BytesStart::new("a:pPr");
+                            ppr.push_attribute(("lvl", "0"));
+                            writer.write_event(Event::Start(ppr))?;
+                            writer.write_event(Event::Empty(BytesStart::new("a:defRPr")))?;
+                            writer.write_event(Event::End(BytesEnd::new("a:pPr")))?;
+                            
+                            writer.write_event(Event::Start(BytesStart::new("a:r")))?;
+                            
+                            let mut rpr = BytesStart::new("a:rPr");
+                            rpr.push_attribute(("lang", "en-US"));
+                            rpr.push_attribute(("sz", "1800"));
+                            writer.write_event(Event::Start(rpr))?;
+                            writer.write_event(Event::Text(BytesText::new(&escaped)))?;
+                            writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
+                            writer.write_event(Event::End(BytesEnd::new("a:r")))?;
+                            
+                            skip_content = true;
+                            bullet_index += 1;
+                            buf.clear();
+                            continue;
+                        }
+                    }
+                }
+                
+                if !skip_content {
+                    writer.write_event(Event::Start(e.to_owned()))?;
+                }
             }
-            result = format!("{}{}{}", &result[..insert_pos], additional_bullets, &result[insert_pos..]);
+            Ok(Event::End(ref e)) => {
+                if in_body_placeholder {
+                    placeholder_depth -= 1;
+                    if placeholder_depth == 0 {
+                        in_body_placeholder = false;
+                    }
+                    
+                    if in_paragraph {
+                        in_paragraph = false;
+                        skip_content = false;
+                    }
+                }
+                
+                if !skip_content {
+                    writer.write_event(Event::End(e.to_owned()))?;
+                }
+            }
+            Ok(Event::Text(ref e)) => {
+                if !skip_content {
+                    writer.write_event(Event::Text(e.to_owned()))?;
+                }
+            }
+            Ok(Event::Eof) => break,
+            Ok(e) => writer.write_event(e.to_owned())?,
+            Err(e) => return Err(format!("XML parsing error: {}", e).into()),
         }
+        buf.clear();
     }
-    
-    result
+
+    if !found_body {
+        return Err("Body element not found".into());
+    }
+
+    let result = writer.into_inner();
+    Ok(String::from_utf8_lossy(&result.into_inner()).to_string())
 }
 
 /// Tool for adding a new slide to a PPTX
