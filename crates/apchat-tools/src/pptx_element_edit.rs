@@ -360,10 +360,16 @@ fn get_element_type_from_name(name: &str) -> &'static str {
         "text"
     } else if name_lower.contains("content") || name_lower.contains("textbox") {
         "text"
+    } else if name_lower.contains("text") {
+        "text"
     } else if name_lower.contains("shape") {
         "shape"
     } else if name_lower.contains("image") || name_lower.contains("picture") {
         "image"
+    } else if name_lower.contains("table") {
+        "table"
+    } else if name_lower.contains("chart") {
+        "chart"
     } else {
         "unknown"
     }
@@ -530,6 +536,10 @@ fn delete_element_from_slide(
     let mut buf = Vec::new();
     
     let mut element_index = 0;
+    let mut in_candidate_element = false;
+    let mut candidate_depth = 0;
+    let mut candidate_element_index = 0;
+    let mut candidate_matched = false;
     let mut skip_element = false;
     let mut skip_depth = 0;
     
@@ -538,17 +548,24 @@ fn delete_element_from_slide(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = e.name();
+                let tag_name = e.name();
                 
-                if name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic" {
+                if tag_name.as_ref() == b"p:sp" || tag_name.as_ref() == b"p:pic" {
                     element_index += 1;
-                    
-                    if !skip_element && element_matches_selector(e, &selector_type, element_index) {
-                        skip_element = true;
-                        skip_depth = 1;
-                        buf.clear();
-                        continue;
-                    }
+                    in_candidate_element = true;
+                    candidate_depth = 1;
+                    candidate_element_index = element_index;
+                    candidate_matched = false;
+                } else if in_candidate_element && !candidate_matched {
+                    candidate_depth += 1;
+                }
+                
+                if candidate_matched && !skip_element {
+                    skip_element = true;
+                    skip_depth = candidate_depth;
+                    in_candidate_element = false;
+                    buf.clear();
+                    continue;
                 }
                 
                 if skip_element {
@@ -563,11 +580,67 @@ fn delete_element_from_slide(
                     if skip_depth == 0 {
                         skip_element = false;
                     }
-                } else {
+                }
+                
+                if in_candidate_element {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_element = false;
+                    }
+                }
+                
+                if !skip_element {
                     writer.write_event(Event::End(e.to_owned()))?;
                 }
             }
             Ok(Event::Empty(ref e)) => {
+                let tag_name = e.name();
+                
+                if in_candidate_element && !candidate_matched && tag_name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let elem_name = String::from_utf8_lossy(&attr.value);
+                            let elem_type = get_element_type_from_name(&elem_name);
+                            let name_lower = match &selector_type {
+                                SelectorType::Name(n) => n.to_lowercase(),
+                                _ => String::new(),
+                            };
+                            
+                            let matches = match &selector_type {
+                                SelectorType::Index(idx) => candidate_element_index == *idx,
+                                SelectorType::Name(name) => {
+                                    let elem_name_lower = elem_name.to_lowercase();
+                                    elem_name_lower == name_lower ||
+                                    ((name == "content" || name == "body") && (
+                                        elem_name_lower.contains("content") ||
+                                        (elem_name_lower.contains("shape") && !elem_name_lower.contains("title"))
+                                    ))
+                                },
+                                SelectorType::TypeWithIndex(type_prefix, idx) => {
+                                    let matches_type = match type_prefix.as_str() {
+                                        "textbox" | "text" => elem_type == "text",
+                                        "shape" => elem_type == "shape",
+                                        "image" => elem_type == "image",
+                                        _ => false,
+                                    };
+                                    matches_type && candidate_element_index == *idx
+                                },
+                            };
+                            
+                            if matches {
+                                candidate_matched = true;
+                            }
+                        }
+                    }
+                }
+                
+                if candidate_matched && !skip_element {
+                    skip_element = true;
+                    skip_depth = 1;
+                    buf.clear();
+                    continue;
+                }
+                
                 if !skip_element {
                     writer.write_event(Event::Empty(e.to_owned()))?;
                 }
@@ -610,6 +683,65 @@ mod tests {
         let tool = DeleteElementFromSlideTool;
         assert_eq!(tool.name(), "delete_element_from_slide");
         assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_delete_element_with_body_alias() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="100" name="roundedRectangle Shape"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Content to delete</a:t></a:r></a:p></p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = delete_element_from_slide(slide_xml, "body");
+        assert!(result.is_ok(), "Should delete shape with 'body' selector: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(!modified.contains("Content to delete"), "Should remove content text");
+        assert!(modified.contains("Title"), "Should keep title");
+    }
+    
+    #[test]
+    fn test_delete_element_with_textbox_index() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Textbox1"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>First textbox</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="3" name="Textbox2"/>
+</p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Second textbox</a:t></a:r></a:p></p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        // textbox:1 = Textbox1, textbox:2 = Textbox2
+        let result = delete_element_from_slide(slide_xml, "textbox:2");
+        assert!(result.is_ok(), "Should delete second textbox: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains("First textbox"), "Should keep first textbox: {}", modified);
+        assert!(!modified.contains("Second textbox"), "Should remove second textbox: {}", modified);
     }
 }
 
