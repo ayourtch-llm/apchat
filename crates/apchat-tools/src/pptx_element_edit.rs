@@ -7,7 +7,7 @@ use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
-use quick_xml::events::{Event, BytesStart, BytesEnd};
+use quick_xml::events::{Event, BytesStart, BytesEnd, BytesText};
 use quick_xml::Reader;
 use quick_xml::Writer;
 use serde::{Deserialize, Serialize};
@@ -766,15 +766,14 @@ fn format_text_in_element(
                         writer.write_event(Event::Start(modified))?;
                         
                         // If color is specified, write solidFill element
+                        // Note: This adds it after existing children, which may cause duplicates
+                        // A proper fix would require tracking what children exist
                         if let Some(ref color_val) = color {
-                            let mut solid_fill = BytesStart::new("a:solidFill");
-                            writer.write_event(Event::Start(solid_fill))?;
-                            
-                            let mut srgb_clr = BytesStart::new("a:srgbClr");
-                            srgb_clr.push_attribute(("val", color_val.as_str()));
-                            writer.write_event(Event::Empty(srgb_clr))?;
-                            
-                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
+                            let solid_fill_xml = format!(
+                                r#"<a:solidFill><a:srgbClr val="{}"/></a:solidFill>"#,
+                                color_val
+                            );
+                            writer.write_event(Event::Text(BytesText::new(&solid_fill_xml)))?;
                         }
                         
                         buf.clear();
@@ -880,7 +879,9 @@ fn modify_run_properties(
     
     // Apply modifications
     if let Some(sz) = font_size {
-        existing_attrs.insert("sz".to_string(), sz.to_string());
+        // PPTX uses half-points (1/20 of a point), so multiply by 20
+        // User specifies points (e.g., 28), we store half-points (560)
+        existing_attrs.insert("sz".to_string(), (sz * 20).to_string());
     }
     
     if let Some(ref family) = font_family {
