@@ -264,13 +264,37 @@ fn modify_element_in_slide(
 enum SelectorType {
     Name(String),
     Index(usize),
+    TypeWithIndex(String, usize),
 }
 
 fn parse_selector(selector: &str) -> SelectorType {
+    let selector_lower = selector.to_lowercase();
+    
+    // Check for type:index syntax (e.g., "textbox:1", "text:2")
+    if let Some(colon_pos) = selector.find(':') {
+        let type_part = &selector[..colon_pos];
+        let index_part = &selector[colon_pos + 1..];
+        if let Ok(idx) = index_part.parse::<usize>() {
+            return SelectorType::TypeWithIndex(type_part.to_lowercase(), idx);
+        }
+    }
+    
+    // Check for pure numeric index
     if let Ok(idx) = selector.parse::<usize>() {
         return SelectorType::Index(idx);
     }
-    SelectorType::Name(selector.to_string())
+    
+    // Apply common aliases for element names
+    let aliased_name = match selector_lower.as_str() {
+        "body" => "content",
+        "title" => "title",
+        "textbox" | "text" => "content",
+        "shape" => "shape",
+        "image" => "image",
+        _ => selector_lower.as_str(),
+    };
+    
+    SelectorType::Name(aliased_name.to_string())
 }
 
 fn element_matches_selector(
@@ -284,12 +308,44 @@ fn element_matches_selector(
             for attr in event.attributes().flatten() {
                 if attr.key.as_ref() == b"name" {
                     let elem_name = String::from_utf8_lossy(&attr.value);
-                    // Case-insensitive comparison
                     return elem_name.to_lowercase() == name.to_lowercase();
                 }
             }
             false
         }
+        SelectorType::TypeWithIndex(type_prefix, idx) => {
+            if element_index != *idx {
+                return false;
+            }
+            for attr in event.attributes().flatten() {
+                if attr.key.as_ref() == b"name" {
+                    let elem_name = String::from_utf8_lossy(&attr.value);
+                    let elem_type = get_element_type_from_name(&elem_name);
+                    return match type_prefix.as_str() {
+                        "textbox" | "text" => elem_type == "text",
+                        "shape" => elem_type == "shape",
+                        "image" => elem_type == "image",
+                        _ => false,
+                    };
+                }
+            }
+            false
+        }
+    }
+}
+
+fn get_element_type_from_name(name: &str) -> &'static str {
+    let name_lower = name.to_lowercase();
+    if name_lower.contains("title") {
+        "text"
+    } else if name_lower.contains("content") || name_lower.contains("textbox") {
+        "text"
+    } else if name_lower.contains("shape") {
+        "shape"
+    } else if name_lower.contains("image") || name_lower.contains("picture") {
+        "image"
+    } else {
+        "unknown"
     }
 }
 
@@ -721,8 +777,13 @@ fn format_text_in_element(
     let mut buf = Vec::new();
     
     let mut element_index = 0;
+    let mut in_candidate_element = false;
+    let mut candidate_depth = 0;
+    let mut candidate_element_index = 0;
+    let mut candidate_matched = false;
+    
     let mut in_target_element = false;
-    let mut element_depth = 0;
+    let mut target_element_depth = 0;
     let mut element_found = false;
     
     let selector_type = parse_selector(selector);
@@ -730,26 +791,25 @@ fn format_text_in_element(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = e.name();
+                let tag_name = e.name();
                 
-                // Check if entering target element
-                if !in_target_element && (name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic") {
+                if tag_name.as_ref() == b"p:sp" || tag_name.as_ref() == b"p:pic" {
                     element_index += 1;
-                    if element_matches_selector(e, &selector_type, element_index) {
-                        in_target_element = true;
-                        element_found = true;
-                        element_depth = 1;
-                        writer.write_event(Event::Start(e.to_owned()))?;
-                        buf.clear();
-                        continue;
-                    }
+                    in_candidate_element = true;
+                    candidate_depth = 1;
+                    candidate_element_index = element_index;
+                    candidate_matched = false;
+                } else if in_candidate_element && !candidate_matched {
+                    candidate_depth += 1;
                 }
                 
-                if in_target_element {
-                    element_depth += 1;
+                if candidate_matched && !in_target_element {
+                    in_target_element = true;
+                    element_found = true;
+                    target_element_depth = candidate_depth;
+                    in_candidate_element = false;
                     
-                    // Modify text paragraph alignment
-                    if name.as_ref() == b"a:pPr" {
+                    if tag_name.as_ref() == b"a:pPr" {
                         if let Some(align) = alignment {
                             let modified = modify_paragraph_alignment(e, align);
                             writer.write_event(Event::Start(modified))?;
@@ -758,22 +818,55 @@ fn format_text_in_element(
                         }
                     }
                     
-                    // Modify text run properties (font, bold, italic, etc.)
-                    if name.as_ref() == b"a:rPr" {
+                    if tag_name.as_ref() == b"a:rPr" {
                         let modified = modify_run_properties(
                             e, font_size, font_family, bold, italic, underline, color
                         );
                         writer.write_event(Event::Start(modified))?;
                         
-                        // If color is specified, write solidFill element
-                        // Note: This adds it after existing children, which may cause duplicates
-                        // A proper fix would require tracking what children exist
                         if let Some(ref color_val) = color {
-                            let solid_fill_xml = format!(
-                                r#"<a:solidFill><a:srgbClr val="{}"/></a:solidFill>"#,
-                                color_val
-                            );
-                            writer.write_event(Event::Text(BytesText::new(&solid_fill_xml)))?;
+                            let mut solid_fill = BytesStart::new("a:solidFill");
+                            writer.write_event(Event::Start(solid_fill))?;
+                            
+                            let mut srgb_clr = BytesStart::new("a:srgbClr");
+                            srgb_clr.push_attribute(("val", color_val.as_str()));
+                            writer.write_event(Event::Empty(srgb_clr))?;
+                            
+                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
+                        }
+                        
+                        buf.clear();
+                        continue;
+                    }
+                }
+                
+                if in_target_element {
+                    target_element_depth += 1;
+                    
+                    if tag_name.as_ref() == b"a:pPr" {
+                        if let Some(align) = alignment {
+                            let modified = modify_paragraph_alignment(e, align);
+                            writer.write_event(Event::Start(modified))?;
+                            buf.clear();
+                            continue;
+                        }
+                    }
+                    
+                    if tag_name.as_ref() == b"a:rPr" {
+                        let modified = modify_run_properties(
+                            e, font_size, font_family, bold, italic, underline, color
+                        );
+                        writer.write_event(Event::Start(modified))?;
+                        
+                        if let Some(ref color_val) = color {
+                            let mut solid_fill = BytesStart::new("a:solidFill");
+                            writer.write_event(Event::Start(solid_fill))?;
+                            
+                            let mut srgb_clr = BytesStart::new("a:srgbClr");
+                            srgb_clr.push_attribute(("val", color_val.as_str()));
+                            writer.write_event(Event::Empty(srgb_clr))?;
+                            
+                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
                         }
                         
                         buf.clear();
@@ -785,14 +878,51 @@ fn format_text_in_element(
             }
             Ok(Event::End(ref e)) => {
                 if in_target_element {
-                    element_depth -= 1;
-                    if element_depth == 0 {
+                    target_element_depth -= 1;
+                    if target_element_depth == 0 {
                         in_target_element = false;
                     }
                 }
+                
+                if in_candidate_element {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_element = false;
+                    }
+                }
+                
                 writer.write_event(Event::End(e.to_owned()))?;
             }
             Ok(Event::Empty(ref e)) => {
+                let tag_name = e.name();
+                
+                if in_candidate_element && !candidate_matched && tag_name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let elem_name = String::from_utf8_lossy(&attr.value);
+                            let elem_type = get_element_type_from_name(&elem_name);
+                            
+                            let matches = match &selector_type {
+                                SelectorType::Index(idx) => candidate_element_index == *idx,
+                                SelectorType::Name(name) => elem_name.to_lowercase() == name.to_lowercase(),
+                                SelectorType::TypeWithIndex(type_prefix, idx) => {
+                                    let matches_type = match type_prefix.as_str() {
+                                        "textbox" | "text" => elem_type == "text",
+                                        "shape" => elem_type == "shape",
+                                        "image" => elem_type == "image",
+                                        _ => false,
+                                    };
+                                    matches_type && candidate_element_index == *idx
+                                },
+                            };
+                            
+                            if matches && !element_found {
+                                candidate_matched = true;
+                            }
+                        }
+                    }
+                }
+                
                 if in_target_element && e.name().as_ref() == b"a:pPr" {
                     if let Some(align) = alignment {
                         let modified = modify_paragraph_alignment(e, align);
@@ -805,7 +935,22 @@ fn format_text_in_element(
                     let modified = modify_run_properties(
                         e, font_size, font_family, bold, italic, underline, color
                     );
-                    writer.write_event(Event::Empty(modified))?;
+                    
+                    if let Some(ref color_val) = color {
+                        writer.write_event(Event::Start(modified))?;
+                        
+                        let mut solid_fill = BytesStart::new("a:solidFill");
+                        writer.write_event(Event::Start(solid_fill))?;
+                        
+                        let mut srgb_clr = BytesStart::new("a:srgbClr");
+                        srgb_clr.push_attribute(("val", color_val.as_str()));
+                        writer.write_event(Event::Empty(srgb_clr))?;
+                        
+                        writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
+                        writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
+                    } else {
+                        writer.write_event(Event::Empty(modified))?;
+                    }
                     buf.clear();
                     continue;
                 }
@@ -1204,6 +1349,218 @@ mod text_tests {
         let tool = FormatTextOnSlideTool;
         assert_eq!(tool.name(), "format_text_on_slide");
         assert!(!tool.description().is_empty());
+    }
+
+    #[test]
+    fn test_format_text_in_element_with_name_selector() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:pPr algn="l"/>
+<a:r>
+<a:rPr sz="3200"/>
+<a:t>Hello</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "Title",
+            Some(24),
+            &None,
+            None,
+            None,
+            None,
+            &None,
+            &Some("center".to_string()),
+        );
+
+        assert!(result.is_ok(), "Should find element by name: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"algn="ctr""#), "Should have center alignment: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_in_element_with_index_selector() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:pPr algn="l"/>
+<a:r>
+<a:rPr sz="3200"/>
+<a:t>Hello</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "1",
+            Some(24),
+            &None,
+            None,
+            None,
+            None,
+            &None,
+            &Some("center".to_string()),
+        );
+
+        assert!(result.is_ok(), "Should find element by index: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"algn="ctr""#), "Should have center alignment: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_with_color() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr sz="2800"/>
+<a:t>Test</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "Content",
+            None,
+            &None,
+            None,
+            None,
+            None,
+            &Some("FFFFFF".to_string()),
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should find element: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"<a:solidFill>"#), "Should have solidFill element: {}", modified);
+        assert!(modified.contains(r#"val="FFFFFF""#), "Should have white color: {}", modified);
+        assert!(!modified.contains("&lt;a:solidFill&gt;"), "Should NOT have escaped XML: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_with_body_alias() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr sz="2800"/>
+<a:t>Test</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "body",
+            None,
+            &None,
+            None,
+            None,
+            None,
+            &Some("FFFFFF".to_string()),
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should find element with 'body' alias: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="FFFFFF""#), "Should have white color: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_with_textbox_index() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:rPr sz="3200"/><a:t>Title</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="3" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr sz="2800"/>
+<a:t>Content</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "textbox:1",
+            None,
+            &None,
+            None,
+            None,
+            None,
+            &Some("FF0000".to_string()),
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should find first textbox: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="FF0000""#), "Should have red color: {}", modified);
     }
 
     #[test]
@@ -2103,8 +2460,25 @@ fn element_matches_selector_simple(
             for attr in event.attributes().flatten() {
                 if attr.key.as_ref() == b"name" {
                     let elem_name = String::from_utf8_lossy(&attr.value);
-                    // Case-insensitive comparison
                     return elem_name.to_lowercase() == name.to_lowercase();
+                }
+            }
+            false
+        }
+        SelectorType::TypeWithIndex(type_prefix, idx) => {
+            if element_index != *idx {
+                return false;
+            }
+            for attr in event.attributes().flatten() {
+                if attr.key.as_ref() == b"name" {
+                    let elem_name = String::from_utf8_lossy(&attr.value);
+                    let elem_type = get_element_type_from_name(&elem_name);
+                    return match type_prefix.as_str() {
+                        "textbox" | "text" => elem_type == "text",
+                        "shape" => elem_type == "shape",
+                        "image" => elem_type == "image",
+                        _ => false,
+                    };
                 }
             }
             false
