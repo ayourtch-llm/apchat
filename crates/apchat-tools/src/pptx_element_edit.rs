@@ -2102,7 +2102,8 @@ fn element_matches_selector_simple(
             for attr in event.attributes().flatten() {
                 if attr.key.as_ref() == b"name" {
                     let elem_name = String::from_utf8_lossy(&attr.value);
-                    return elem_name == *name;
+                    // Case-insensitive comparison
+                    return elem_name.to_lowercase() == name.to_lowercase();
                 }
             }
             false
