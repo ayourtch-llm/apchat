@@ -19,6 +19,7 @@ members = [
     "crates/apchat-webex",
     "crates/apchat-mcp-pty-server",
     "crates/apchat-finserv",
+    "crates/apchat-designer",
     "crates/apchat-ocr",
     "crates/apchat-types",
     "crates/apchat-pptx",

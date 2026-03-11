@@ -239,6 +239,32 @@ impl APChat {
                     }
                     print_heart_red(&format!("✓ Loaded {} financial services skills (--financial-services)", count), true);
                 }
+                if let Some(ref plugins) = flags.designer_skills {
+                    let plugin_refs: Vec<&str> = plugins.iter().map(|s| s.as_str()).collect();
+                    for p in &plugin_refs {
+                        if !apchat_designer::DESIGNER_PLUGIN_NAMES.contains(p) {
+                            print_heart_yellow(&format!("⚠️  Unknown designer-skills plugin '{}'. Valid plugins: {}",
+                                p,
+                                apchat_designer::DESIGNER_PLUGIN_NAMES.join(", ")), true);
+                        }
+                    }
+                    let designer_skills = apchat_designer::get_designer_skills(&plugin_refs);
+                    let mut count = 0;
+                    for (_name, content) in &designer_skills {
+                        match registry.add_skill_from_content(content) {
+                            Ok(_) => count += 1,
+                            Err(e) => {
+                                print_heart_yellow(&format!("⚠️  Failed to load designer skill: {}", e), true);
+                            }
+                        }
+                    }
+                    let plugin_desc = if plugins.is_empty() {
+                        "all plugins".to_string()
+                    } else {
+                        plugins.join(", ")
+                    };
+                    print_heart_red(&format!("✓ Loaded {} designer skills (--designer-skills {})", count, plugin_desc), true);
+                }
                 Some(Arc::new(registry))
             }
             Err(e) => {

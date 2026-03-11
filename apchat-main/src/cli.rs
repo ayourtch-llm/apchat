@@ -282,6 +282,15 @@ pub struct Cli {
     #[arg(long)]
     pub financial_services: bool,
 
+    /// Enable designer skills from https://github.com/Owl-Listener/designer-skills (63 skills, 8 plugins).
+    /// Without a value, loads all plugins. With plugin names, loads only those plugins.
+    /// Available plugins: design-research, design-systems, ux-strategy, ui-design,
+    /// interaction-design, prototyping-testing, design-ops, designer-toolkit
+    /// Can be specified multiple times to select individual plugins.
+    /// Example: --designer-skills (all) or --designer-skills design-research --designer-skills ui-design
+    #[arg(long, value_name = "PLUGIN", num_args = 0.., action = clap::ArgAction::Append)]
+    pub designer_skills: Option<Vec<String>>,
+
     /// Enable context-mode MCP server (https://github.com/mksglu/claude-context-mode)
     /// Provides sandboxed code execution and FTS5 knowledge base tools that save ~98% of context window.
     /// Requires Node.js 18+ to be installed. Tools are registered with 'ctx_' prefix.

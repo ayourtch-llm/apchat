@@ -1,0 +1,7 @@
+[package]
+name = "apchat-designer"
+version = "0.1.0"
+edition = "2021"
+description = "Designer skills for APChat, adapted from https://github.com/Owl-Listener/designer-skills (MIT licensed)"
+
+[dependencies]
