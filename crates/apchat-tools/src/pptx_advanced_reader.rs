@@ -204,16 +204,6 @@ fn parse_slide_detailed(
                         // Starting a picture
                         current_element = Some(SlideElementBuilder::new("image"));
                     }
-                    b"p:cNvPr" => {
-                        // Extract name attribute
-                        for attr in e.attributes().flatten() {
-                            if attr.key.as_ref() == b"name" {
-                                if let Some(ref mut elem) = current_element {
-                                    elem.name = Some(String::from_utf8_lossy(&attr.value).to_string());
-                                }
-                            }
-                        }
-                    }
                     b"a:off" => {
                         // Extract position
                         let mut x = 0i64;
@@ -242,6 +232,16 @@ fn parse_slide_detailed(
                         }
                         if let Some(ref mut elem) = current_element {
                             elem.size = Some(ElementSize { width: cx, height: cy });
+                        }
+                    }
+                    b"p:cNvSpPr" => {
+                        // Check if this is a text box
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"txBox" {
+                                if let Some(ref mut elem) = current_element {
+                                    elem.properties.insert("txBox".to_string(), "true".to_string());
+                                }
+                            }
                         }
                     }
                     b"a:p" => {
@@ -341,6 +341,29 @@ fn parse_slide_detailed(
                         }
                         if let Some(ref mut elem) = current_element {
                             elem.size = Some(ElementSize { width: cx, height: cy });
+                        }
+                    }
+                    b"p:cNvPr" => {
+                        // Extract name attribute from self-closing cNvPr
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                let name = String::from_utf8_lossy(&attr.value).to_string();
+                                if let Some(ref mut elem) = current_element {
+                                    elem.name = Some(name);
+                                }
+                            }
+                        }
+                    }
+                    b"a:srgbClr" => {
+                        // Extract color from self-closing srgbClr
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"val" {
+                                let color_val = String::from_utf8_lossy(&attr.value).to_string();
+                                if let Some(ref mut elem) = current_element {
+                                    elem.properties.insert("color".to_string(), color_val);
+                                }
+                                break;
+                            }
                         }
                     }
                     _ => {}
