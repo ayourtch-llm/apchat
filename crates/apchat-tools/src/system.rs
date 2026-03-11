@@ -111,6 +111,7 @@ impl Tool for RunCommandTool {
             let mut child = match AsyncCommand::new("bash")
                 .args(["-c", &orig_command])
                 .current_dir(&context.work_dir)
+                .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .spawn()
