@@ -334,8 +334,11 @@ fn update_slide_title(slide_xml: &str, new_title: &str) -> Result<String, Box<dy
     let mut writer = Writer::new(Cursor::new(Vec::new()));
     let mut buf = Vec::new();
     
-    let mut in_title_placeholder = false;
-    let mut placeholder_depth = 0;
+    let mut in_candidate_shape = false;
+    let mut candidate_depth = 0;
+    let mut shape_is_title = false;
+    let mut in_title_text = false;
+    let mut text_depth = 0;
     let mut found_title = false;
     let escaped_title = xml_escape(new_title);
 
@@ -344,38 +347,92 @@ fn update_slide_title(slide_xml: &str, new_title: &str) -> Result<String, Box<dy
             Ok(Event::Start(ref e)) => {
                 let name = e.name();
                 
-                // Check if entering title placeholder
-                if name.as_ref() == b"p:ph" && !in_title_placeholder {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"type" {
-                            let ph_type = String::from_utf8_lossy(&attr.value);
-                            if ph_type == "title" || ph_type == "ctrTitle" {
-                                in_title_placeholder = true;
-                                placeholder_depth = 1;
-                                break;
+                // Check if entering a shape/picture element
+                if name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic" {
+                    in_candidate_shape = true;
+                    candidate_depth = 1;
+                    shape_is_title = false;
+                } else if in_candidate_shape {
+                    candidate_depth += 1;
+                    
+                    // Check if this shape has a title placeholder or name
+                    if name.as_ref() == b"p:ph" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"type" {
+                                let ph_type = String::from_utf8_lossy(&attr.value);
+                                if ph_type == "title" || ph_type == "ctrTitle" {
+                                    shape_is_title = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Check shape name from cNvPr
+                    if name.as_ref() == b"p:cNvPr" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                                if shape_name.contains("title") {
+                                    shape_is_title = true;
+                                }
                             }
                         }
                     }
                 }
                 
-                if in_title_placeholder {
-                    placeholder_depth += 1;
+                // If we're in a title shape and entering txBody, start replacing text
+                if in_candidate_shape && shape_is_title && name.as_ref() == b"a:t" {
+                    in_title_text = true;
+                    text_depth = 1;
+                } else if in_title_text {
+                    text_depth += 1;
                 }
                 
-                writer.write_event(Event::Start(e.to_owned()))?;
+                if in_title_text && name.as_ref() != b"a:t" {
+                    writer.write_event(Event::Start(e.to_owned()))?;
+                } else if !in_title_text || name.as_ref() == b"a:t" {
+                    writer.write_event(Event::Start(e.to_owned()))?;
+                }
             }
             Ok(Event::End(ref e)) => {
-                if in_title_placeholder {
-                    placeholder_depth -= 1;
-                    if placeholder_depth == 0 {
-                        in_title_placeholder = false;
+                let name = e.name();
+                
+                if in_candidate_shape {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_shape = false;
+                        shape_is_title = false;
                     }
                 }
+                
+                if in_title_text {
+                    text_depth -= 1;
+                    if text_depth == 0 {
+                        in_title_text = false;
+                    }
+                }
+                
                 writer.write_event(Event::End(e.to_owned()))?;
             }
+            Ok(Event::Empty(ref e)) => {
+                let name = e.name();
+                
+                if in_candidate_shape && name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                            if shape_name.contains("title") {
+                                shape_is_title = true;
+                            }
+                        }
+                    }
+                }
+                
+                writer.write_event(Event::Empty(e.to_owned()))?;
+            }
             Ok(Event::Text(ref e)) => {
-                // Replace text if we're inside title placeholder's text element
-                if in_title_placeholder && placeholder_depth >= 2 && !found_title {
+                // Replace text if we're inside title shape's text element
+                if in_title_text && !found_title {
                     writer.write_event(Event::Text(BytesText::new(&escaped_title)))?;
                     found_title = true;
                 } else {
@@ -405,8 +462,11 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<Strin
     let mut writer = Writer::new(Cursor::new(Vec::new()));
     let mut buf = Vec::new();
     
-    let mut in_body_placeholder = false;
-    let mut placeholder_depth = 0;
+    let mut in_candidate_shape = false;
+    let mut candidate_depth = 0;
+    let mut shape_is_body = false;
+    let mut in_body_text = false;
+    let mut body_depth = 0;
     let mut in_paragraph = false;
     let mut bullet_index = 0;
     let mut found_body = false;
@@ -417,58 +477,82 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<Strin
             Ok(Event::Start(ref e)) => {
                 let name = e.name();
                 
-                // Check if entering body placeholder
-                if name.as_ref() == b"p:ph" && !in_body_placeholder {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"type" {
-                            let ph_type = String::from_utf8_lossy(&attr.value);
-                            if ph_type == "body" || ph_type == "obj" {
-                                in_body_placeholder = true;
-                                placeholder_depth = 1;
-                                found_body = true;
-                                break;
+                // Check if entering a shape/picture element
+                if name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic" {
+                    in_candidate_shape = true;
+                    candidate_depth = 1;
+                    shape_is_body = false;
+                } else if in_candidate_shape {
+                    candidate_depth += 1;
+                    
+                    // Check if this shape has a body placeholder or name
+                    if name.as_ref() == b"p:ph" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"type" {
+                                let ph_type = String::from_utf8_lossy(&attr.value);
+                                if ph_type == "body" || ph_type == "obj" {
+                                    shape_is_body = true;
+                                }
                             }
                         }
                     }
+                    
+                    // Check shape name from cNvPr
+                    if name.as_ref() == b"p:cNvPr" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                                if shape_name.contains("content") || shape_name.contains("body") {
+                                    shape_is_body = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Enter body text if we're in a body shape
+                    if shape_is_body && name.as_ref() == b"p:txBody" {
+                        in_body_text = true;
+                        body_depth = 1;
+                        found_body = true;
+                    } else if in_body_text {
+                        body_depth += 1;
+                    }
                 }
                 
-                if in_body_placeholder {
-                    placeholder_depth += 1;
+                if in_body_text && body_depth >= 2 && name.as_ref() == b"a:p" {
+                    in_paragraph = true;
+                    skip_content = false;
                     
-                    // Check if this is a paragraph element
-                    if name.as_ref() == b"a:p" {
-                        in_paragraph = true;
-                        skip_content = false;
+                    // Replace this paragraph with new bullet if we have one
+                    if bullet_index < new_bullets.len() {
+                        let escaped = xml_escape(&new_bullets[bullet_index]);
                         
-                        // Replace this paragraph with new bullet if we have one
-                        if bullet_index < new_bullets.len() {
-                            let escaped = xml_escape(&new_bullets[bullet_index]);
-                            
-                            // Write new complete paragraph
-                            let mut p_start = BytesStart::new("a:p");
-                            writer.write_event(Event::Start(p_start))?;
-                            
-                            let mut ppr = BytesStart::new("a:pPr");
-                            ppr.push_attribute(("lvl", "0"));
-                            writer.write_event(Event::Start(ppr))?;
-                            writer.write_event(Event::Empty(BytesStart::new("a:defRPr")))?;
-                            writer.write_event(Event::End(BytesEnd::new("a:pPr")))?;
-                            
-                            writer.write_event(Event::Start(BytesStart::new("a:r")))?;
-                            
-                            let mut rpr = BytesStart::new("a:rPr");
-                            rpr.push_attribute(("lang", "en-US"));
-                            rpr.push_attribute(("sz", "1800"));
-                            writer.write_event(Event::Start(rpr))?;
-                            writer.write_event(Event::Text(BytesText::new(&escaped)))?;
-                            writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
-                            writer.write_event(Event::End(BytesEnd::new("a:r")))?;
-                            
-                            skip_content = true;
-                            bullet_index += 1;
-                            buf.clear();
-                            continue;
-                        }
+                        // Write new complete paragraph
+                        let mut p_start = BytesStart::new("a:p");
+                        writer.write_event(Event::Start(p_start))?;
+                        
+                        let mut ppr = BytesStart::new("a:pPr");
+                        ppr.push_attribute(("lvl", "0"));
+                        writer.write_event(Event::Start(ppr))?;
+                        writer.write_event(Event::Empty(BytesStart::new("a:defRPr")))?;
+                        writer.write_event(Event::End(BytesEnd::new("a:pPr")))?;
+                        
+                        writer.write_event(Event::Start(BytesStart::new("a:r")))?;
+                        
+                        let mut rpr = BytesStart::new("a:rPr");
+                        rpr.push_attribute(("lang", "en-US"));
+                        rpr.push_attribute(("sz", "1800"));
+                        writer.write_event(Event::Start(rpr))?;
+                        writer.write_event(Event::Start(BytesStart::new("a:t")))?;
+                        writer.write_event(Event::Text(BytesText::new(&escaped)))?;
+                        writer.write_event(Event::End(BytesEnd::new("a:t")))?;
+                        writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
+                        writer.write_event(Event::End(BytesEnd::new("a:r")))?;
+                        
+                        skip_content = true;
+                        bullet_index += 1;
+                        buf.clear();
+                        continue;
                     }
                 }
                 
@@ -477,20 +561,49 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<Strin
                 }
             }
             Ok(Event::End(ref e)) => {
-                if in_body_placeholder {
-                    placeholder_depth -= 1;
-                    if placeholder_depth == 0 {
-                        in_body_placeholder = false;
+                let name = e.name();
+                
+                if in_candidate_shape {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_shape = false;
+                        shape_is_body = false;
                     }
-                    
-                    if in_paragraph {
-                        in_paragraph = false;
-                        skip_content = false;
+                }
+                
+                if in_body_text {
+                    body_depth -= 1;
+                    if body_depth == 0 {
+                        in_body_text = false;
                     }
+                }
+                
+                if in_paragraph && name.as_ref() == b"a:p" {
+                    in_paragraph = false;
                 }
                 
                 if !skip_content {
                     writer.write_event(Event::End(e.to_owned()))?;
+                } else if name.as_ref() == b"a:p" {
+                    skip_content = false;
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                let name = e.name();
+                
+                if in_candidate_shape && name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                            if shape_name.contains("content") || shape_name.contains("body") {
+                                shape_is_body = true;
+                            }
+                        }
+                    }
+                }
+                
+                if !skip_content {
+                    writer.write_event(Event::Empty(e.to_owned()))?;
                 }
             }
             Ok(Event::Text(ref e)) => {
@@ -499,7 +612,11 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<Strin
                 }
             }
             Ok(Event::Eof) => break,
-            Ok(e) => writer.write_event(e.to_owned())?,
+            Ok(e) => {
+                if !skip_content {
+                    writer.write_event(e.to_owned())?;
+                }
+            }
             Err(e) => return Err(format!("XML parsing error: {}", e).into()),
         }
         buf.clear();
@@ -507,6 +624,26 @@ fn update_slide_bullets(slide_xml: &str, new_bullets: &[String]) -> Result<Strin
 
     if !found_body {
         return Err("Body element not found".into());
+    }
+
+    // If we have remaining bullets, add them as new paragraphs
+    if bullet_index < new_bullets.len() {
+        let mut result = String::from_utf8_lossy(&writer.into_inner().into_inner()).to_string();
+        
+        // Find the closing </p:txBody> tag and insert remaining bullets before it
+        if let Some(txbody_end) = result.find("</p:txBody>") {
+            let mut additional_bullets = String::new();
+            for bullet in &new_bullets[bullet_index..] {
+                let escaped = xml_escape(bullet);
+                additional_bullets.push_str(&format!(
+                    r#"<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800">{}</a:rPr></a:r></a:p>"#,
+                    escaped
+                ));
+            }
+            result.insert_str(txbody_end, &additional_bullets);
+        }
+        
+        return Ok(result);
     }
 
     let result = writer.into_inner();
@@ -880,5 +1017,60 @@ mod tests {
         let tool = SetSlideBackgroundTool;
         assert_eq!(tool.name(), "set_slide_background");
         assert!(!tool.description().is_empty());
+    }
+    
+    #[test]
+    fn test_update_slide_title_without_placeholder() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:t>Old Title</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = update_slide_title(slide_xml, "New Title");
+        assert!(result.is_ok(), "Should update title without placeholder: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains("<a:t>New Title</a:t>"), "Should have new title: {}", modified);
+        assert!(!modified.contains("<a:t>Old Title</a:t>"), "Should not have old title: {}", modified);
+    }
+    
+    #[test]
+    fn test_update_slide_bullets_without_placeholder() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="3" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>Bullet 1</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 2</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = update_slide_bullets(slide_xml, &["New Bullet 1".to_string(), "New Bullet 2".to_string()]);
+        assert!(result.is_ok(), "Should update bullets without placeholder: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains("<a:t>New Bullet 1</a:t>"), "Should have new bullet 1: {}", modified);
+        assert!(modified.contains("<a:t>New Bullet 2</a:t>"), "Should have new bullet 2: {}", modified);
     }
 }
