@@ -1,6 +1,42 @@
 use apchat_toolcore::tool_context::ToolContext;
 use std::io::{Cursor, Read, Write};
 
+/// Slide size/aspect ratio options for presentations
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SlideSize {
+    /// 16:9 widescreen (default, PowerPoint standard)
+    Screen16x9,
+    /// 4:3 standard (older format)
+    Screen4x3,
+    /// 16:10 widescreen (some laptops)
+    Screen16x10,
+    /// Custom dimensions in EMU (English Metric Units)
+    Custom { width: i64, height: i64 },
+}
+
+impl SlideSize {
+    /// Get slide dimensions in EMU (English Metric Units)
+    /// 1 inch = 914,400 EMU
+    pub fn dimensions(&self) -> (i64, i64, &'static str) {
+        match self {
+            SlideSize::Screen16x9 => (9144000, 5143500, "screen16x9"), // 10" × 5.625"
+            SlideSize::Screen4x3 => (9144000, 6858000, "screen4x3"),   // 10" × 7.5"
+            SlideSize::Screen16x10 => (9144000, 5715000, "screen16x10"), // 10" × 6.25"
+            SlideSize::Custom { width, height } => (*width, *height, "custom"),
+        }
+    }
+
+    /// Parse slide size from string
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "4x3" | "4:3" | "standard" => SlideSize::Screen4x3,
+            "16x10" | "16:10" | "widescreen16x10" => SlideSize::Screen16x10,
+            "16x9" | "16:9" | "widescreen" | "widescreen16x9" => SlideSize::Screen16x9,
+            _ => SlideSize::Screen16x9, // Default to 16:9
+        }
+    }
+}
+
 /// Create a presentation from a template, preserving theme and layouts
 pub fn create_presentation_from_template(
     _title: &str,
@@ -8,6 +44,7 @@ pub fn create_presentation_from_template(
     slides: &[ppt_rs::generator::SlideContent],
     is_title_slide: &[bool],
     template_path: &str,
+    slide_size: SlideSize,
     context: &ToolContext,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     // Read template
@@ -55,6 +92,7 @@ pub fn create_presentation_from_template(
     let (title_layout_id, content_layout_id) = find_layout_ids(&mut template_archive)?;
 
     // Generate new presentation.xml with correct slide references
+    let (width, height, size_type) = slide_size.dimensions();
     let mut pres_content = format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
@@ -73,10 +111,7 @@ pub fn create_presentation_from_template(
     }
 
     pres_content.push_str(
-        r#"</p:sldIdLst>
-<p:sldSz cx="9144000" cy="5143500" type="screen16x9"/>
-<p:notesSz cx="6858000" cy="9144000"/>
-</p:presentation>"#,
+        &format!(r#"</p:sldIdLst><p:sldSz cx="{width}" cy="{height}" type="{size_type}"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#),
     );
 
     new_archive.start_file("ppt/presentation.xml", options.clone())?;
@@ -390,4 +425,42 @@ fn find_layout_ids(
     }
 
     Ok((title_layout_id, content_layout_id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slide_size_dimensions() {
+        // Test 16:9
+        let (w, h, t) = SlideSize::Screen16x9.dimensions();
+        assert_eq!(w, 9144000);
+        assert_eq!(h, 5143500);
+        assert_eq!(t, "screen16x9");
+
+        // Test 4:3
+        let (w, h, t) = SlideSize::Screen4x3.dimensions();
+        assert_eq!(w, 9144000);
+        assert_eq!(h, 6858000);
+        assert_eq!(t, "screen4x3");
+
+        // Test 16:10
+        let (w, h, t) = SlideSize::Screen16x10.dimensions();
+        assert_eq!(w, 9144000);
+        assert_eq!(h, 5715000);
+        assert_eq!(t, "screen16x10");
+    }
+
+    #[test]
+    fn test_slide_size_from_str() {
+        assert_eq!(SlideSize::from_str("16x9"), SlideSize::Screen16x9);
+        assert_eq!(SlideSize::from_str("16:9"), SlideSize::Screen16x9);
+        assert_eq!(SlideSize::from_str("widescreen"), SlideSize::Screen16x9);
+        assert_eq!(SlideSize::from_str("4x3"), SlideSize::Screen4x3);
+        assert_eq!(SlideSize::from_str("4:3"), SlideSize::Screen4x3);
+        assert_eq!(SlideSize::from_str("standard"), SlideSize::Screen4x3);
+        assert_eq!(SlideSize::from_str("16x10"), SlideSize::Screen16x10);
+        assert_eq!(SlideSize::from_str("unknown"), SlideSize::Screen16x9); // Default
+    }
 }

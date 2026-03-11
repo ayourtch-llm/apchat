@@ -124,7 +124,7 @@ Parameters:
         };
 
         // Generate new presentation using ppt-rs
-        match apply_template_to_slides(&title, &author, &pptx_slides, &is_title_slide, &template_path, context) {
+        match apply_template_to_slides(&title, &author, &pptx_slides, &is_title_slide, &template_path, crate::template_impl::SlideSize::Screen16x9, context) {
             Ok(_) => ToolResult::success(format!(
                 "Successfully applied template style from '{}' to '{}', output: '{}'",
                 template_path, input_path, output_path
@@ -341,11 +341,12 @@ fn apply_template_to_slides(
     slides: &[ppt_rs::generator::SlideContent],
     is_title_slide: &[bool],
     template_path: &str,
+    slide_size: crate::template_impl::SlideSize,
     context: &ToolContext,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use crate::template_impl::create_presentation_from_template;
     
-    match create_presentation_from_template(title, author, slides, is_title_slide, template_path, context) {
+    match create_presentation_from_template(title, author, slides, is_title_slide, template_path, slide_size, context) {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Template application failed: {}", e).into()),
     }

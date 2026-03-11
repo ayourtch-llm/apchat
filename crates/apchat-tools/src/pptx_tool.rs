@@ -34,6 +34,7 @@ pub struct PresentationParams {
     title: String,
     author: String,
     slides: Vec<SlideType>,
+    slide_size: Option<String>,
 }
 
 #[async_trait]
@@ -78,6 +79,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
             param!("title", "string", "Presentation title", required),
             param!("author", "string", "Author name", required),
             param!("template", "string", "Optional path to an existing PPTX file to use as a template (preserves theme, slide masters, layouts, logos)", optional),
+            param!("slide_size", "string", "Slide size/aspect ratio: '16x9' (default, widescreen), '4x3' (standard), or '16x10' (wide)", optional),
             param!("slides", "array", "Array of slide objects. Each slide has a 'type' ('title' or 'content'), 'title', and optionally 'subtitle' (for title slides) or 'bullets' (array of strings for content slides)", required),
         ])
     }
@@ -103,6 +105,13 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
 
         // Parse the optional template parameter
         let template_path: Option<String> = params.data.get("template").and_then(|v| v.as_str().map(String::from));
+
+        // Parse the optional slide_size parameter (defaults to 16:9 for best Keynote compatibility)
+        let slide_size_str: Option<String> = params.data.get("slide_size").and_then(|v| v.as_str().map(String::from));
+        let slide_size = slide_size_str
+            .as_deref()
+            .map(crate::template_impl::SlideSize::from_str)
+            .unwrap_or(crate::template_impl::SlideSize::Screen16x9);
 
         // Parse the slides parameter
         let slides: Vec<SlideType> = match params.get_required::<Vec<SlideType>>("slides") {
@@ -158,7 +167,7 @@ The tool uses the ppt-rs library (Apache-2.0 licensed) which supports:
         // Create the presentation using ppt-rs or template
         let pptx_data: Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> = if let Some(template) = &template_path {
             // Use template-based creation
-            create_presentation_from_template(&title, &author, &pptx_slides, &is_title_slide, template, context)
+            create_presentation_from_template(&title, &author, &pptx_slides, &is_title_slide, template, slide_size, context)
         } else {
             // Use default ppt-rs creation
             ppt_rs::generator::create_pptx_with_content(&title, pptx_slides).map_err(|e| e.into())
