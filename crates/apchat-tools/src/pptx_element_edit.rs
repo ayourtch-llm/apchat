@@ -3754,6 +3754,111 @@ fn insert_chart_into_slide(slide_xml: &str, chart_xml: &str) -> Result<String, B
 }
 
 #[cfg(test)]
+mod modify_element_tests {
+    use super::*;
+
+    #[test]
+    fn test_modify_element_preserves_text_content() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Content"/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr>
+<p:txBody>
+<a:p><a:r><a:t>Bullet 1</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 2</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 3</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = modify_element_in_slide(slide_xml, "Content", Some(500), Some(600), None, None);
+        assert!(result.is_ok(), "Should modify: {:?}", result.err());
+        let modified = result.unwrap();
+        
+        assert!(modified.contains(r#"x="500""#), "X should update");
+        assert!(modified.contains(r#"y="600""#), "Y should update");
+        assert!(modified.contains("Bullet 1"), "Bullet 1 preserved");
+        assert!(modified.contains("Bullet 2"), "Bullet 2 preserved");
+        assert!(modified.contains("Bullet 3"), "Bullet 3 preserved");
+        assert!(modified.contains("</p:txBody>"), "</p:txBody> preserved");
+        assert!(modified.contains("</p:sp>"), "</p:sp> preserved");
+    }
+    
+    #[test]
+    fn test_modify_element_with_bullets_no_corruption() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld><p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Content"/><p:cNvSpPr txBox="1"/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="457200" y="1600200"/><a:ext cx="8230200" cy="4572000"/></a:xfrm></p:spPr>
+<p:txBody><a:bodyPr wrap="square" rtlCol="0"/><a:lstStyle/>
+<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"><a:t>Bullet 1</a:t></a:rPr></a:r></a:p>
+<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"><a:t>Bullet 2</a:t></a:rPr></a:r></a:p>
+<a:p><a:pPr lvl="0"><a:defRPr/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"><a:t>Bullet 3</a:t></a:rPr></a:r></a:p>
+</p:txBody>
+</p:sp>
+</p:spTree></p:cSld>
+</p:sld>"#;
+
+        let result = modify_element_in_slide(slide_xml, "Content", Some(500000), Some(1000000), Some(2500000), None);
+        assert!(result.is_ok(), "Should modify: {:?}", result.err());
+        let modified = result.unwrap();
+        
+        let open_p = modified.matches("<a:p>").count();
+        let close_p = modified.matches("</a:p>").count();
+        assert_eq!(open_p, close_p, "Mismatched <a:p>: {} open vs {} close\nXML: {}", open_p, close_p, modified);
+        
+        assert!(modified.contains("Bullet 1"), "Bullet 1");
+        assert!(modified.contains("Bullet 2"), "Bullet 2");
+        assert!(modified.contains("Bullet 3"), "Bullet 3");
+        assert!(modified.contains("</p:txBody>"), "</p:txBody>");
+        assert!(modified.contains("</p:sp>"), "</p:sp>");
+    }
+    
+    #[test]
+    fn test_modify_image_preserves_nearby_shapes() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld><p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Content"/></p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>Bullet 1</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 2</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:pic>
+<p:nvPicPr><p:cNvPr id="11" name="image1.jpg"/></p:nvPicPr>
+<p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="300" cy="400"/></a:xfrm></p:spPr>
+</p:pic>
+</p:spTree></p:cSld>
+</p:sld>"#;
+
+        let result = modify_element_in_slide(slide_xml, "image1.jpg", Some(500), Some(600), None, None);
+        assert!(result.is_ok(), "Should modify image: {:?}", result.err());
+        let modified = result.unwrap();
+        
+        assert!(modified.contains(r#"x="500"#), "X updated");
+        assert!(modified.contains("Bullet 1"), "Bullet 1 preserved");
+        assert!(modified.contains("Bullet 2"), "Bullet 2 preserved");
+        
+        let open_p = modified.matches("<a:p>").count();
+        let close_p = modified.matches("</a:p>").count();
+        assert_eq!(open_p, close_p, "Mismatched a:p: {} vs {}", open_p, close_p);
+    }
+}
+
+#[cfg(test)]
 mod chart_tests {
     use super::*;
 
