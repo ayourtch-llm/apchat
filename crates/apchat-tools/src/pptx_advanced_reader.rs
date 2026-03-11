@@ -344,13 +344,25 @@ fn parse_slide_detailed(
                         }
                     }
                     b"p:cNvPr" => {
-                        // Extract name attribute (can be Start or Empty event)
+                        // Extract name attribute from self-closing cNvPr
                         for attr in e.attributes().flatten() {
                             if attr.key.as_ref() == b"name" {
                                 let name = String::from_utf8_lossy(&attr.value).to_string();
                                 if let Some(ref mut elem) = current_element {
                                     elem.name = Some(name);
                                 }
+                            }
+                        }
+                    }
+                    b"a:srgbClr" => {
+                        // Extract color from self-closing srgbClr
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"val" {
+                                let color_val = String::from_utf8_lossy(&attr.value).to_string();
+                                if let Some(ref mut elem) = current_element {
+                                    elem.properties.insert("color".to_string(), color_val);
+                                }
+                                break;
                             }
                         }
                     }
