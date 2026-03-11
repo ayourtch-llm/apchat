@@ -172,39 +172,62 @@ fn modify_element_in_slide(
     
     let mut element_found = false;
     let mut element_index = 0;
+    let mut in_candidate_element = false;
+    let mut candidate_depth = 0;
+    let mut candidate_element_index = 0;
+    let mut candidate_matched = false;
     let mut in_target_element = false;
-    let mut element_depth = 0;
+    let mut target_element_depth = 0;
     
     let selector_type = parse_selector(selector);
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = e.name();
+                let tag_name = e.name();
                 
-                if name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic" {
+                if tag_name.as_ref() == b"p:sp" || tag_name.as_ref() == b"p:pic" {
                     element_index += 1;
-                    
-                    if element_matches_selector(e, &selector_type, element_index) {
-                        in_target_element = true;
-                        element_found = true;
-                        element_depth = 1;
-                        writer.write_event(Event::Start(e.to_owned()))?;
-                        continue;
-                    }
+                    in_candidate_element = true;
+                    candidate_depth = 1;
+                    candidate_element_index = element_index;
+                    candidate_matched = false;
+                } else if in_candidate_element && !candidate_matched {
+                    candidate_depth += 1;
                 }
                 
-                if in_target_element {
-                    element_depth += 1;
+                if candidate_matched && !in_target_element {
+                    in_target_element = true;
+                    element_found = true;
+                    target_element_depth = candidate_depth;
+                    in_candidate_element = false;
                     
-                    if name.as_ref() == b"a:off" {
+                    if tag_name.as_ref() == b"a:off" {
                         let modified = modify_off_event(e, new_x, new_y);
                         writer.write_event(Event::Start(modified))?;
                         buf.clear();
                         continue;
                     }
                     
-                    if name.as_ref() == b"a:ext" {
+                    if tag_name.as_ref() == b"a:ext" {
+                        let modified = modify_ext_event(e, new_width, new_height);
+                        writer.write_event(Event::Start(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                }
+                
+                if in_target_element {
+                    target_element_depth += 1;
+                    
+                    if tag_name.as_ref() == b"a:off" {
+                        let modified = modify_off_event(e, new_x, new_y);
+                        writer.write_event(Event::Start(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                    
+                    if tag_name.as_ref() == b"a:ext" {
                         let modified = modify_ext_event(e, new_width, new_height);
                         writer.write_event(Event::Start(modified))?;
                         buf.clear();
@@ -216,26 +239,98 @@ fn modify_element_in_slide(
             }
             Ok(Event::End(ref e)) => {
                 if in_target_element {
-                    element_depth -= 1;
-                    if element_depth == 0 {
+                    target_element_depth -= 1;
+                    if target_element_depth == 0 {
                         in_target_element = false;
                     }
                 }
+                
+                if in_candidate_element {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_element = false;
+                    }
+                }
+                
                 writer.write_event(Event::End(e.to_owned()))?;
             }
             Ok(Event::Empty(ref e)) => {
-                if in_target_element && e.name().as_ref() == b"a:off" {
-                    let modified = modify_off_event(e, new_x, new_y);
-                    writer.write_event(Event::Empty(modified))?;
-                    buf.clear();
-                    continue;
+                let tag_name = e.name();
+                
+                if in_candidate_element && !candidate_matched && tag_name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let elem_name = String::from_utf8_lossy(&attr.value);
+                            let elem_type = get_element_type_from_name(&elem_name);
+                            let name_lower = match &selector_type {
+                                SelectorType::Name(n) => n.to_lowercase(),
+                                _ => String::new(),
+                            };
+                            
+                            let matches = match &selector_type {
+                                SelectorType::Index(idx) => candidate_element_index == *idx,
+                                SelectorType::Name(name) => {
+                                    let elem_name_lower = elem_name.to_lowercase();
+                                    elem_name_lower == name_lower ||
+                                    ((name == "content" || name == "body") && (
+                                        elem_name_lower.contains("content") ||
+                                        (elem_name_lower.contains("shape") && !elem_name_lower.contains("title"))
+                                    ))
+                                },
+                                SelectorType::TypeWithIndex(type_prefix, idx) => {
+                                    let matches_type = match type_prefix.as_str() {
+                                        "textbox" | "text" => elem_type == "text",
+                                        "shape" => elem_type == "shape",
+                                        "image" => elem_type == "image",
+                                        _ => false,
+                                    };
+                                    matches_type && candidate_element_index == *idx
+                                },
+                            };
+                            
+                            if matches {
+                                candidate_matched = true;
+                            }
+                        }
+                    }
                 }
-                if in_target_element && e.name().as_ref() == b"a:ext" {
-                    let modified = modify_ext_event(e, new_width, new_height);
-                    writer.write_event(Event::Empty(modified))?;
-                    buf.clear();
-                    continue;
+                
+                if candidate_matched && !in_target_element {
+                    in_target_element = true;
+                    element_found = true;
+                    in_candidate_element = false;
+                    
+                    if tag_name.as_ref() == b"a:off" {
+                        let modified = modify_off_event(e, new_x, new_y);
+                        writer.write_event(Event::Empty(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                    
+                    if tag_name.as_ref() == b"a:ext" {
+                        let modified = modify_ext_event(e, new_width, new_height);
+                        writer.write_event(Event::Empty(modified))?;
+                        buf.clear();
+                        continue;
+                    }
                 }
+                
+                if in_target_element {
+                    if tag_name.as_ref() == b"a:off" {
+                        let modified = modify_off_event(e, new_x, new_y);
+                        writer.write_event(Event::Empty(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                    
+                    if tag_name.as_ref() == b"a:ext" {
+                        let modified = modify_ext_event(e, new_width, new_height);
+                        writer.write_event(Event::Empty(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                }
+                
                 writer.write_event(Event::Empty(e.to_owned()))?;
             }
             Ok(Event::Text(ref e)) => {
@@ -742,6 +837,55 @@ mod tests {
         let modified = result.unwrap();
         assert!(modified.contains("First textbox"), "Should keep first textbox: {}", modified);
         assert!(!modified.contains("Second textbox"), "Should remove second textbox: {}", modified);
+    }
+    
+    #[test]
+    fn test_modify_element_with_body_alias() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="100" y="100"/><a:ext cx="1000" cy="1000"/></a:xfrm></p:spPr>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="100" name="roundedRectangle Shape"/></p:nvSpPr>
+<p:spPr><a:xfrm><a:off x="200" y="200"/><a:ext cx="500" cy="500"/></a:xfrm></p:spPr>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = modify_element_in_slide(slide_xml, "body", Some(500), Some(500), None, None);
+        assert!(result.is_ok(), "Should modify shape with 'body' selector: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"x="500""#), "Should have new x position: {}", modified);
+        assert!(modified.contains(r#"y="500""#), "Should have new y position: {}", modified);
+    }
+    
+    #[test]
+    fn test_apply_bullet_style_with_body_alias() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Title"/></p:nvSpPr>
+<p:txBody><a:p><a:pPr/><a:r><a:t>Title</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Content"/></p:nvSpPr>
+<p:txBody><a:p><a:pPr/><a:r><a:t>Content</a:t></a:r></a:p></p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = apply_bullet_style(slide_xml, "body", "char", &None, &None, None);
+        assert!(result.is_ok(), "Should apply bullets to 'body' selector: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"buChar="1""#), "Should have bullet char: {}", modified);
     }
 }
 
@@ -1384,8 +1528,12 @@ fn apply_bullet_style(
     let mut buf = Vec::new();
     
     let mut element_index = 0;
+    let mut in_candidate_element = false;
+    let mut candidate_depth = 0;
+    let mut candidate_element_index = 0;
+    let mut candidate_matched = false;
     let mut in_target_element = false;
-    let mut element_depth = 0;
+    let mut target_element_depth = 0;
     let mut element_found = false;
     
     let selector_type = parse_selector(selector);
@@ -1393,25 +1541,38 @@ fn apply_bullet_style(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = e.name();
+                let tag_name = e.name();
                 
-                if !in_target_element && (name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic") {
+                if tag_name.as_ref() == b"p:sp" || tag_name.as_ref() == b"p:pic" {
                     element_index += 1;
-                    if element_matches_selector(e, &selector_type, element_index) {
-                        in_target_element = true;
-                        element_found = true;
-                        element_depth = 1;
-                        writer.write_event(Event::Start(e.to_owned()))?;
+                    in_candidate_element = true;
+                    candidate_depth = 1;
+                    candidate_element_index = element_index;
+                    candidate_matched = false;
+                } else if in_candidate_element && !candidate_matched {
+                    candidate_depth += 1;
+                }
+                
+                if candidate_matched && !in_target_element {
+                    in_target_element = true;
+                    element_found = true;
+                    target_element_depth = candidate_depth;
+                    in_candidate_element = false;
+                    
+                    if tag_name.as_ref() == b"a:pPr" {
+                        let modified = modify_bullet_properties(
+                            e, bullet_type, bullet_char, bullet_color, bullet_size
+                        );
+                        writer.write_event(Event::Start(modified))?;
                         buf.clear();
                         continue;
                     }
                 }
                 
                 if in_target_element {
-                    element_depth += 1;
+                    target_element_depth += 1;
                     
-                    // Modify paragraph properties for bullets
-                    if name.as_ref() == b"a:pPr" {
+                    if tag_name.as_ref() == b"a:pPr" {
                         let modified = modify_bullet_properties(
                             e, bullet_type, bullet_char, bullet_color, bullet_size
                         );
@@ -1425,14 +1586,77 @@ fn apply_bullet_style(
             }
             Ok(Event::End(ref e)) => {
                 if in_target_element {
-                    element_depth -= 1;
-                    if element_depth == 0 {
+                    target_element_depth -= 1;
+                    if target_element_depth == 0 {
                         in_target_element = false;
                     }
                 }
+                
+                if in_candidate_element {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_element = false;
+                    }
+                }
+                
                 writer.write_event(Event::End(e.to_owned()))?;
             }
             Ok(Event::Empty(ref e)) => {
+                let tag_name = e.name();
+                
+                if in_candidate_element && !candidate_matched && tag_name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let elem_name = String::from_utf8_lossy(&attr.value);
+                            let elem_type = get_element_type_from_name(&elem_name);
+                            let name_lower = match &selector_type {
+                                SelectorType::Name(n) => n.to_lowercase(),
+                                _ => String::new(),
+                            };
+                            
+                            let matches = match &selector_type {
+                                SelectorType::Index(idx) => candidate_element_index == *idx,
+                                SelectorType::Name(name) => {
+                                    let elem_name_lower = elem_name.to_lowercase();
+                                    elem_name_lower == name_lower ||
+                                    ((name == "content" || name == "body") && (
+                                        elem_name_lower.contains("content") ||
+                                        (elem_name_lower.contains("shape") && !elem_name_lower.contains("title"))
+                                    ))
+                                },
+                                SelectorType::TypeWithIndex(type_prefix, idx) => {
+                                    let matches_type = match type_prefix.as_str() {
+                                        "textbox" | "text" => elem_type == "text",
+                                        "shape" => elem_type == "shape",
+                                        "image" => elem_type == "image",
+                                        _ => false,
+                                    };
+                                    matches_type && candidate_element_index == *idx
+                                },
+                            };
+                            
+                            if matches {
+                                candidate_matched = true;
+                            }
+                        }
+                    }
+                }
+                
+                if candidate_matched && !in_target_element {
+                    in_target_element = true;
+                    element_found = true;
+                    in_candidate_element = false;
+                    
+                    if tag_name.as_ref() == b"a:pPr" {
+                        let modified = modify_bullet_properties(
+                            e, bullet_type, bullet_char, bullet_color, bullet_size
+                        );
+                        writer.write_event(Event::Empty(modified))?;
+                        buf.clear();
+                        continue;
+                    }
+                }
+                
                 if in_target_element && e.name().as_ref() == b"a:pPr" {
                     let modified = modify_bullet_properties(
                         e, bullet_type, bullet_char, bullet_color, bullet_size
