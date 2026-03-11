@@ -908,13 +908,15 @@ Parameters:
 - path: Path to the PPTX file
 - slide_number: 1-based slide number
 - element_selector: Element to format (name or index)
-- font_size: Font size in half-points (optional, 12pt = 24 half-points)
+- font_size: Font size in points (optional, e.g., 12 for 12pt, 28 for 28pt)
 - font_family: Font name like 'Arial' (optional)
 - bold: Make text bold (optional)
 - italic: Make text italic (optional)
 - underline: Underline text (optional)
 - color: Hex color like 'FF0000' for red (optional)
 - alignment: Text alignment (left|center|right|justify, optional)
+
+Note: Font sizes stored in hundredths of a point (ISO/IEC 29500-1). 12pt=sz=\"1200\"
 
 Use element selector 'title' to format title, or 'body' for body text."
     }
@@ -924,7 +926,7 @@ Use element selector 'title' to format title, or 'body' for body text."
             param!("path", "string", "Path to the PPTX file", required),
             param!("slide_number", "integer", "1-based slide number", required),
             param!("element_selector", "string", "Element to format (name or index)", required),
-            param!("font_size", "integer", "Font size in half-points (12pt=24)", optional),
+            param!("font_size", "integer", "Font size in points (e.g., 12 for 12pt)", optional),
             param!("font_family", "string", "Font name like 'Arial'", optional),
             param!("bold", "boolean", "Make text bold", optional),
             param!("italic", "boolean", "Make text italic", optional),
@@ -1333,9 +1335,9 @@ fn modify_run_properties(
     
     // Apply modifications
     if let Some(sz) = font_size {
-        // PPTX uses half-points (1/20 of a point), so multiply by 20
-        // User specifies points (e.g., 28), we store half-points (560)
-        existing_attrs.insert("sz".to_string(), (sz * 20).to_string());
+        // PPTX uses hundredths of a point (ISO/IEC 29500-1:2016 ST_TextFontSize)
+        // User specifies points (e.g., 28), we store hundredths (2800)
+        existing_attrs.insert("sz".to_string(), (sz * 100).to_string());
     }
     
     if let Some(ref family) = font_family {
