@@ -187,6 +187,7 @@ fn parse_slide_detailed(
 
     let mut buf = Vec::new();
     let mut in_text_element = false;
+    let mut in_paragraph = false;
     let mut current_text = String::new();
     let mut current_element: Option<SlideElementBuilder> = None;
     
@@ -244,6 +245,14 @@ fn parse_slide_detailed(
                     }
                     b"a:t" => {
                         in_text_element = true;
+                    }
+                    b"a:p" => {
+                        // Start of a paragraph (bullet point)
+                        in_paragraph = true;
+                        // Add newline between paragraphs for readability
+                        if !current_text.is_empty() && !current_text.ends_with('\n') {
+                            current_text.push('\n');
+                        }
                     }
                     b"a:srgbClr" => {
                         // Extract color from a:srgbClr val attribute
@@ -314,6 +323,10 @@ fn parse_slide_detailed(
                 match e.name().as_ref() {
                     b"a:t" => {
                         in_text_element = false;
+                    }
+                    b"a:p" => {
+                        // End of paragraph
+                        in_paragraph = false;
                     }
                     b"p:sp" | b"p:pic" => {
                         // End of element
