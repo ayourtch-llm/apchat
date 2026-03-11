@@ -31,6 +31,7 @@ pub struct FeatureFlags {
     pub forecasting: bool,
     pub context_mode: bool,
     pub financial_services: bool,
+    pub designer_skills: Option<Vec<String>>,
     pub save: bool,
     pub load: Option<String>,
     pub disable_webex_broadcast: bool,

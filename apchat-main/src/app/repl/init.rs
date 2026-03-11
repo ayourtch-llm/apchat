@@ -48,6 +48,7 @@ pub async fn initialize_repl(
         forecasting: cli.forecasting,
         context_mode: cli.context_mode,
         financial_services: cli.financial_services,
+        designer_skills: cli.designer_skills.clone(),
         save: cli.save,
         load: cli.load.clone(),
         disable_webex_broadcast: cli.disable_webex_broadcast,
