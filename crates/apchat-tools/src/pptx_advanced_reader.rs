@@ -188,6 +188,7 @@ fn parse_slide_detailed(
     let mut buf = Vec::new();
     let mut in_text_element = false;
     let mut in_paragraph = false;
+    let mut is_bullet_paragraph = false;
     let mut current_text = String::new();
     let mut current_element: Option<SlideElementBuilder> = None;
     
@@ -243,15 +244,41 @@ fn parse_slide_detailed(
                             elem.size = Some(ElementSize { width: cx, height: cy });
                         }
                     }
-                    b"a:t" => {
-                        in_text_element = true;
-                    }
                     b"a:p" => {
                         // Start of a paragraph (bullet point)
                         in_paragraph = true;
+                        is_bullet_paragraph = false;
                         // Add newline between paragraphs for readability
                         if !current_text.is_empty() && !current_text.ends_with('\n') {
                             current_text.push('\n');
+                        }
+                    }
+                    b"a:buChar" => {
+                        // This paragraph has a bullet character
+                        is_bullet_paragraph = true;
+                        // Extract the bullet character if specified
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"char" {
+                                let bullet_char = String::from_utf8_lossy(&attr.value);
+                                // We'll prepend this when we hit the text
+                                if let Some(ref mut elem) = current_element {
+                                    elem.properties.insert("bullet_char".to_string(), bullet_char.to_string());
+                                }
+                            }
+                        }
+                    }
+                    b"a:buAutoNum" => {
+                        // This paragraph has auto-numbered bullets
+                        is_bullet_paragraph = true;
+                        if let Some(ref mut elem) = current_element {
+                            elem.properties.insert("is_numbered".to_string(), "true".to_string());
+                        }
+                    }
+                    b"a:t" => {
+                        in_text_element = true;
+                        // Prepend bullet marker if this is a bullet paragraph
+                        if is_bullet_paragraph && in_paragraph && !current_text.ends_with("• ") {
+                            current_text.push_str("• ");
                         }
                     }
                     b"a:srgbClr" => {
@@ -327,6 +354,7 @@ fn parse_slide_detailed(
                     b"a:p" => {
                         // End of paragraph
                         in_paragraph = false;
+                        is_bullet_paragraph = false;
                     }
                     b"p:sp" | b"p:pic" => {
                         // End of element
