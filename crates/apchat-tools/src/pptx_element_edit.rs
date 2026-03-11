@@ -204,14 +204,14 @@ fn modify_element_in_slide(
                     
                     if tag_name.as_ref() == b"a:off" {
                         let modified = modify_off_event(e, new_x, new_y);
-                        writer.write_event(Event::Start(modified))?;
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
                     
                     if tag_name.as_ref() == b"a:ext" {
                         let modified = modify_ext_event(e, new_width, new_height);
-                        writer.write_event(Event::Start(modified))?;
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
@@ -222,14 +222,14 @@ fn modify_element_in_slide(
                     
                     if tag_name.as_ref() == b"a:off" {
                         let modified = modify_off_event(e, new_x, new_y);
-                        writer.write_event(Event::Start(modified))?;
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
                     
                     if tag_name.as_ref() == b"a:ext" {
                         let modified = modify_ext_event(e, new_width, new_height);
-                        writer.write_event(Event::Start(modified))?;
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
@@ -1110,7 +1110,7 @@ fn format_text_in_element(
                     if tag_name.as_ref() == b"a:pPr" {
                         if let Some(align) = alignment {
                             let modified = modify_paragraph_alignment(e, align);
-                            writer.write_event(Event::Start(modified))?;
+                            writer.write_event(Event::Empty(modified))?;
                             buf.clear();
                             continue;
                         }
@@ -1120,19 +1120,7 @@ fn format_text_in_element(
                         let modified = modify_run_properties(
                             e, font_size, font_family, bold, italic, underline, color
                         );
-                        writer.write_event(Event::Start(modified))?;
-                        
-                        if let Some(ref color_val) = color {
-                            let mut solid_fill = BytesStart::new("a:solidFill");
-                            writer.write_event(Event::Start(solid_fill))?;
-                            
-                            let mut srgb_clr = BytesStart::new("a:srgbClr");
-                            srgb_clr.push_attribute(("val", color_val.as_str()));
-                            writer.write_event(Event::Empty(srgb_clr))?;
-                            
-                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
-                        }
-                        
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
@@ -1144,7 +1132,7 @@ fn format_text_in_element(
                     if tag_name.as_ref() == b"a:pPr" {
                         if let Some(align) = alignment {
                             let modified = modify_paragraph_alignment(e, align);
-                            writer.write_event(Event::Start(modified))?;
+                            writer.write_event(Event::Empty(modified))?;
                             buf.clear();
                             continue;
                         }
@@ -1154,19 +1142,7 @@ fn format_text_in_element(
                         let modified = modify_run_properties(
                             e, font_size, font_family, bold, italic, underline, color
                         );
-                        writer.write_event(Event::Start(modified))?;
-                        
-                        if let Some(ref color_val) = color {
-                            let mut solid_fill = BytesStart::new("a:solidFill");
-                            writer.write_event(Event::Start(solid_fill))?;
-                            
-                            let mut srgb_clr = BytesStart::new("a:srgbClr");
-                            srgb_clr.push_attribute(("val", color_val.as_str()));
-                            writer.write_event(Event::Empty(srgb_clr))?;
-                            
-                            writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
-                        }
-                        
+                        writer.write_event(Event::Empty(modified))?;
                         buf.clear();
                         continue;
                     }
@@ -1246,22 +1222,7 @@ fn format_text_in_element(
                     let modified = modify_run_properties(
                         e, font_size, font_family, bold, italic, underline, color
                     );
-                    
-                    if let Some(ref color_val) = color {
-                        writer.write_event(Event::Start(modified))?;
-                        
-                        let mut solid_fill = BytesStart::new("a:solidFill");
-                        writer.write_event(Event::Start(solid_fill))?;
-                        
-                        let mut srgb_clr = BytesStart::new("a:srgbClr");
-                        srgb_clr.push_attribute(("val", color_val.as_str()));
-                        writer.write_event(Event::Empty(srgb_clr))?;
-                        
-                        writer.write_event(Event::End(BytesEnd::new("a:solidFill")))?;
-                        writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
-                    } else {
-                        writer.write_event(Event::Empty(modified))?;
-                    }
+                    writer.write_event(Event::Empty(modified))?;
                     buf.clear();
                     continue;
                 }
