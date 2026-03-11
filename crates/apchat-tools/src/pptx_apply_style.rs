@@ -183,11 +183,15 @@ fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Erro
     let mut buf = Vec::new();
     let mut title = String::new();
     let mut bullets: Vec<String> = Vec::new();
-    let mut in_title_ph = false;
-    let mut in_body_ph = false;
+    
+    // Track shape elements and their names
+    let mut in_candidate_shape = false;
+    let mut candidate_depth = 0;
+    let mut shape_is_title = false;
+    let mut shape_is_body = false;
+    
     let mut in_text = false;
     let mut current_text = String::new();
-    let mut depth = 0;
     let mut slide_number = 0usize;
 
     loop {
@@ -206,31 +210,51 @@ fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Erro
                     }
                 }
                 
-                // Check for placeholder elements
-                if name.as_ref() == b"p:ph" {
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"type" {
-                            let t = String::from_utf8_lossy(&attr.value);
-                            if t == "title" || t == "ctrTitle" {
-                                in_title_ph = true;
-                                depth = 1;
-                            } else if t == "body" || t == "obj" {
-                                in_body_ph = true;
-                                depth = 1;
+                // Check if entering a shape element
+                if name.as_ref() == b"p:sp" || name.as_ref() == b"p:pic" {
+                    in_candidate_shape = true;
+                    candidate_depth = 1;
+                    shape_is_title = false;
+                    shape_is_body = false;
+                } else if in_candidate_shape {
+                    candidate_depth += 1;
+                    
+                    // Check shape name from cNvPr element
+                    if name.as_ref() == b"p:cNvPr" {
+                        for attr in e.attributes().flatten() {
+                            if attr.key.as_ref() == b"name" {
+                                let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                                if shape_name.contains("title") {
+                                    shape_is_title = true;
+                                } else if shape_name.contains("content") || shape_name.contains("body") {
+                                    shape_is_body = true;
+                                }
                             }
-                            break;
                         }
                     }
                 }
                 
-                if in_title_ph || in_body_ph {
-                    depth += 1;
-                }
-                
-                // Track text elements
-                if name.as_ref() == b"a:t" && (in_title_ph || in_body_ph) {
+                // Track text elements in title or body shapes
+                if (shape_is_title || shape_is_body) && name.as_ref() == b"a:t" {
                     in_text = true;
                     current_text.clear();
+                }
+            }
+            Ok(Event::Empty(ref e)) => {
+                let name = e.name();
+                
+                // Handle self-closing p:cNvPr tags
+                if in_candidate_shape && name.as_ref() == b"p:cNvPr" {
+                    for attr in e.attributes().flatten() {
+                        if attr.key.as_ref() == b"name" {
+                            let shape_name = String::from_utf8_lossy(&attr.value).to_lowercase();
+                            if shape_name.contains("title") {
+                                shape_is_title = true;
+                            } else if shape_name.contains("content") || shape_name.contains("body") {
+                                shape_is_body = true;
+                            }
+                        }
+                    }
                 }
             }
             Ok(Event::Text(ref e)) => {
@@ -239,11 +263,12 @@ fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Erro
                 }
             }
             Ok(Event::End(ref e)) => {
-                if in_title_ph || in_body_ph {
-                    depth -= 1;
-                    if depth == 0 {
-                        in_title_ph = false;
-                        in_body_ph = false;
+                if in_candidate_shape {
+                    candidate_depth -= 1;
+                    if candidate_depth == 0 {
+                        in_candidate_shape = false;
+                        shape_is_title = false;
+                        shape_is_body = false;
                     }
                 }
                 
@@ -251,9 +276,9 @@ fn parse_slide_xml(xml: &str) -> Result<ExtractedSlide, Box<dyn std::error::Erro
                     in_text = false;
                     let t = current_text.trim().to_string();
                     if !t.is_empty() {
-                        if in_title_ph && title.is_empty() {
+                        if shape_is_title && title.is_empty() {
                             title = t;
-                        } else if in_body_ph {
+                        } else if shape_is_body {
                             bullets.push(t);
                         }
                     }
@@ -349,5 +374,116 @@ fn apply_template_to_slides(
     match create_presentation_from_template(title, author, slides, is_title_slide, template_path, slide_size, context) {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Template application failed: {}", e).into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_pptx_style_tool_basic() {
+        let tool = ApplyPptxStyleTool;
+        assert_eq!(tool.name(), "apply_pptx_style");
+        assert!(!tool.description().is_empty());
+    }
+    
+    #[test]
+    fn test_parse_slide_xml_with_shape_names() {
+        // Test ppt_rs-generated slides that use shape names instead of placeholders
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>My Title</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="3" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>Bullet 1</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 2</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet 3</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let slide = parse_slide_xml(slide_xml).expect("Failed to parse slide XML");
+        assert_eq!(slide.title, "My Title", "Should extract title from shape named 'Title'");
+        assert_eq!(slide.bullets.len(), 3, "Should extract 3 bullets from shape named 'Content'");
+        assert_eq!(slide.bullets[0], "Bullet 1");
+        assert_eq!(slide.bullets[1], "Bullet 2");
+        assert_eq!(slide.bullets[2], "Bullet 3");
+    }
+    
+    #[test]
+    fn test_parse_slide_xml_with_placeholder_type() {
+        // Test traditional slides that use placeholder types
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+<p:nvPr><p:ph type="title"/></p:nvPr>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>Placeholder Title</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="3" name="Content"/>
+<p:nvPr><p:ph type="body"/></p:nvPr>
+</p:nvSpPr>
+<p:txBody>
+<a:p><a:r><a:t>Bullet A</a:t></a:r></a:p>
+<a:p><a:r><a:t>Bullet B</a:t></a:r></a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let slide = parse_slide_xml(slide_xml).expect("Failed to parse slide XML");
+        assert_eq!(slide.title, "Placeholder Title");
+        assert_eq!(slide.bullets.len(), 2);
+        assert_eq!(slide.bullets[0], "Bullet A");
+        assert_eq!(slide.bullets[1], "Bullet B");
+    }
+    
+    #[test]
+    fn test_parse_slide_xml_with_self_closing_cnvpr() {
+        // Test slides with self-closing p:cNvPr tags
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="2" name="Title 1"/></p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Self-closing Title</a:t></a:r></a:p></p:txBody>
+</p:sp>
+<p:sp>
+<p:nvSpPr><p:cNvPr id="3" name="Body Placeholder 5"/></p:nvSpPr>
+<p:txBody><a:p><a:r><a:t>Content from body shape</a:t></a:r></a:p></p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let slide = parse_slide_xml(slide_xml).expect("Failed to parse slide XML");
+        assert_eq!(slide.title, "Self-closing Title");
+        assert_eq!(slide.bullets.len(), 1);
+        assert_eq!(slide.bullets[0], "Content from body shape");
     }
 }
