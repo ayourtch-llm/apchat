@@ -1106,21 +1106,23 @@ fn format_text_in_element(
                     element_found = true;
                     target_element_depth = candidate_depth;
                     in_candidate_element = false;
-                    
+
                     if tag_name.as_ref() == b"a:pPr" {
                         if let Some(align) = alignment {
                             let modified = modify_paragraph_alignment(e, align);
-                            writer.write_event(Event::Empty(modified))?;
+                            writer.write_event(Event::Start(modified))?;
                             buf.clear();
                             continue;
                         }
                     }
-                    
+
                     if tag_name.as_ref() == b"a:rPr" {
                         let modified = modify_run_properties(
                             e, font_size, font_family, bold, italic, underline, color
                         );
-                        writer.write_event(Event::Empty(modified))?;
+                        writer.write_event(Event::Start(modified.start.to_owned()))?;
+                        // Write child elements if any
+                        write_child_elements(&mut writer, &modified.child_elements)?;
                         buf.clear();
                         continue;
                     }
@@ -1128,21 +1130,23 @@ fn format_text_in_element(
                 
                 if in_target_element {
                     target_element_depth += 1;
-                    
+
                     if tag_name.as_ref() == b"a:pPr" {
                         if let Some(align) = alignment {
                             let modified = modify_paragraph_alignment(e, align);
-                            writer.write_event(Event::Empty(modified))?;
+                            writer.write_event(Event::Start(modified))?;
                             buf.clear();
                             continue;
                         }
                     }
-                    
+
                     if tag_name.as_ref() == b"a:rPr" {
                         let modified = modify_run_properties(
                             e, font_size, font_family, bold, italic, underline, color
                         );
-                        writer.write_event(Event::Empty(modified))?;
+                        writer.write_event(Event::Start(modified.start.to_owned()))?;
+                        // Write child elements if any
+                        write_child_elements(&mut writer, &modified.child_elements)?;
                         buf.clear();
                         continue;
                     }
@@ -1222,7 +1226,15 @@ fn format_text_in_element(
                     let modified = modify_run_properties(
                         e, font_size, font_family, bold, italic, underline, color
                     );
-                    writer.write_event(Event::Empty(modified))?;
+                    // If we have child elements, write as Start + Children + End
+                    // Otherwise write as Empty
+                    if modified.has_children() {
+                        writer.write_event(Event::Start(modified.start.to_owned()))?;
+                        write_child_elements(&mut writer, &modified.child_elements)?;
+                        writer.write_event(Event::End(BytesEnd::new("a:rPr")))?;
+                    } else {
+                        writer.write_event(Event::Empty(modified.start))?;
+                    }
                     buf.clear();
                     continue;
                 }
@@ -1258,9 +1270,9 @@ fn modify_paragraph_alignment(event: &BytesStart, alignment: &str) -> BytesStart
         "justify" => "just",
         _ => "l",
     };
-    
+
     let mut result = BytesStart::new("a:pPr");
-    
+
     // Copy existing attributes except algn
     for attr in event.attributes().flatten() {
         if attr.key.as_ref() != b"algn" {
@@ -1269,10 +1281,73 @@ fn modify_paragraph_alignment(event: &BytesStart, alignment: &str) -> BytesStart
             result.push_attribute((key.as_ref(), value.as_ref()));
         }
     }
-    
+
     // Add new alignment
     result.push_attribute(("algn", align_val));
     result
+}
+
+/// Holds a modified XML element along with any child elements that need to be written
+struct ModifiedElement {
+    start: BytesStart<'static>,
+    child_elements: Vec<String>,
+}
+
+impl ModifiedElement {
+    fn new(start: BytesStart<'static>) -> Self {
+        Self {
+            start,
+            child_elements: Vec::new(),
+        }
+    }
+
+    fn with_child(mut self, child: String) -> Self {
+        self.child_elements.push(child);
+        self
+    }
+
+    fn has_children(&self) -> bool {
+        !self.child_elements.is_empty()
+    }
+}
+
+/// Write child XML elements as proper events (not escaped text)
+fn write_child_elements<W: Write>(
+    writer: &mut Writer<W>,
+    child_elements: &[String],
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    for child_xml in child_elements {
+        // Parse the child XML and write it as proper events
+        let mut child_reader = Reader::from_str(child_xml);
+        child_reader.trim_text(true);
+        let mut child_buf = Vec::new();
+
+        loop {
+            match child_reader.read_event_into(&mut child_buf) {
+                Ok(Event::Start(e)) => {
+                    writer.write_event(Event::Start(e.to_owned()))?;
+                }
+                Ok(Event::End(e)) => {
+                    writer.write_event(Event::End(e.to_owned()))?;
+                }
+                Ok(Event::Empty(e)) => {
+                    writer.write_event(Event::Empty(e.to_owned()))?;
+                }
+                Ok(Event::Text(e)) => {
+                    writer.write_event(Event::Text(e.to_owned()))?;
+                }
+                Ok(Event::Eof) => break,
+                Ok(e) => {
+                    writer.write_event(e.to_owned())?;
+                }
+                Err(e) => {
+                    return Err(format!("Failed to parse child XML: {}", e).into());
+                }
+            }
+            child_buf.clear();
+        }
+    }
+    Ok(())
 }
 
 fn modify_run_properties(
@@ -1283,9 +1358,9 @@ fn modify_run_properties(
     italic: Option<bool>,
     underline: Option<bool>,
     color: &Option<String>,
-) -> BytesStart<'static> {
+) -> ModifiedElement {
     let mut result = BytesStart::new("a:rPr");
-    
+
     // Get existing values
     let mut existing_attrs: HashMap<String, String> = HashMap::new();
     for attr in event.attributes().flatten() {
@@ -1293,37 +1368,45 @@ fn modify_run_properties(
         let value = String::from_utf8_lossy(&attr.value).to_string();
         existing_attrs.insert(key, value);
     }
-    
+
     // Apply modifications
     if let Some(sz) = font_size {
         // PPTX uses hundredths of a point (ISO/IEC 29500-1:2016 ST_TextFontSize)
         // User specifies points (e.g., 28), we store hundredths (2800)
         existing_attrs.insert("sz".to_string(), (sz * 100).to_string());
     }
-    
+
     if let Some(ref family) = font_family {
         // Note: Font family requires additional a:latin element, skip for now
         // This is a simplification
     }
-    
+
     if let Some(b) = bold {
         existing_attrs.insert("b".to_string(), if b { "1".to_string() } else { "0".to_string() });
     }
-    
+
     if let Some(i) = italic {
         existing_attrs.insert("i".to_string(), if i { "1".to_string() } else { "0".to_string() });
     }
-    
+
     if let Some(u) = underline {
         existing_attrs.insert("u".to_string(), if u { "sng".to_string() } else { "none".to_string() });
     }
-    
+
     // Write all attributes
     for (key, value) in existing_attrs {
         result.push_attribute((key.as_str(), value.as_str()));
     }
-    
-    result
+
+    let mut modified = ModifiedElement::new(result);
+
+    // Add color as child element if specified
+    if let Some(ref color_value) = color {
+        let color_xml = format!(r#"<a:solidFill><a:srgbClr val="{}"/></a:solidFill>"#, color_value);
+        modified = modified.with_child(color_xml);
+    }
+
+    modified
 }
 
 /// Tool for setting bullet point style
@@ -1952,6 +2035,133 @@ mod text_tests {
         assert!(result.is_ok(), "Should find shape with 'body' selector: {:?}", result.err());
         let modified = result.unwrap();
         assert!(modified.contains(r#"val="FFFFFF""#), "Should have white color: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_with_color_and_bold() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Title"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr sz="2800"/>
+<a:t>Test</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "Title",
+            Some(32),
+            &None,
+            Some(true),
+            None,
+            None,
+            &Some("FF0000".to_string()), // Red
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should format with color and bold: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="FF0000""#), "Should have red color: {}", modified);
+        assert!(modified.contains(r#"b="1""#), "Should have bold attribute: {}", modified);
+        assert!(modified.contains(r#"sz="3200""#), "Should have font size 32pt (3200 hundredths): {}", modified);
+        assert!(!modified.contains("&lt;"), "Should NOT have escaped XML: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_empty_rpr_with_color() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="Content"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr/>
+<a:t>Test</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "Content",
+            None,
+            &None,
+            None,
+            None,
+            None,
+            &Some("00FF00".to_string()), // Green
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should handle empty rPr with color: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="00FF00""#), "Should have green color: {}", modified);
+        assert!(modified.contains(r#"<a:solidFill>"#), "Should have solidFill element: {}", modified);
+    }
+
+    #[test]
+    fn test_format_text_preserves_existing_rpr_attributes_with_color() {
+        let slide_xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld>
+<p:spTree>
+<p:sp>
+<p:nvSpPr>
+<p:cNvPr id="2" name="MyCustomBox"/>
+</p:nvSpPr>
+<p:txBody>
+<a:p>
+<a:r>
+<a:rPr sz="2400" i="1" lang="en-US"/>
+<a:t>Italic Text</a:t>
+</a:r>
+</a:p>
+</p:txBody>
+</p:sp>
+</p:spTree>
+</p:cSld>
+</p:sld>"#;
+
+        let result = format_text_in_element(
+            slide_xml,
+            "MyCustomBox",
+            None,
+            &None,
+            None,
+            Some(false), // Turn off italic
+            None,
+            &Some("0000FF".to_string()), // Blue
+            &None,
+        );
+
+        assert!(result.is_ok(), "Should preserve existing attributes: {:?}", result.err());
+        let modified = result.unwrap();
+        assert!(modified.contains(r#"val="0000FF""#), "Should have blue color: {}", modified);
+        assert!(modified.contains(r#"sz="2400""#), "Should preserve font size: {}", modified);
+        assert!(modified.contains(r#"i="0""#), "Should turn off italic: {}", modified);
+        assert!(modified.contains(r#"lang="en-US""#), "Should preserve language: {}", modified);
     }
 
     #[test]
