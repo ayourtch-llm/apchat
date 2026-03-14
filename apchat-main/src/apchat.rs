@@ -380,6 +380,14 @@ impl APChat {
         Ok(content)
     }
 
+    pub fn load_agents_context(&self, file_path: &str) -> Result<String> {
+        let full_path = self.work_dir.join(file_path);
+        let content = fs::read_to_string(&full_path)
+            .with_context(|| format!("Failed to read file: {}", full_path.display()))?;
+
+        Ok(content)
+    }
+
     pub fn switch_model(&mut self, model_str: &str, reason: &str) -> Result<String> {
         let new_model = match model_str.to_lowercase().as_str() {
             "blu_model" | "blu-model" | "blumodel" => ModelColor::BluModel,

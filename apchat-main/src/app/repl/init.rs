@@ -283,7 +283,7 @@ fn parse_idle_config(cli: &Cli) -> Result<Option<IdleConfig>> {
 }
 
 async fn load_project_context(chat: &mut APChat) {
-    let kimi_context = if let Ok(kimi_content) = chat.peek_file_top_10_lines("AGENTS.md") {
+    let kimi_context = if let Ok(kimi_content) = chat.load_agents_context("AGENTS.md") {
         print_heart_red(&format!("{} {}", "📖".bright_cyan(), "Reading project context from AGENTS.md...".bright_black()), true);
         kimi_content
     } else {
