@@ -299,11 +299,6 @@ pub async fn run_repl_mode(
                 if chat.get_inference_debug() {
                     print_heart_yellow(&format!("📉 [DEBUG] request_guard set to None - counter should decrement"), true);
                 }
-                // Always clear the cancellation token, regardless of outcome
-                {
-                    let mut guard = current_token.lock().unwrap();
-                    *guard = None;
-                }
                 let llm_response = match llm_response_res {
                     Some(response) => response,
                     None => {
@@ -404,10 +399,21 @@ pub async fn run_repl_mode(
                                 print_heart_yellow("🔕 Webex broadcast disabled (--disable-webex-broadcast)", true);
                             }
                         }
+                        
+                        // Clear cancellation token after response completes (tools have finished)
+                        {
+                            let mut guard = current_token.lock().unwrap();
+                            *guard = None;
+                        }
                     }
 
                     InferenceOutcome::Interrupted | InferenceOutcome::Error => {
                         print_heart_yellow(&format!("🚫 [DEBUG] InferenceOutcome::Interrupted or Error - continuing outer loop"), true);
+                        // Clear cancellation token on interrupt/error
+                        {
+                            let mut guard = current_token.lock().unwrap();
+                            *guard = None;
+                        }
                         // Reset empty response retries on error/interrupt
                         empty_response_retries = 0;
                         // Error/interrupted messages were already pushed by run_tool_loop
