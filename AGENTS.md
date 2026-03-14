@@ -22,7 +22,7 @@ cargo run
 
 ### Run inside the pty tool, with a real model behind, to be able to interact:
 ```bash
-cargo run -- --stream --interactive --llama-cpp-url http://192.168.0.201:8081 --auto-confirm
+cargo run -- --stream --interactive --llama-cpp-url http://127.0.0.1:4000/v1/ --auto-confirm
 ```
 
 ## Tool Usage Best Practices
@@ -139,36 +139,40 @@ APChat is a sophisticated Rust-based AI development assistant with two operation
 1. **Single LLM Mode** (default) - Direct conversation with one LLM with full tool access
 2. **Multi-Agent Mode** (`--agents` flag) - Planner-first architecture where a planning agent decomposes tasks and delegates to specialized agents
 
-The project is organized as a Rust workspace with 15 crates and ~11,270 lines of Rust code. It supports 4 LLM providers (Groq, Anthropic Claude, OpenAI, llama.cpp) and includes 26 tools, 7 specialized agents, and 21 mandatory skills (proven workflows).
+The project is organized as a Rust workspace with **24 crates** and **~100,000 lines** of Rust code. It supports 4 LLM providers (Groq, Anthropic Claude, OpenAI, llama.cpp) and includes **50+ tools**, **8 specialized agents**, and **38 skills** (proven workflows).
 
-### Project exploration
-IMPORTANT: you can save a lot of effort by using file_curly_glance tool to look at the *.rs files! It will give you the parentheses spans - and if you
-give the start line inside the span - then you can recursively peek inside the spans too! Read [docs/tools/curly_glance_usage.md](docs/tools/curly_glance_usage.md) for more info.
-
-## Workspace Structure
+### Project Structure
 
 ```
 apchat/
 ├── apchat-main/           # Main binary crate (CLI, REPL, web server)
 ├── crates/
-│   ├── apchat-llm-api/   # Unified LLM client interface
+│   ├── apchat-common/     # Common utilities and types
+│   ├── apchat-core/       # Core functionality
+│   ├── apchat-designer/   # Design-related tools
+│   ├── apchat-finserv/    # Financial services tools
+│   ├── apchat-llm-api/    # Unified LLM client interface
 │   ├── apchat-logging/    # Conversation logging (JSONL)
+│   ├── apchat-mcp-pty-server/  # MCP PTY server integration
 │   ├── apchat-models/     # Data structures and types
 │   ├── apchat-mspc/       # Message passing channels
+│   ├── apchat-ocr/        # Optical character recognition
 │   ├── apchat-policy/     # Security and approval system
-│   ├── apchat-progress/    # Progress tracking for streaming
+│   ├── apchat-pptx/       # PowerPoint processing
+│   ├── apchat-progress/   # Progress tracking for streaming
 │   ├── apchat-skills/     # Skill registry and loading
-│   ├── apchat-terminal/    # PTY session management with VT100
+│   ├── apchat-terminal/   # PTY session management with VT100
 │   ├── apchat-todo/       # Task tracking
 │   ├── apchat-toolcore/   # Tool execution framework
-│   ├── apchat-tools/      # 26 tool implementations
+│   ├── apchat-tools/      # 50+ tool implementations
+│   ├── apchat-types/      # Type definitions
 │   ├── apchat-vty/        # VTY/readline abstractions
 │   ├── apchat-wasm/       # WebAssembly frontend
-│   └── apchat-webex/     # Webex bot integration
-├── agents/configs/        # Agent JSON configurations (7 agents)
-├── skills/               # Skill definitions (21 skills)
-├── hooks/                # Session lifecycle hooks
-└── docs/                 # Extensive documentation
+│   └── apchat-webex/      # Webex bot integration
+├── agents/configs/        # Agent JSON configurations (8 agents)
+├── skills/                # Skill definitions (38 skills)
+├── hooks/                 # Session lifecycle hooks
+└── docs/                  # Extensive documentation
 ```
 
 ## Build Commands
@@ -307,13 +311,42 @@ Skills are proven workflows that agents MUST follow when applicable. This is non
 - SkillRegistry shared across agents via `Arc<SkillRegistry>`
 - Agents have mandatory skill-checking in system prompts
 
-**Common Skills**:
+**Available Skills** (38 total):
 - `test-driven-development` - Red-Green-Refactor workflow
 - `systematic-debugging` - 4-phase debugging process
 - `writing-plans` - Implementation planning
 - `executing-plans` - Plan execution with checkpoints
 - `verification-before-completion` - Pre-delivery verification
 - `requesting-code-review` / `receiving-code-review` - Code review workflow
+- `brainstorming` - Collaborative idea development
+- `clarify-before-coding` - Requirements clarification
+- `condition-based-waiting` - Race condition handling
+- `context-management` - Context window optimization
+- `defense-in-depth` - Multi-layer validation
+- `dispatching-parallel-agents` - Parallel investigation
+- `finishing-a-development-branch` - Integration decisions
+- `forecasting-reverso` - Reversal forecasting
+- `refactoring-for-clarity` - Progressive decomposition
+- `root-cause-tracing` - Error source identification
+- `sharing-skills` - Skill contribution workflow
+- `subagent-driven-development` - Independent task execution
+- `testing-anti-patterns` - Test quality prevention
+- `testing-skills-with-subagents` - Skill testing
+- `using-git-worktrees` - Git isolation
+- `using-superpowers` - Skill discovery and usage
+- `coding-conventions` - Code style guidelines
+- `convening-experts` - Multi-expert collaboration
+- `crafting-instructions` - Prompt engineering
+- `learning-opportunities` - Feedback integration
+- `reverse-socratic-examination` - Critical analysis
+- `reviewing-ai-papers` - Academic paper analysis
+- `skill-creator` - New skill development
+- `socratic` - Socratic questioning
+- `specification` - Specification writing
+- `tiling-tree` - Hierarchical organization
+- `writing-clearly-and-concisely` - Clear communication
+- `writing-skills` - Skill creation workflow
+- `commands` - Command management
 
 ### Agent Configuration System
 
@@ -395,6 +428,15 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
 - **Permissions**: Read-only file access, all command execution
 - **Purpose**: Managing interactive terminal sessions and executing commands that require persistent shell environments
 
+### 8. Financial Analyst Agent (`financial_analyst.json`)
+- **Role**: Financial services specialist for building financial models, equity research, investment banking analysis, and wealth management workflows
+- **Model**: blu_model
+- **Tools**: peek_file_top_10_lines, read_file, write_file, edit_file, list_files, search_files, run_command, fetch_url, load_skill, list_skills, find_relevant_skills, todo_write, todo_list, request_more_iterations
+- **Capabilities**: Financial analysis, financial modeling, equity research, investment banking, private equity, wealth management
+- **Skills**: Uses financial services skills (fsi-* prefix skills)
+- **Permissions**: Read-write file access, python/python3/pip command execution, network access
+- **Purpose**: Building institutional-quality financial deliverables including comps analysis, DCF models, LBO models, CIMs, earnings analysis, and portfolio management
+
 ## Important Implementation Details
 
 ### Conversation History Management
@@ -460,28 +502,80 @@ Three model slots available:
 
 ### CLI Options
 
+**Model Configuration:**
 ```bash
-# Model configuration
---api-url-blu-model <URL>        # Custom API URLs
---model-blu-model <NAME>          # Override model names
---llama-cpp-url <URL>             # Quick llama.cpp setup
+--api-url-blu-model <URL>        # Custom API URL for blu_model
+--api-url-grn-model <URL>        # Custom API URL for grn_model
+--api-url-red-model <URL>        # Custom API URL for red_model
+--model-blu-model <NAME>          # Override model name for blu_model
+--model-grn-model <NAME>          # Override model name for grn_model
+--model-red-model <NAME>          # Override model name for red_model
+--model <NAME>                    # Base model for all models
+--llama-cpp-url <URL>             # Quick llama.cpp setup for all models
+--blu-backend <BACKEND>           # Backend for blu_model (groq, anthropic, llama, openai)
+--grn-backend <BACKEND>           # Backend for grn_model
+--red-backend <BACKEND>           # Backend for red_model
+--blu-key <KEY>                   # API key for blu_model
+--grn-key <KEY>                   # API key for grn_model
+--red-key <KEY>                   # API key for red_model
+```
 
-# Mode selection
+**Mode Selection:**
+```bash
 --agents                          # Enable multi-agent system
 --task "Your task"                # One-shot task mode
 --web                             # Web server mode
 --interactive / -i                # Force interactive REPL
+```
 
-# Behavior
+**Behavior:**
+```bash
 --stream                          # Streaming responses (default)
 --auto-confirm                    # Skip confirmations
+--early-superpowers               # Load all skills at startup
 --policy-file <PATH>              # Custom policy file
 --learn-policies                  # Learn from user decisions
+```
 
-# Debug
---verbose                         # Verbose output
+**Debug:**
+```bash
+--verbose / -v                    # Verbose output
 --debug <LEVEL>                   # Debug level 0-5
 --pretty                          # Pretty-print JSON
+```
+
+**Web Server:**
+```bash
+--web                             # Enable web server
+--web-port <PORT>                 # Web server port (default: 8080)
+--web-bind <ADDRESS>              # Web server bind address (default: 127.0.0.1)
+--web-attachable                  # Allow TUI session attachment from web
+--sessions-dir <PATH>             # Directory for persistent web session storage
+```
+
+**Memory & Logging:**
+```bash
+--memory-db-path <PATH>           # Path to SQLite memory database
+--sql-log-path <PATH>             # Path to SQL log database for debugging
+```
+
+**Terminal & Idle:**
+```bash
+--terminal-backend <BACKEND>      # Terminal backend (pty, tmux)
+--idle-timeout <SECONDS>          # Idle timeout (1-86400)
+--idle-input <TEXT>               # String to inject on idle timeout
+```
+
+**Delayed Instructions:**
+```bash
+--delayed-instructions            # Enable scheduled instructions feature
+```
+
+**Webex Bot:**
+```bash
+--webex-bot <USER_EMAIL>          # Enable Webex bot for user email
+--webex-websocket                 # Use WebSocket for Webex bot
+--webex-reconnect-hours <HOURS>   # Proactive reconnection interval (default: 24)
 ```
 
 ## Adding New Components
@@ -539,6 +633,9 @@ Focus areas with test coverage:
 - Tool execution and registry (`apchat-toolcore/tests/`)
 - File operations and edit planning (`apchat-tools/tests/`)
 - MSPC readline integration (`apchat-main/tests/test_mspc_*.rs`)
+- Webex bot integration (`apchat-webex/tests/`)
+- Financial services tools (`apchat-finserv/tests/`)
+- PowerPoint processing (`apchat-pptx/tests/`)
 
 ## Linting and Type Checking
 
