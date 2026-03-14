@@ -26,7 +26,7 @@ impl Tool for SearxngSearchTool {
     }
 
     fn description(&self) -> &str {
-        "Search the web using a SearXNG metasearch engine instance. Returns a list of search results with titles, URLs, and snippets. Use this to find information on the internet."
+        "Search the web using a SearXNG metasearch engine instance. Returns a list of search results with titles, URLs, and snippets. Use this to find information on the internet. WARNING: ALWAYS include a 30 seconds sleep after using this tool to avoid getting it banned and broken."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
