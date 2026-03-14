@@ -283,11 +283,11 @@ fn parse_idle_config(cli: &Cli) -> Result<Option<IdleConfig>> {
 }
 
 async fn load_project_context(chat: &mut APChat) {
-    let kimi_context = if let Ok(kimi_content) = chat.peek_file_top_10_lines("apchat.md") {
-        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "Reading project context from apchat.md...".bright_black()), true);
+    let kimi_context = if let Ok(kimi_content) = chat.peek_file_top_10_lines("AGENTS.md") {
+        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "Reading project context from AGENTS.md...".bright_black()), true);
         kimi_content
     } else {
-        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "No apchat.md found. Starting fresh.".bright_black()), true);
+        print_heart_red(&format!("{} {}", "📖".bright_cyan(), "No AGENTS.md found. Starting fresh.".bright_black()), true);
         String::new()
     };
 
