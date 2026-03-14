@@ -3,7 +3,7 @@ use super::backend::{TerminalBackend, SessionInfo, CursorPosition};
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::SystemTime;
 
@@ -320,16 +320,17 @@ impl TerminalBackend for TmuxBackend {
         Ok(())
     }
 
-    async fn capture_start(&mut self, session_id: &str, _output_file: String) -> Result<()> {
+    async fn capture_start(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<()> {
         let tmux_name = self.session_map.get(session_id)
             .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
-        // Generate capture file path
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let capture_file = self.log_dir.join(format!("session_{}_capture_{}.log", session_id, timestamp));
+        // Ensure parent directory exists
+        if let Some(parent) = capture_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow::anyhow!("Failed to create capture directory: {}", e))?;
+        }
+
+        let capture_file = capture_path;
 
         // Start tmux pipe-pane to capture output
         let output = Command::new("tmux")
@@ -351,13 +352,11 @@ impl TerminalBackend for TmuxBackend {
         Ok(())
     }
 
-    async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)> {
+    async fn capture_stop(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<(std::path::PathBuf, usize, f64)> {
         let tmux_name = self.session_map.get(session_id)
             .ok_or_else(|| anyhow::anyhow!("Session not found: {}", session_id))?;
 
-        let capture_file = self.capture_files.get(session_id)
-            .ok_or_else(|| anyhow::anyhow!("No active capture for session: {}", session_id))?
-            .clone();
+        let capture_file = capture_path;
 
         // Stop tmux pipe-pane
         let output = Command::new("tmux")
@@ -379,7 +378,7 @@ impl TerminalBackend for TmuxBackend {
 
         self.capture_files.remove(session_id);
 
-        Ok((capture_file.display().to_string(), bytes, duration))
+        Ok((capture_file, bytes, duration))
     }
 
     async fn session_exists(&self, session_id: &str) -> bool {

@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 
 use super::session::SessionId;
+use std::path::Path;
 
 /// Session logger for PTY I/O and events
 pub struct SessionLogger {
@@ -93,15 +94,8 @@ impl SessionLogger {
     }
 
     /// Start capturing output to a separate file
-    pub fn start_capture(&mut self) -> Result<PathBuf> {
-        let timestamp = Utc::now().format("%Y%m%d-%H%M%S");
-        let logs_dir = apchat_logging::get_logs_dir()?;
-        let capture_path = logs_dir.join(format!(
-            "terminals/session-{}-capture-{}.log",
-            self.session_id, timestamp
-        ));
-
-        // Ensure directory exists
+    pub fn start_capture(&mut self, capture_path: &Path) -> Result<PathBuf> {
+        // Ensure parent directory exists
         if let Some(parent) = capture_path.parent() {
             std::fs::create_dir_all(parent)
                 .context("Failed to create capture directory")?;
@@ -110,7 +104,7 @@ impl SessionLogger {
         let capture_file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&capture_path)
+            .open(capture_path)
             .context("Failed to create capture file")?;
 
         self.capture_file = Some(capture_file);
@@ -118,13 +112,13 @@ impl SessionLogger {
         self.capture_bytes = 0;
 
         // Log capture start
-        self.log_capture_event("start", &capture_path)?;
+        self.log_capture_event("start", capture_path)?;
 
-        Ok(capture_path)
+        Ok(capture_path.to_path_buf())
     }
 
     /// Stop capturing output
-    pub fn stop_capture(&mut self) -> Result<(PathBuf, u64, f64)> {
+    pub fn stop_capture(&mut self, capture_path: &Path) -> Result<(PathBuf, u64, f64)> {
         let capture_start = self.capture_start
             .ok_or_else(|| anyhow::anyhow!("Capture not started"))?;
 
@@ -134,13 +128,8 @@ impl SessionLogger {
 
         let bytes = self.capture_bytes;
 
-        // Get capture file path before closing
-        let logs_dir = apchat_logging::get_logs_dir()?;
-        let capture_path = logs_dir.join(format!(
-            "terminals/session-{}-capture-{}.log",
-            self.session_id,
-            capture_start.format("%Y%m%d-%H%M%S")
-        ));
+        // Use the provided capture path
+        let capture_path = capture_path.to_path_buf();
 
         // Close capture file
         self.capture_file = None;
@@ -170,7 +159,7 @@ impl SessionLogger {
     }
 
     /// Log capture start/stop event
-    fn log_capture_event(&mut self, event: &str, capture_path: &PathBuf) -> Result<()> {
+    fn log_capture_event(&mut self, event: &str, capture_path: &Path) -> Result<()> {
         let entry = json!({
             "timestamp": Utc::now().to_rfc3339(),
             "session_id": self.session_id,

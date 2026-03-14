@@ -393,7 +393,7 @@ impl McpHandler {
 
         let mut mgr = self.manager.lock().await;
         // Generate a default output file path
-        let output_file = format!("/tmp/pty-capture-{}.log", session_id);
+        let output_file = std::path::PathBuf::from(format!("/tmp/pty-capture-{}.log", session_id));
         mgr.capture_start(&session_id, output_file).await?;
 
         Ok(json!({ "status": format!("Capture started for session {}", session_id) }))
@@ -407,7 +407,8 @@ impl McpHandler {
             .to_string();
 
         let mut mgr = self.manager.lock().await;
-        let (capture_file, bytes, duration) = mgr.capture_stop(&session_id).await?;
+        let capture_path = std::path::PathBuf::from(format!("/tmp/pty-capture-{}.log", session_id));
+        let (capture_file, bytes, duration) = mgr.capture_stop(&session_id, capture_path).await?;
 
         Ok(json!({
             "status": format!("Capture stopped for session {}", session_id),

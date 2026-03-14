@@ -65,11 +65,11 @@ pub trait TerminalBackend: Send + Sync {
     async fn set_scrollback(&mut self, session_id: &str, lines: usize) -> Result<()>;
 
     /// Start capturing session output to file
-    async fn capture_start(&mut self, session_id: &str, output_file: String) -> Result<()>;
+    async fn capture_start(&mut self, session_id: &str, output_file: std::path::PathBuf) -> Result<()>;
 
     /// Stop capturing session output
     /// Returns (capture_file_path, bytes_captured, duration_seconds)
-    async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)>;
+    async fn capture_stop(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<(std::path::PathBuf, usize, f64)>;
 
     /// Check if session exists
     async fn session_exists(&self, session_id: &str) -> bool;

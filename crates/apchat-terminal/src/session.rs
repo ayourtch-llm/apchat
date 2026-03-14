@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -229,12 +229,12 @@ impl TerminalSession {
     }
 
     /// Start capturing output to file
-    pub fn start_capture(&mut self) -> Result<PathBuf> {
+    pub fn start_capture(&mut self, capture_path: &Path) -> Result<PathBuf> {
         if self.capture_enabled {
             bail!("Capture already enabled for session {}", self.id);
         }
 
-        let capture_file = self.logger.start_capture()?;
+        let capture_file = self.logger.start_capture(capture_path)?;
         self.capture_file = Some(capture_file.clone());
         self.capture_enabled = true;
 
@@ -242,12 +242,12 @@ impl TerminalSession {
     }
 
     /// Stop capturing output
-    pub fn stop_capture(&mut self) -> Result<(PathBuf, u64, f64)> {
+    pub fn stop_capture(&mut self, capture_path: &Path) -> Result<(PathBuf, u64, f64)> {
         if !self.capture_enabled {
             bail!("Capture not enabled for session {}", self.id);
         }
 
-        let (file, bytes, duration) = self.logger.stop_capture()?;
+        let (file, bytes, duration) = self.logger.stop_capture(capture_path)?;
         self.capture_enabled = false;
         self.capture_file = None;
 

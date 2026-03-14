@@ -527,7 +527,7 @@ impl Tool for PtyStartCaptureTool {
 
         let mut manager = terminal_manager.lock().await;
         // Generate a default output file path
-        let output_file = format!("/tmp/pty-capture-{}.log", session_id);
+        let output_file = std::path::PathBuf::from(format!("/tmp/pty-capture-{}.log", session_id));
         match manager.capture_start(&session_id, output_file).await {
             Ok(_) => {
                 let result = json!({
@@ -579,7 +579,9 @@ impl Tool for PtyStopCaptureTool {
         let terminal_manager = &self.terminal_manager;
 
         let mut manager = terminal_manager.lock().await;
-        match manager.capture_stop(&session_id).await {
+        // Use the same default path as capture_start
+        let capture_path = std::path::PathBuf::from(format!("/tmp/pty-capture-{}.log", session_id));
+        match manager.capture_stop(&session_id, capture_path).await {
             Ok((capture_file, bytes, duration)) => {
                 let result = json!({
                     "session_id": session_id,

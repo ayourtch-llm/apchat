@@ -5,7 +5,6 @@ use super::backend::{TerminalBackend, TerminalBackendType, SessionInfo};
 use super::pty_backend::PtyBackend;
 use super::tmux_backend::TmuxBackend;
 use super::MAX_CONCURRENT_SESSIONS;
-use apchat_vty::print_heart_yellow;
 
 /// Manages all terminal sessions globally using pluggable backends
 pub struct TerminalManager {
@@ -42,15 +41,15 @@ impl TerminalManager {
                 match TmuxBackend::new(log_dir.clone(), max_sessions) {
                     Ok(backend) => Box::new(backend),
                     Err(e) => {
-                        print_heart_yellow(&format!("⚠️  Failed to initialize tmux backend: {}", e), true);
-                        print_heart_yellow("⚠️  Falling back to PTY backend", true);
+                        eprintln!("⚠️  Failed to initialize tmux backend: {}", e);
+                        eprintln!("⚠️  Falling back to PTY backend");
                         Box::new(PtyBackend::new(log_dir.clone(), max_sessions))
                     }
                 }
             }
         };
 
-        print_heart_yellow(&format!("Terminal backend: {}", backend.backend_name()), true);
+        eprintln!("Terminal backend: {}", backend.backend_name());
 
         Self {
             backend,
@@ -123,16 +122,16 @@ impl TerminalManager {
     }
 
     /// Start capturing session output to file
-    pub async fn capture_start(&mut self, session_id: &str, output_file: String) -> Result<()> {
+    pub async fn capture_start(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<()> {
         self.backend
-            .capture_start(session_id, output_file)
+            .capture_start(session_id, capture_path)
             .await
     }
 
     /// Stop capturing session output
     /// Returns (capture_file_path, bytes_captured, duration_seconds)
-    pub async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)> {
-        self.backend.capture_stop(session_id).await
+    pub async fn capture_stop(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<(std::path::PathBuf, usize, f64)> {
+        self.backend.capture_stop(session_id, capture_path).await
     }
 
     /// Check if a session exists

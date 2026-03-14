@@ -4,7 +4,7 @@ use super::session::{TerminalSession, SessionId};
 use anyhow::{Result, bail};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 /// PTY backend using internal PTY implementation
@@ -168,22 +168,20 @@ impl TerminalBackend for PtyBackend {
         session.set_scrollback(lines)
     }
 
-    async fn capture_start(&mut self, session_id: &str, output_file: String) -> Result<()> {
+    async fn capture_start(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<()> {
         let session = self.get_session(session_id)?;
         let mut session = session.lock().unwrap();
-        // Note: The existing API doesn't take a file path, it generates one
-        // For backend API compatibility, we ignore the provided path and use the generated one
-        let capture_path = session.start_capture()?;
+        let capture_path = session.start_capture(&capture_path)?;
         self.capture_files.insert(session_id.to_string(), capture_path);
         Ok(())
     }
 
-    async fn capture_stop(&mut self, session_id: &str) -> Result<(String, usize, f64)> {
+    async fn capture_stop(&mut self, session_id: &str, capture_path: std::path::PathBuf) -> Result<(std::path::PathBuf, usize, f64)> {
         let session = self.get_session(session_id)?;
         let mut session = session.lock().unwrap();
-        let (path, bytes, duration) = session.stop_capture()?;
+        let (path, bytes, duration) = session.stop_capture(&capture_path)?;
         self.capture_files.remove(session_id);
-        Ok((path.display().to_string(), bytes as usize, duration))
+        Ok((path, bytes as usize, duration))
     }
 
     async fn session_exists(&self, session_id: &str) -> bool {

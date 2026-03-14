@@ -2,7 +2,7 @@
 //
 // This module provides stateful PTY terminal session support with full VT100/ANSI
 // escape sequence interpretation, allowing LLMs to launch, interact with, and monitor
-// terminal sessions.
+// terminal sessions. All file paths are explicitly provided by callers.
 
 mod manager;
 mod session;
