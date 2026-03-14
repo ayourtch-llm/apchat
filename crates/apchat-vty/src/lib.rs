@@ -103,6 +103,32 @@ pub mod token_counter {
 
 pub use request_counter::{RequestGuard, get_count};
 
+/// Atomic flag for tracking active smart context compaction
+/// This module provides thread-safe tracking of ongoing intelligent compaction operations
+pub mod compaction_counter {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    /// Flag indicating if compaction is currently active
+    static IS_COMPACTION_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+    /// Check if compaction is currently active
+    pub fn is_active() -> bool {
+        IS_COMPACTION_ACTIVE.load(Ordering::Relaxed)
+    }
+
+    /// Set compaction as active
+    pub fn set_active() {
+        IS_COMPACTION_ACTIVE.store(true, Ordering::Relaxed);
+    }
+
+    /// Clear compaction active flag
+    pub fn clear() {
+        IS_COMPACTION_ACTIVE.store(false, Ordering::Relaxed);
+    }
+}
+
+pub use compaction_counter::{is_active as is_compaction_active, set_active as set_compaction_active, clear as clear_compaction};
+
 /// Atomic counter for tracking active tool executions
 /// This module provides thread-safe tracking of ongoing tool operations
 pub mod tool_counter {

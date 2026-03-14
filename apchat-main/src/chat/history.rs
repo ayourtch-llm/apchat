@@ -5,7 +5,7 @@ use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::APChat;
-use apchat_vty::{print_heart_yellow, print_heart_red};
+use apchat_vty::{print_heart_yellow, print_heart_red, set_compaction_active, clear_compaction};
 use apchat_models::{ModelColor, Message, ChatRequest, ChatResponse};
 use apchat_models::types::ContentPart;
 use apchat_logging::{log_request_to_file, safe_truncate};
@@ -416,6 +416,9 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
              conversation_size as f64 / 1024.0, 
              chat.messages.len()), true);
     
+    // Set compaction active flag so status line shows INFER
+    set_compaction_active();
+    
     // Find recent tool calls to preserve context
     let mut recent_tool_call_indices = Vec::new();
     let mut tool_call_count = 0;
@@ -650,6 +653,9 @@ pub async fn intelligent_compaction(chat: &mut APChat, current_tool_iteration: u
         
         // Save history after compaction
         let _ = save_history_after_compaction(chat, "Intelligent compaction", conversation_size);
+        
+        // Clear compaction active flag
+        clear_compaction();
         
         // Calculate new size
         let new_size = calculate_conversation_size(&chat.messages);

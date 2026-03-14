@@ -20,6 +20,7 @@ use crate::tool_counter::ToolGuard;
 use crate::token_counter;
 use crate::status_info;
 use crate::print_heart_yellow;
+use crate::compaction_counter;
 
 // Termios imports for raw mode on stdin only
 use libc::{tcsetattr, termios, ECHO, ICANON, ISIG, STDIN_FILENO, TCSANOW};
@@ -2094,8 +2095,14 @@ impl Readline {
             let req_count = request_counter::get_count();
             let tool_count = tool_counter::get_count();
 
+            // Check if compaction is active
+            let is_compaction_active = compaction_counter::is_active();
+
             // Create fixed-width status zone after clock
-            let status_zone = if req_count == 0 && tool_count == 0 {
+            let status_zone = if is_compaction_active {
+                // Show compaction status during smart context compaction
+                "COMPACT".to_string()
+            } else if req_count == 0 && tool_count == 0 {
                 if idle_remaining > 0 {
                     format!("IDLE({})", idle_remaining)
                 } else {
