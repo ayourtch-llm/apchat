@@ -9,10 +9,10 @@ use chrono;
 use apchat_vty::print_heart_red;
 
 /// Tool for opening files with optional line range
-pub struct OpenFileTool;
+pub struct ReadFileTool;
 
 #[async_trait]
-impl Tool for OpenFileTool {
+impl Tool for ReadFileTool {
     fn name(&self) -> &str {
         "read_file"
     }

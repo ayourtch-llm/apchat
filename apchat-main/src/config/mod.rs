@@ -141,7 +141,7 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
-    registry.register_with_categories(OpenFileTool, vec!["file_ops".to_string()]);
+    registry.register_with_categories(ReadFileTool, vec!["file_ops".to_string()]);
     registry.register_with_categories(WriteFileTool, vec!["file_ops".to_string()]);
     registry.register_with_categories(EditFileTool, vec!["file_ops".to_string()]);
     registry.register_with_categories(ListFilesTool, vec!["file_ops".to_string()]);

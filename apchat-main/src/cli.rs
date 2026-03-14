@@ -8,7 +8,7 @@ use std::pin::Pin;
 use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use apchat_policy::PolicyManager;
 use apchat_tools::{
-    OpenFileTool, WriteFileTool, EditFileTool, ListFilesTool,
+    ReadFileTool, WriteFileTool, EditFileTool, ListFilesTool,
     RunCommandTool, SearchFilesTool,
     PtyLaunchTool, PtySendKeysTool, PtyGetScreenTool, PtyListTool, PtyKillTool,
 };
@@ -534,7 +534,7 @@ impl Commands {
                     let mut params = ToolParameters::new();
                     params.set("file_path", file_path);
                     let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    let result = OpenFileTool.execute(params, &context).await;
+                    let result = ReadFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
@@ -655,7 +655,7 @@ impl Commands {
                         params.set("end_line", end as i64);
                     }
                     let context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    let result = OpenFileTool.execute(params, &context).await;
+                    let result = ReadFileTool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
