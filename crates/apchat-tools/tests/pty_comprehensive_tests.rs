@@ -19,7 +19,7 @@ use apchat_policy::PolicyManager;
 use apchat_tools::{
     PtyLaunchTool, PtySendKeysTool, PtyGetScreenTool, PtyListTool, PtyKillTool,
     PtyGetCursorTool, PtyResizeTool, PtySetScrollbackTool, PtyStartCaptureTool,
-    PtyStopCaptureTool, PtyRequestUserInputTool
+    PtyStopCaptureTool, PtyRequestUserInputTool, PtySendCredentialKeysTool
 };
 use apchat_terminal::TerminalManager;
 use apchat_common::ApChatPaths;
@@ -74,7 +74,9 @@ fn create_tool_context(
 
 #[tokio::test]
 async fn test_pty_launch_tool_parameters() {
-    let tool = PtyLaunchTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyLaunchTool::new(terminal_manager, temp_dir.path().to_path_buf());
 
     assert_eq!(tool.name(), "pty_launch");
     
@@ -95,7 +97,7 @@ async fn test_pty_launch_creates_session_successfully() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyLaunchTool;
+    let tool = PtyLaunchTool::new(terminal_manager.clone(), temp_dir.path().to_path_buf());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -116,7 +118,7 @@ async fn test_pty_launch_with_custom_command() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyLaunchTool;
+    let tool = PtyLaunchTool::new(terminal_manager.clone(), temp_dir.path().to_path_buf());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -137,7 +139,7 @@ async fn test_pty_launch_with_custom_dimensions() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyLaunchTool;
+    let tool = PtyLaunchTool::new(terminal_manager.clone(), temp_dir.path().to_path_buf());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -158,7 +160,7 @@ async fn test_pty_launch_missing_command() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyLaunchTool;
+    let tool = PtyLaunchTool::new(terminal_manager.clone(), temp_dir.path().to_path_buf());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -178,7 +180,9 @@ async fn test_pty_launch_missing_command() {
 
 #[tokio::test]
 async fn test_pty_send_keys_tool_parameters() {
-    let tool = PtySendKeysTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtySendKeysTool::new(terminal_manager);
 
     assert_eq!(tool.name(), "pty_send_keys");
     
@@ -209,7 +213,7 @@ async fn test_pty_send_keys_basic_input() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -243,7 +247,7 @@ async fn test_pty_send_keys_special_characters() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     // Test special key sequences
@@ -277,7 +281,7 @@ async fn test_pty_send_keys_with_raw_mode() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -296,7 +300,7 @@ async fn test_pty_send_keys_to_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -331,7 +335,7 @@ async fn test_pty_send_keys_arrow_keys() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -365,7 +369,7 @@ async fn test_pty_send_keys_function_keys() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -399,7 +403,7 @@ async fn test_pty_send_keys_tab_completion() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySendKeysTool;
+    let tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -418,7 +422,9 @@ async fn test_pty_send_keys_tab_completion() {
 
 #[tokio::test]
 async fn test_pty_get_screen_tool_parameters() {
-    let tool = PtyGetScreenTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyGetScreenTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_get_screen");
     
@@ -449,7 +455,7 @@ async fn test_pty_get_screen_basic() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyGetScreenTool;
+    let tool = PtyGetScreenTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -484,7 +490,7 @@ async fn test_pty_get_screen_with_colors() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyGetScreenTool;
+    let tool = PtyGetScreenTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -518,7 +524,7 @@ async fn test_pty_get_screen_without_cursor() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyGetScreenTool;
+    let tool = PtyGetScreenTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -537,7 +543,7 @@ async fn test_pty_get_screen_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyGetScreenTool;
+    let tool = PtyGetScreenTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -557,7 +563,9 @@ async fn test_pty_get_screen_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_list_tool_parameters() {
-    let tool = PtyListTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyListTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_list");
     
@@ -571,7 +579,7 @@ async fn test_pty_list_empty() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyListTool;
+    let tool = PtyListTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let result = tool.execute(ToolParameters::new(), &context).await;
@@ -610,7 +618,7 @@ async fn test_pty_list_with_sessions() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyListTool;
+    let tool = PtyListTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let result = tool.execute(ToolParameters::new(), &context).await;
@@ -641,7 +649,7 @@ async fn test_pty_list_session_metadata() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyListTool;
+    let tool = PtyListTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let result = tool.execute(ToolParameters::new(), &context).await;
@@ -657,7 +665,9 @@ async fn test_pty_list_session_metadata() {
 
 #[tokio::test]
 async fn test_pty_kill_tool_parameters() {
-    let tool = PtyKillTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyKillTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_kill");
     
@@ -692,7 +702,7 @@ async fn test_pty_kill_session() {
         assert!(tm.session_exists(&session_id).await);
     }
 
-    let tool = PtyKillTool;
+    let tool = PtyKillTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -715,7 +725,7 @@ async fn test_pty_kill_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyKillTool;
+    let tool = PtyKillTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -733,7 +743,9 @@ async fn test_pty_kill_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_get_cursor_tool_parameters() {
-    let tool = PtyGetCursorTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyGetCursorTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_get_cursor");
     
@@ -762,7 +774,7 @@ async fn test_pty_get_cursor_position() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyGetCursorTool;
+    let tool = PtyGetCursorTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -781,7 +793,7 @@ async fn test_pty_get_cursor_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyGetCursorTool;
+    let tool = PtyGetCursorTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -799,7 +811,9 @@ async fn test_pty_get_cursor_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_resize_tool_parameters() {
-    let tool = PtyResizeTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyResizeTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_resize");
     
@@ -838,7 +852,7 @@ async fn test_pty_resize_session() {
             .expect("Failed to resize session");
     }
 
-    let tool = PtyResizeTool;
+    let tool = PtyResizeTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -857,7 +871,7 @@ async fn test_pty_resize_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyResizeTool;
+    let tool = PtyResizeTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -877,7 +891,9 @@ async fn test_pty_resize_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_set_scrollback_tool_parameters() {
-    let tool = PtySetScrollbackTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtySetScrollbackTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_set_scrollback");
     
@@ -907,7 +923,7 @@ async fn test_pty_set_scrollback_default() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySetScrollbackTool;
+    let tool = PtySetScrollbackTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -940,7 +956,7 @@ async fn test_pty_set_scrollback_custom_size() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtySetScrollbackTool;
+    let tool = PtySetScrollbackTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -958,7 +974,7 @@ async fn test_pty_set_scrollback_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtySetScrollbackTool;
+    let tool = PtySetScrollbackTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -977,7 +993,9 @@ async fn test_pty_set_scrollback_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_start_capture_tool_parameters() {
-    let tool = PtyStartCaptureTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyStartCaptureTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_start_capture");
     
@@ -1006,7 +1024,7 @@ async fn test_pty_start_capture() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyStartCaptureTool;
+    let tool = PtyStartCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -1024,7 +1042,7 @@ async fn test_pty_start_capture_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyStartCaptureTool;
+    let tool = PtyStartCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -1042,7 +1060,9 @@ async fn test_pty_start_capture_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_stop_capture_tool_parameters() {
-    let tool = PtyStopCaptureTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyStopCaptureTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_stop_capture");
     
@@ -1072,7 +1092,7 @@ async fn test_pty_stop_capture() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     // Start capture first
-    let start_tool = PtyStartCaptureTool;
+    let start_tool = PtyStartCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
     let mut start_params = ToolParameters::new();
     start_params.set("session_id", session_id);
@@ -1090,7 +1110,7 @@ async fn test_pty_stop_capture() {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     // Stop capture
-    let tool = PtyStopCaptureTool;
+    let tool = PtyStopCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -1124,7 +1144,7 @@ async fn test_pty_stop_capture_without_start() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let tool = PtyStopCaptureTool;
+    let tool = PtyStopCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -1143,7 +1163,7 @@ async fn test_pty_stop_capture_nonexistent_session() {
     let temp_dir = setup_test_environment().await;
     let terminal_manager = create_terminal_manager(temp_dir.path()).await;
 
-    let tool = PtyStopCaptureTool;
+    let tool = PtyStopCaptureTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
 
     let mut params = ToolParameters::new();
@@ -1161,7 +1181,9 @@ async fn test_pty_stop_capture_nonexistent_session() {
 
 #[tokio::test]
 async fn test_pty_request_user_input_tool_parameters() {
-    let tool = PtyRequestUserInputTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyRequestUserInputTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_request_user_input");
     
@@ -1174,7 +1196,9 @@ async fn test_pty_request_user_input_tool_parameters() {
 #[tokio::test]
 async fn test_pty_request_user_input_not_implemented() {
     // This tool requires actual user interaction, so we test the parameters
-    let tool = PtyRequestUserInputTool;
+    let temp_dir = setup_test_environment().await;
+    let terminal_manager = create_terminal_manager(temp_dir.path()).await;
+    let tool = PtyRequestUserInputTool::new(terminal_manager.clone());
 
     assert_eq!(tool.name(), "pty_request_user_input");
     
@@ -1212,7 +1236,7 @@ async fn test_pty_full_workflow() {
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
     
     // 1. Send input
-    let send_keys_tool = PtySendKeysTool;
+    let send_keys_tool = PtySendKeysTool::new(terminal_manager.clone());
     let mut send_params = ToolParameters::new();
     send_params.set("session_id", session_id);
     send_params.set("keys", "echo 'Hello from PTY test'\n");
@@ -1225,7 +1249,7 @@ async fn test_pty_full_workflow() {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     
     // 2. Get screen
-    let get_screen_tool = PtyGetScreenTool;
+    let get_screen_tool = PtyGetScreenTool::new(terminal_manager.clone());
     let mut screen_params = ToolParameters::new();
     screen_params.set("session_id", session_id);
     screen_params.set("include_colors", false);
@@ -1236,7 +1260,7 @@ async fn test_pty_full_workflow() {
     assert!(!screen_result.content.is_empty(), "Screen should not be empty");
     
     // 3. Get cursor
-    let get_cursor_tool = PtyGetCursorTool;
+    let get_cursor_tool = PtyGetCursorTool::new(terminal_manager.clone());
     let mut cursor_params = ToolParameters::new();
     cursor_params.set("session_id", session_id);
     
@@ -1244,7 +1268,7 @@ async fn test_pty_full_workflow() {
     assert!(cursor_result.success, "Get cursor should succeed");
     
     // 4. Resize session
-    let resize_tool = PtyResizeTool;
+    let resize_tool = PtyResizeTool::new(terminal_manager.clone());
     let mut resize_params = ToolParameters::new();
     resize_params.set("session_id", session_id);
     resize_params.set("rows", 40);
@@ -1254,7 +1278,7 @@ async fn test_pty_full_workflow() {
     assert!(resize_result.success, "Resize should succeed");
     
     // 5. Set scrollback
-    let set_scrollback_tool = PtySetScrollbackTool;
+    let set_scrollback_tool = PtySetScrollbackTool::new(terminal_manager.clone());
     let mut scrollback_params = ToolParameters::new();
     scrollback_params.set("session_id", session_id);
     scrollback_params.set("lines", 500);
@@ -1263,13 +1287,13 @@ async fn test_pty_full_workflow() {
     assert!(scrollback_result.success, "Set scrollback should succeed");
     
     // 6. List sessions
-    let list_tool = PtyListTool;
+    let list_tool = PtyListTool::new(terminal_manager.clone());
     let list_result = list_tool.execute(ToolParameters::new(), &context).await;
     assert!(list_result.success, "List sessions should succeed");
     assert!(list_result.content.contains("test-full-workflow"), "List should contain session info");
     
     // 7. Start capture
-    let start_capture_tool = PtyStartCaptureTool;
+    let start_capture_tool = PtyStartCaptureTool::new(terminal_manager.clone());
     let mut start_capture_params = ToolParameters::new();
     start_capture_params.set("session_id", session_id);
     
@@ -1286,7 +1310,7 @@ async fn test_pty_full_workflow() {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     
     // 8. Stop capture
-    let stop_capture_tool = PtyStopCaptureTool;
+    let stop_capture_tool = PtyStopCaptureTool::new(terminal_manager.clone());
     let mut stop_capture_params = ToolParameters::new();
     stop_capture_params.set("session_id", session_id);
     
@@ -1294,7 +1318,7 @@ async fn test_pty_full_workflow() {
     assert!(stop_capture_result.success, "Stop capture should succeed");
     
     // 9. Kill session
-    let kill_tool = PtyKillTool;
+    let kill_tool = PtyKillTool::new(terminal_manager.clone());
     let mut kill_params = ToolParameters::new();
     kill_params.set("session_id", session_id);
     
@@ -1335,7 +1359,7 @@ async fn test_pty_concurrent_sessions() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     
     // List all sessions
-    let list_tool = PtyListTool;
+    let list_tool = PtyListTool::new(terminal_manager.clone());
     let list_result = list_tool.execute(ToolParameters::new(), &context).await;
     assert!(list_result.success, "List concurrent sessions should succeed");
     
@@ -1347,7 +1371,7 @@ async fn test_pty_concurrent_sessions() {
     
     // Kill all sessions
     for sid in &session_ids {
-        let kill_tool = PtyKillTool;
+        let kill_tool = PtyKillTool::new(terminal_manager.clone());
         let mut kill_params = ToolParameters::new();
         kill_params.set("session_id", sid);
         
@@ -1366,7 +1390,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_send_keys with nonexistent session
     {
-        let send_keys_tool = PtySendKeysTool;
+        let send_keys_tool = PtySendKeysTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         params.set("keys", "test\n");
@@ -1379,7 +1403,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_get_screen with nonexistent session
     {
-        let get_screen_tool = PtyGetScreenTool;
+        let get_screen_tool = PtyGetScreenTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         params.set("include_colors", false);
@@ -1392,7 +1416,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_get_cursor with nonexistent session
     {
-        let get_cursor_tool = PtyGetCursorTool;
+        let get_cursor_tool = PtyGetCursorTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         
@@ -1403,7 +1427,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_resize with nonexistent session
     {
-        let resize_tool = PtyResizeTool;
+        let resize_tool = PtyResizeTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         params.set("rows", 40);
@@ -1416,7 +1440,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_set_scrollback with nonexistent session
     {
-        let set_scrollback_tool = PtySetScrollbackTool;
+        let set_scrollback_tool = PtySetScrollbackTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         params.set("lines", 1000);
@@ -1428,7 +1452,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_start_capture with nonexistent session
     {
-        let start_capture_tool = PtyStartCaptureTool;
+        let start_capture_tool = PtyStartCaptureTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         
@@ -1439,7 +1463,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_stop_capture with nonexistent session
     {
-        let stop_capture_tool = PtyStopCaptureTool;
+        let stop_capture_tool = PtyStopCaptureTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         
@@ -1450,7 +1474,7 @@ async fn test_pty_error_handling_comprehensive() {
     
     // Test pty_kill with nonexistent session
     {
-        let kill_tool = PtyKillTool;
+        let kill_tool = PtyKillTool::new(terminal_manager.clone());
         let mut params = ToolParameters::new();
         params.set("session_id", "nonexistent-session");
         
@@ -1499,7 +1523,7 @@ async fn test_pty_session_lifecycle() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     
     // Get screen to verify output
-    let get_screen_tool = PtyGetScreenTool;
+    let get_screen_tool = PtyGetScreenTool::new(terminal_manager.clone());
     let mut screen_params = ToolParameters::new();
     screen_params.set("session_id", session_id);
     screen_params.set("include_colors", false);
@@ -1509,7 +1533,7 @@ async fn test_pty_session_lifecycle() {
     assert!(screen_result.success, "Should get screen");
     
     // Kill session
-    let kill_tool = PtyKillTool;
+    let kill_tool = PtyKillTool::new(terminal_manager.clone());
     let mut kill_params = ToolParameters::new();
     kill_params.set("session_id", session_id);
     
@@ -1544,7 +1568,7 @@ async fn test_pty_special_key_sequences() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let send_keys_tool = PtySendKeysTool;
+    let send_keys_tool = PtySendKeysTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
     
     // Test various special key sequences
@@ -1592,8 +1616,8 @@ async fn test_pty_command_execution() {
     }
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    let send_keys_tool = PtySendKeysTool;
-    let get_screen_tool = PtyGetScreenTool;
+    let send_keys_tool = PtySendKeysTool::new(terminal_manager.clone());
+    let get_screen_tool = PtyGetScreenTool::new(terminal_manager.clone());
     let context = create_tool_context(temp_dir.path(), terminal_manager.clone());
     
     // Execute commands and verify output

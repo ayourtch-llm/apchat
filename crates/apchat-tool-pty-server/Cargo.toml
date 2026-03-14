@@ -1,0 +1,38 @@
+[package]
+name = "apchat-tool-pty-server"
+version = "0.1.0"
+edition = "2021"
+description = "PTY (pseudo-terminal) server tools and MCP protocol implementation"
+license = "MIT"
+
+[lib]
+name = "apchat_tool_pty_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "apchat-mcp-pty-server"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+apchat-common = { path = "../apchat-common" }
+apchat-terminal = { path = "../apchat-terminal" }
+apchat-toolcore = { path = "../apchat-toolcore" }
+apchat-logging = { path = "../apchat-logging" }
+
+# External dependencies
+tokio = { workspace = true, features = ["full"] }
+tokio-util = "0.7"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+regex = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+tempfile = { workspace = true }

@@ -873,14 +873,12 @@ impl Tool for PtySendCredentialKeysTool {
             ));
         }
 
-        let result_json = json!({
+        Ok(ToolResult::success(serde_json::to_string_pretty(&json!({
             "session_id": session_id,
             "device_hostname": device_hostname,
             "credential_type": credential_type,
             "status": "credential sent successfully",
             "echo_check": "passed - credential did not echo back"
-        });
-        let result_str = serde_json::to_string_pretty(&result_json).unwrap();
-        ToolResult::success(result_str)
+        })).unwrap()))
     }
 }

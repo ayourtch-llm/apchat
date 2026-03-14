@@ -7,9 +7,17 @@ use apchat_toolcore::ToolRegistry;
 fn test_llm_oneshot_tool_registration() {
     // Import the initialize_tool_registry function
     use crate::config::{initialize_tool_registry, FeatureFlags};
+    use crate::terminal::TerminalManager;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
     
     // Initialize the tool registry
-    let registry = initialize_tool_registry(&FeatureFlags::default());
+    let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(std::path::PathBuf::from("/tmp"))));
+    let registry = initialize_tool_registry(
+        &FeatureFlags::default(),
+        terminal_manager,
+        std::path::PathBuf::from("/tmp")
+    );
     
     // Verify that the llm_oneshot tool is registered
     assert!(registry.has_tool("llm_oneshot"), "llm_oneshot tool should be registered");
@@ -48,9 +56,16 @@ fn test_llm_oneshot_tool_registration() {
 #[test]
 fn test_feature_flags_gate_tools() {
     use crate::config::{initialize_tool_registry, FeatureFlags};
+    use crate::terminal::TerminalManager;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    // Setup terminal manager for all calls
+    let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(std::path::PathBuf::from("/tmp"))));
+    let work_dir = std::path::PathBuf::from("/tmp");
 
     // Default flags: metacog and self_regulate disabled
-    let registry = initialize_tool_registry(&FeatureFlags::default());
+    let registry = initialize_tool_registry(&FeatureFlags::default(), terminal_manager.clone(), work_dir.clone());
     assert!(!registry.has_tool("become"), "become should not be registered by default");
     assert!(!registry.has_tool("drugs"), "drugs should not be registered by default");
     assert!(!registry.has_tool("ritual"), "ritual should not be registered by default");
@@ -60,7 +75,7 @@ fn test_feature_flags_gate_tools() {
     let registry = initialize_tool_registry(&FeatureFlags {
         metacog_tools: true,
         ..FeatureFlags::default()
-    });
+    }, terminal_manager.clone(), work_dir.clone());
     assert!(registry.has_tool("become"), "become should be registered when metacog_tools is true");
     assert!(registry.has_tool("drugs"), "drugs should be registered when metacog_tools is true");
     assert!(registry.has_tool("ritual"), "ritual should be registered when metacog_tools is true");
@@ -69,7 +84,7 @@ fn test_feature_flags_gate_tools() {
     let registry = initialize_tool_registry(&FeatureFlags {
         self_regulate: true,
         ..FeatureFlags::default()
-    });
+    }, terminal_manager.clone(), work_dir.clone());
     assert!(registry.has_tool("self_regulate"), "self_regulate should be registered when self_regulate is true");
 
     // Default: self_edit tools disabled
@@ -80,34 +95,34 @@ fn test_feature_flags_gate_tools() {
     let registry = initialize_tool_registry(&FeatureFlags {
         self_edit: true,
         ..FeatureFlags::default()
-    });
+    }, terminal_manager.clone(), work_dir.clone());
     assert!(registry.has_tool("delete_items"), "delete_items should be registered when self_edit is true");
     assert!(registry.has_tool("edit_item"), "edit_item should be registered when self_edit is true");
 
     // Default: diff_fuzz tool disabled
-    let registry = initialize_tool_registry(&FeatureFlags::default());
+    let registry = initialize_tool_registry(&FeatureFlags::default(), terminal_manager.clone(), work_dir.clone());
     assert!(!registry.has_tool("diff_fuzz"), "diff_fuzz should not be registered by default");
 
     // Enable diff_fuzz
     let registry = initialize_tool_registry(&FeatureFlags {
         diff_fuzz: true,
         ..FeatureFlags::default()
-    });
+    }, terminal_manager.clone(), work_dir.clone());
     assert!(registry.has_tool("diff_fuzz"), "diff_fuzz should be registered when diff_fuzz is true");
 
     // Default: web_search (searxng) tool disabled
-    let registry = initialize_tool_registry(&FeatureFlags::default());
+    let registry = initialize_tool_registry(&FeatureFlags::default(), terminal_manager.clone(), work_dir.clone());
     assert!(!registry.has_tool("web_search"), "web_search should not be registered by default");
 
     // Enable searxng
     let registry = initialize_tool_registry(&FeatureFlags {
         searxng_url: Some("http://localhost:8888".to_string()),
         ..FeatureFlags::default()
-    });
+    }, terminal_manager.clone(), work_dir.clone());
     assert!(registry.has_tool("web_search"), "web_search should be registered when searxng_url is set");
 
     // Default: python_sandbox tool disabled
-    let registry = initialize_tool_registry(&FeatureFlags::default());
+    let registry = initialize_tool_registry(&FeatureFlags::default(), terminal_manager.clone(), work_dir.clone());
     assert!(!registry.has_tool("python_sandbox"), "python_sandbox should not be registered by default");
 
     // Enable python_sandbox (only effective when compiled with python-sandbox feature)
@@ -116,7 +131,7 @@ fn test_feature_flags_gate_tools() {
         let registry = initialize_tool_registry(&FeatureFlags {
             python_sandbox: true,
             ..FeatureFlags::default()
-        });
+        }, terminal_manager.clone(), work_dir.clone());
         assert!(registry.has_tool("python_sandbox"), "python_sandbox should be registered when python_sandbox is true");
     }
 }

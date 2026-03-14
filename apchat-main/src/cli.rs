@@ -14,6 +14,9 @@ use apchat_tools::{
 };
 use apchat_models::{ModelConfig, ModelColor};
 use apchat_llm_api::config::parse_model_attings;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use apchat_terminal::TerminalManager;
 
 // Note: APChat is needed for the Switch command
 // It will be imported from the parent module when needed
@@ -776,10 +779,12 @@ impl TerminalCommands {
                     params.set("rows", rows as i64);
 
                     let work_dir = env::current_dir().unwrap();
-                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    context = context.with_terminal_manager(terminal_manager);
+                    let mut context = ToolContext::new(work_dir.clone(), "cli_session".to_string(), PolicyManager::new());
+                    let tm = terminal_manager.clone();
+                    context = context.with_terminal_manager(tm);
 
-                    let result = PtyLaunchTool.execute(params, &context).await;
+                    let tool = PtyLaunchTool::new(terminal_manager.clone(), work_dir);
+                    let result = tool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
@@ -794,10 +799,11 @@ impl TerminalCommands {
                     params.set("session_id", session_id as i64);
 
                     let work_dir = env::current_dir().unwrap();
-                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    context = context.with_terminal_manager(terminal_manager);
+                    let mut context = ToolContext::new(work_dir.clone(), "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager.clone());
 
-                    let result = PtyGetScreenTool.execute(params, &context).await;
+                    let tool = PtyGetScreenTool::new(terminal_manager.clone());
+                    let result = tool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
@@ -810,10 +816,11 @@ impl TerminalCommands {
                     let params = ToolParameters::new();
 
                     let work_dir = env::current_dir().unwrap();
-                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    context = context.with_terminal_manager(terminal_manager);
+                    let mut context = ToolContext::new(work_dir.clone(), "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager.clone());
 
-                    let result = PtyListTool.execute(params, &context).await;
+                    let tool = PtyListTool::new(terminal_manager.clone());
+                    let result = tool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
@@ -828,10 +835,11 @@ impl TerminalCommands {
                     params.set("session_id", session_id as i64);
 
                     let work_dir = env::current_dir().unwrap();
-                    let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    context = context.with_terminal_manager(terminal_manager);
+                    let mut context = ToolContext::new(work_dir.clone(), "cli_session".to_string(), PolicyManager::new());
+                    context = context.with_terminal_manager(terminal_manager.clone());
 
-                    let result = PtyKillTool.execute(params, &context).await;
+                    let tool = PtyKillTool::new(terminal_manager.clone());
+                    let result = tool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {
@@ -850,9 +858,11 @@ impl TerminalCommands {
 
                     let work_dir = env::current_dir().unwrap();
                     let mut context = ToolContext::new(work_dir, "cli_session".to_string(), PolicyManager::new());
-                    context = context.with_terminal_manager(terminal_manager);
+                    let tm = terminal_manager.clone();
+                    context = context.with_terminal_manager(tm);
 
-                    let result = PtySendKeysTool.execute(params, &context).await;
+                    let tool = PtySendKeysTool::new(terminal_manager);
+                    let result = tool.execute(params, &context).await;
                     if result.success {
                         Ok(result.content)
                     } else {

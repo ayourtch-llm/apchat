@@ -190,7 +190,12 @@ impl APChat {
         backend_type: TerminalBackendType,
         flags: FeatureFlags,
     ) -> Self {
-        let tool_registry = initialize_tool_registry(&flags);
+        let terminal_manager = std::sync::Arc::new(tokio::sync::Mutex::new(
+            apchat_terminal::TerminalManager::new(
+                std::env::temp_dir().join("apchat-pty-logs")
+            )
+        ));
+        let tool_registry = initialize_tool_registry(&flags, terminal_manager.clone(), work_dir.clone());
 
         // Initialize content limiter
         let content_limiter_config = apchat_toolcore::content_limiter::ContentLimiterConfig::new(&work_dir);

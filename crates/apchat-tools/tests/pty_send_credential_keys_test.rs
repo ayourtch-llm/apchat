@@ -14,7 +14,10 @@ use serial_test::serial;
 
 #[tokio::test]
 async fn test_pty_send_credential_keys_tool_parameters() {
-    let tool = PtySendCredentialKeysTool;
+    let temp_dir = TempDir::new().unwrap();
+    std::env::set_var("HOME", temp_dir.path());
+    let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(std::path::PathBuf::from("/tmp"))));
+    let tool = PtySendCredentialKeysTool::new(terminal_manager);
 
     // Test tool name
     assert_eq!(tool.name(), "pty_send_credential_keys");
@@ -84,7 +87,7 @@ enable_secret = "switch_enable_abc"
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    let tool = PtySendCredentialKeysTool;
+    let tool = PtySendCredentialKeysTool::new(terminal_manager.clone());
     let context = ToolContext::new(
         PathBuf::from(temp_dir.path()),
         "test-session".to_string(),
@@ -166,7 +169,7 @@ enable_secret = "dev_enable"
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     }
 
-    let tool = PtySendCredentialKeysTool;
+    let tool = PtySendCredentialKeysTool::new(terminal_manager.clone());
     let context = ToolContext::new(
         PathBuf::from(temp_dir.path()),
         "test-session".to_string(),
@@ -220,7 +223,7 @@ enable_secret = "test_enable"
     fs::create_dir_all(&log_dir).unwrap();
     let terminal_manager = Arc::new(Mutex::new(TerminalManager::new(log_dir.clone())));
 
-    let tool = PtySendCredentialKeysTool;
+    let tool = PtySendCredentialKeysTool::new(terminal_manager.clone());
     let context = ToolContext::new(
         PathBuf::from(temp_dir.path()),
         "test-session".to_string(),

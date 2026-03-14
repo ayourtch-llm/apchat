@@ -137,7 +137,11 @@ impl ClientConfig {
 mod tool_registry_integration_tests;
 
 /// Initialize the tool registry with all available tools
-pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
+pub fn initialize_tool_registry(
+    flags: &FeatureFlags,
+    terminal_manager: std::sync::Arc<tokio::sync::Mutex<crate::terminal::TerminalManager>>,
+    work_dir: std::path::PathBuf,
+) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
 
     // Register file operation tools
@@ -182,18 +186,18 @@ pub fn initialize_tool_registry(flags: &FeatureFlags) -> ToolRegistry {
     registry.register_with_categories(TodoListTool::new(), vec!["task_tracking".to_string()]);
 
     // Register PTY terminal tools
-    registry.register_with_categories(PtyLaunchTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySendKeysTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyGetScreenTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyGetCursorTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyResizeTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySetScrollbackTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyStartCaptureTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyStopCaptureTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyListTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyKillTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyRequestUserInputTool, vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySendCredentialKeysTool, vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyLaunchTool::new(terminal_manager.clone(), work_dir.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtySendKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyGetScreenTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyGetCursorTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyResizeTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtySetScrollbackTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyStartCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyStopCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyListTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyKillTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtyRequestUserInputTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    registry.register_with_categories(PtySendCredentialKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
 
     // Register memory tools
     registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);

@@ -10,8 +10,8 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0"
-apchat-common = { path = "../apchat-common" }
 apchat-terminal = { path = "../apchat-terminal" }
+apchat-tool-pty-server = { path = "../apchat-tool-pty-server" }
 regex = "1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

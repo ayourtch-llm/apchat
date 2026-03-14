@@ -2,8 +2,6 @@
 //!
 //! This binary provides a standalone MCP server for PTY operations.
 //! It reads JSON-RPC 2.0 requests from stdin and writes responses to stdout.
-//!
-//! This is a thin wrapper that delegates to apchat-tool-pty-server crate.
 
 use std::path::PathBuf;
 use std::sync::Arc;
