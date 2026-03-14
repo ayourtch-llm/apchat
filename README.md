@@ -555,7 +555,6 @@ apchat/
 │   ├── apchat-toolcore/    # Tool execution framework
 │   ├── apchat-tools/       # 67+ implemented tools
 │   ├── apchat-vty/         # VTY/readline abstractions
-│   ├── apchat-wasm/        # WebAssembly frontend
 │   ├── apchat-webex/       # Webex bot integration
 │   └── apchat-pptx/        # PowerPoint/PPTX library
 ├── agents/configs/         # Agent JSON configurations (8 agents)

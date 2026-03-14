@@ -28,9 +28,6 @@ cargo build --release
 
 # Build without embeddings feature (faster builds)
 cargo build --no-default-features
-
-# Build WebAssembly frontend
-cd crates/apchat-wasm && ./build.sh
 ```
 
 ## Test Commands

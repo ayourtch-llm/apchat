@@ -66,9 +66,6 @@ cargo run -- -i --auto-confirm
 
 # Test PTY terminal functionality
 ./run_pty_test.sh
-
-# Build WebAssembly frontend
-cd crates/apchat-wasm && ./build.sh
 ```
 
 ## Architecture Overview
@@ -103,8 +100,7 @@ apchat/
 │   ├── apchat-skills/    # Skill registry and loading
 │   ├── apchat-policy/    # Security and approval system
 │   ├── apchat-logging/   # Conversation logging (JSONL)
-│   ├── apchat-todo/      # Task tracking
-│   └── apchat-wasm/      # WebAssembly frontend
+│   └── apchat-todo/      # Task tracking
 ├── agents/configs/       # Agent JSON configurations (dynamically loaded)
 ├── skills/               # 20+ proven workflow patterns (SKILL.md files)
 └── hooks/                # Session lifecycle hooks

@@ -26,7 +26,6 @@ apchat/
 │   ├── apchat-tools/      # 50+ tool implementations
 │   ├── apchat-types/      # Type definitions
 │   ├── apchat-vty/        # VTY/readline abstractions
-│   ├── apchat-wasm/       # WebAssembly frontend
 │   └── apchat-webex/      # Webex bot integration
 ├── agents/configs/        # Agent JSON configurations (8 agents)
 ├── skills/                # Skill definitions (38 skills)

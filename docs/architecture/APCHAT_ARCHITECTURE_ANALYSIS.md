@@ -23,7 +23,6 @@ apchat/
 │   ├── apchat-toolcore/   # Tool execution framework (traits, registry, validation)
 │   ├── apchat-tools/      # 26 tool implementations
 │   ├── apchat-vty/        # VTY/readline abstractions and terminal output
-│   ├── apchat-wasm/       # WebAssembly frontend
 │   ├── apchat-webex/      # Webex bot integration
 │   ├── apchat-mcp-pty-server/  # MCP PTY server
 │   └── apchat-finserv/    # Financial services integration

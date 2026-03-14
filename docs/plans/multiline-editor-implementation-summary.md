@@ -229,7 +229,6 @@ $ cargo build --release
    Compiling apchat-vty v0.1.0
    Compiling apchat-mspc v0.1.0
    Compiling apchat-todo v0.1.0
-   Compiling apchat-wasm v0.1.0
    Compiling apchat-tools v0.1.0
    Compiling apchat v0.1.0
    Compiling apchat-main v0.1.0
