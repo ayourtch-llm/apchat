@@ -248,7 +248,7 @@ pub(crate) async fn chat(
                 // Detect if tool is read-only (less likely to be problematic loop)
                 let is_read_only = tool_calls.iter().all(|tc|
                     tc.function.name == "read_file" ||
-                    tc.function.name == "peek_file_top_10_lines" ||
+                    
                     tc.function.name == "list_files" ||
                     tc.function.name == "search_files" ||
                     tc.function.name == "grep_search"
@@ -499,7 +499,7 @@ pub(crate) async fn chat(
                     };
 
                     // Display result to user (truncate for file reading tools)
-                    let display_result = if tool_call.function.name == "read_file" || tool_call.function.name == "peek_file_top_10_lines" {
+                    let display_result = if tool_call.function.name == "read_file" {
                         let lines: Vec<&str> = result.lines().collect();
                         if lines.len() > 10 {
                             let first_10 = lines[..10].join("\n");

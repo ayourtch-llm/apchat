@@ -430,32 +430,7 @@ mod tests {
         // since we return the first error encountered
     }
 
-    #[test]
-    fn test_peek_file_top_10_lines_tool_schema() {
-        let schema = create_tool_schema(vec![
-            ("file_path".to_string(), ParameterDefinition {
-                param_type: "string".to_string(),
-                description: "Path to the file".to_string(),
-                required: true,
-                default: None,
-            }),
-            ("limit".to_string(), ParameterDefinition {
-                param_type: "integer".to_string(),
-                description: "Maximum number of lines to read".to_string(),
-                required: false,
-                default: None,
-            }),
-        ]);
 
-        let tool_call = create_tool_call("peek_file_top_10_lines", r#"{"file_path": "test.txt", "limit": 100}"#);
-
-        let result = validate_tool_call(&tool_call, &schema, &schema.data);
-        assert!(result.is_ok());
-
-        let params = result.unwrap();
-        assert_eq!(params.get_required::<String>("file_path").unwrap(), "test.txt");
-        assert_eq!(params.get_optional::<i64>("limit").unwrap().unwrap(), 100);
-    }
 
     #[test]
     fn test_search_files_tool_schema() {
