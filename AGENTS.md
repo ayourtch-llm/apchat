@@ -20,9 +20,9 @@ RUSTFLAGS=-Awarnings cargo build
 cargo run 
 ```
 
-### Run inside the pty tool, with a real model behind, to be able to interact:
+### Run inside the pty tool (requires --pty-tools flag), with a real model behind, to be able to interact:
 ```bash
-cargo run -- --stream --interactive --llama-cpp-url http://127.0.0.1:4000/v1/ --auto-confirm
+cargo run -- --pty-tools --stream --interactive --llama-cpp-url http://127.0.0.1:4000/v1/ --auto-confirm
 ```
 
 ## Tool Usage Best Practices
@@ -250,7 +250,6 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
 ### 7. Terminal Specialist Agent (`terminal_specialist.json`)
 - **Role**: PTY session management specialist
 - **Model**: blu_model
-- **Tools**: 11 PTY tools (pty_launch, pty_send_keys, pty_get_screen, pty_list, pty_kill, pty_get_cursor, pty_resize, pty_set_scrollback, pty_start_capture, pty_stop_capture, pty_request_user_input), peek_file_top_10_lines, read_file, list_files, load_skill, list_skills, find_relevant_skills, todo_write, todo_list
 - **Permissions**: Read-only file access, all command execution
 - **Purpose**: Managing interactive terminal sessions and executing commands that require persistent shell environments
 
