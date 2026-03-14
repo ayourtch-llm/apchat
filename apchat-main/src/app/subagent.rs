@@ -51,6 +51,7 @@ pub async fn run_subagent_mode(
         searxng_url: cli.searxng.clone(),
         image_processing: cli.image_processing,
         pptx_tools: cli.pptx_tools,
+        pty_tools: cli.pty_tools,
         ..FeatureFlags::default()
     };
 

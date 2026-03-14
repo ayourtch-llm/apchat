@@ -139,6 +139,12 @@ pub struct Cli {
     #[arg(long, value_name = "BACKEND")]
     pub terminal_backend: Option<String>,
 
+    /// Enable PTY terminal tools (pty_launch, pty_send_keys, pty_get_screen, etc.)
+    /// Without this flag, PTY tools are not registered in the tool registry
+    /// Default: disabled
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub pty_tools: bool,
+
     /// Enable web server
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub web: bool,

@@ -12,7 +12,7 @@ pub use apchat_llm_api::{BackendType, GROQ_API_URL, normalize_api_url};
 
 /// Feature flags that control optional capabilities.
 /// Centralizes the boolean flags that were previously passed as individual parameters.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct FeatureFlags {
     pub early_superpowers: bool,
     pub delayed_instructions: bool,
@@ -39,6 +39,40 @@ pub struct FeatureFlags {
     pub searxng_url: Option<String>,
     pub image_processing: bool,
     pub pptx_tools: bool,
+    pub pty_tools: bool,
+}
+
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self {
+            early_superpowers: false,
+            delayed_instructions: false,
+            metacog_tools: false,
+            python_sandbox: false,
+            self_regulate: false,
+            learning_opportunities: false,
+            community_skills: false,
+            tiling_tree: false,
+            convening_experts: false,
+            crafting_instructions: false,
+            reviewing_ai_papers: false,
+            elements_of_style: false,
+            self_edit: false,
+            diff_fuzz: false,
+            forecasting: false,
+            context_mode: false,
+            financial_services: false,
+            designer_skills: None,
+            save: false,
+            load: None,
+            disable_webex_broadcast: false,
+            mcp_servers: Vec::new(),
+            searxng_url: None,
+            image_processing: false,
+            pptx_tools: false,
+            pty_tools: false, // PTY tools disabled by default
+        }
+    }
 }
 
 /// Configuration for APChat client
@@ -185,19 +219,30 @@ pub fn initialize_tool_registry(
     registry.register_with_categories(TodoWriteTool::new(), vec!["task_tracking".to_string()]);
     registry.register_with_categories(TodoListTool::new(), vec!["task_tracking".to_string()]);
 
-    // Register PTY terminal tools
-    registry.register_with_categories(PtyLaunchTool::new(terminal_manager.clone(), work_dir.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySendKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyGetScreenTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyGetCursorTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyResizeTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySetScrollbackTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyStartCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyStopCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyListTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyKillTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtyRequestUserInputTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
-    registry.register_with_categories(PtySendCredentialKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+    // Register PTY terminal tools (only if enabled via --pty-tools CLI flag)
+    if flags.pty_tools {
+        registry.register_with_categories(PtyLaunchTool::new(terminal_manager.clone(), work_dir.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtySendKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyGetScreenTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyGetCursorTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyResizeTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtySetScrollbackTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyStartCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyStopCaptureTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyListTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyKillTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtyRequestUserInputTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        registry.register_with_categories(PtySendCredentialKeysTool::new(terminal_manager.clone()), vec!["terminal".to_string()]);
+        print_heart_red(
+            "✓ PTY terminal tools enabled (pty_launch, pty_send_keys, etc. available)",
+            true,
+        );
+    } else {
+        print_heart_yellow(
+            "⚠️ PTY tools disabled (--pty-tools flag required). Terminal tools will not be available.",
+            true,
+        );
+    }
 
     // Register memory tools
     registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);

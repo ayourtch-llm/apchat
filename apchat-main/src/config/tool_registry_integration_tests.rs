@@ -134,4 +134,28 @@ fn test_feature_flags_gate_tools() {
         }, terminal_manager.clone(), work_dir.clone());
         assert!(registry.has_tool("python_sandbox"), "python_sandbox should be registered when python_sandbox is true");
     }
+
+    // Test pty_tools flag: by default, PTY tools are NOT registered (PTY tools disabled by default)
+    let registry = initialize_tool_registry(&FeatureFlags::default(), terminal_manager.clone(), work_dir.clone());
+    assert!(!registry.has_tool("pty_launch"), "pty_launch should NOT be registered by default");
+    assert!(!registry.has_tool("pty_send_keys"), "pty_send_keys should NOT be registered by default");
+    assert!(!registry.has_tool("pty_get_screen"), "pty_get_screen should NOT be registered by default");
+
+    // PTY tools enabled when explicitly set to true
+    let registry = initialize_tool_registry(&FeatureFlags {
+        pty_tools: true,
+        ..FeatureFlags::default()
+    }, terminal_manager.clone(), work_dir.clone());
+    assert!(registry.has_tool("pty_launch"), "pty_launch should be registered when pty_tools is true");
+    assert!(registry.has_tool("pty_send_keys"), "pty_send_keys should be registered when pty_tools is true");
+    assert!(registry.has_tool("pty_get_screen"), "pty_get_screen should be registered when pty_tools is true");
+
+    // PTY tools disabled when explicitly set to false
+    let registry = initialize_tool_registry(&FeatureFlags {
+        pty_tools: false,
+        ..FeatureFlags::default()
+    }, terminal_manager.clone(), work_dir.clone());
+    assert!(!registry.has_tool("pty_launch"), "pty_launch should NOT be registered when pty_tools is false");
+    assert!(!registry.has_tool("pty_send_keys"), "pty_send_keys should NOT be registered when pty_tools is false");
+    assert!(!registry.has_tool("pty_get_screen"), "pty_get_screen should NOT be registered when pty_tools is false");
 }
