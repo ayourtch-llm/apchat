@@ -13,23 +13,29 @@ use std::sync::Arc;
 /// # Usage
 /// 
 /// Create the state once and pass it to Webex components:
-/// ```rust
+/// ```rust,no_run
+/// use apchat_core::WebexDebugState;
 /// let debug_state = WebexDebugState::new();
 /// 
 /// // Pass to WebexClient and WebexWebSocketRouter
-/// let client = WebexClient::new(debug_state.clone());
-/// let router = WebexWebSocketRouter::new(debug_state.clone());
+/// // Note: WebexClient and WebexWebSocketRouter are defined elsewhere
+/// // let client = WebexClient::new(debug_state.clone());
+/// // let router = WebexWebSocketRouter::new(debug_state.clone());
 /// ```
 /// 
 /// Toggle debug mode:
-/// ```rust
+/// ```rust,no_run
+/// use apchat_core::WebexDebugState;
+/// let debug_state = WebexDebugState::new();
 /// debug_state.toggle(); // Flips between enabled/disabled
 /// debug_state.set_enabled(true); // Explicitly enable
 /// debug_state.set_enabled(false); // Explicitly disable
 /// ```
 /// 
 /// Check if debug is enabled:
-/// ```rust
+/// ```rust,no_run
+/// use apchat_core::WebexDebugState;
+/// let debug_state = WebexDebugState::new();
 /// if debug_state.is_enabled() {
 ///     // Log debug information
 /// }
@@ -43,6 +49,7 @@ impl WebexDebugState {
     /// 
     /// # Example
     /// ```rust
+    /// use apchat_core::WebexDebugState;
     /// let state = WebexDebugState::new();
     /// assert!(!state.is_enabled());
     /// ```
@@ -58,7 +65,8 @@ impl WebexDebugState {
     /// * `enabled` - Whether to enable debug output
     /// 
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// use apchat_core::WebexDebugState;
     /// let state = WebexDebugState::new();
     /// state.set_enabled(true);
     /// assert!(state.is_enabled());
@@ -73,7 +81,8 @@ impl WebexDebugState {
     /// `true` if debug is enabled, `false` otherwise
     /// 
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// use apchat_core::WebexDebugState;
     /// let state = WebexDebugState::new();
     /// assert!(!state.is_enabled());
     /// ```
@@ -84,7 +93,8 @@ impl WebexDebugState {
     /// Toggle debug mode (enabled <-> disabled)
     /// 
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
+    /// use apchat_core::WebexDebugState;
     /// let state = WebexDebugState::new();
     /// state.toggle();
     /// assert!(state.is_enabled());

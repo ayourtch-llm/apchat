@@ -42,6 +42,15 @@ pub mod elements;
 pub mod generator;
 pub mod integration;
 
+// Import functionality
+pub mod import;
+
+// Export functionality
+pub mod export;
+
+// Template functionality
+pub mod templates;
+
 // Supporting modules
 pub mod config;
 pub mod constants;
@@ -103,6 +112,7 @@ pub use generator::{
     GradientFill, GradientType, GradientDirection, GradientStop, PresetGradients,
     Video, Audio, VideoFormat, AudioFormat, VideoOptions, AudioOptions,
 };
+pub use import::import_pptx;
 pub use integration::{PresentationBuilder, SlideBuilder, PresentationMetadata};
 pub use oxml::repair::{PptxRepair, RepairIssue, RepairResult};
 
