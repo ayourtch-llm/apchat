@@ -199,6 +199,15 @@ impl Tool for SearxngSearchTool {
         let shown = total.min(max_results);
         output.push_str(&format!("Showing {} of {} results.", shown, total));
 
+        // Wait 30-60 seconds to avoid hammering search engines
+        // Using a simple pseudo-random based on current timestamp
+        let wait_seconds = 30 + (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() % 31);
+        print_heart_red(&format!("\n⏳ Waiting {} seconds before returning results (to avoid search engine rate limiting)...", wait_seconds), true);
+        tokio::time::sleep(std::time::Duration::from_secs(wait_seconds)).await;
+
         ToolResult::success(output)
     }
 }
