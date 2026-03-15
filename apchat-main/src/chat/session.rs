@@ -39,6 +39,12 @@ pub(crate) async fn chat(
     user_message: &str,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
 ) -> Result<String> {
+    // Empty response retry configuration
+    const MAX_EMPTY_RESPONSE_RETRIES: usize = 3;
+    let mut empty_response_retries: usize = 0;
+
+    // ── Main retry loop for empty responses ──────────────────────────────────
+    'retry_loop: loop {
         chat.messages.push(Message {
             role: "user".to_string(),
             content: vec![ContentPart::Text(user_message.to_string())],
@@ -589,16 +595,59 @@ pub(crate) async fn chat(
                 // Apply any pending context edits from self-edit tools
                 crate::chat::context_edit::apply_pending_context_edits(chat, rollback_len);
             } else {
+                // No tool calls - this is the final response
+                let text_content = response.text_only();
                 chat.messages.push(response.clone());
+                
                 // If finish_reason is "stop", the agent has naturally finished
                 // This explicit check allows agents to signal completion
                 if finish_reason.as_deref() == Some("stop") {
                     if chat.should_show_debug(1) {
                         print_heart_red("🔧 DEBUG: Agent signaled completion via finish_reason: stop", true);
                     }
-                    return Ok(response.text_only());
+                    return Ok(text_content);
                 }
-                return Ok(response.text_only());
+                
+                // Check if we got an empty response
+                if text_content.trim().is_empty() {
+                    empty_response_retries += 1;
+                    print_heart_yellow(&format!("⚠️ [DEBUG] Empty response detected! Retry attempt {}/{}", empty_response_retries, MAX_EMPTY_RESPONSE_RETRIES), true);
+
+                    if empty_response_retries >= MAX_EMPTY_RESPONSE_RETRIES {
+                        print_heart_yellow(&format!("❌ [DEBUG] Max empty response retries ({}) exceeded", MAX_EMPTY_RESPONSE_RETRIES), true);
+                        empty_response_retries = 0;
+                        break 'retry_loop Ok(String::new());
+                    }
+
+                    // Retry: inject encouragement message
+                    print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - injecting encouragement", empty_response_retries), true);
+
+                    // Add a bogus assistant message and encouragement before retry
+                    chat.messages.push(Message {
+                        role: "assistant".to_string(),
+                        content: vec![ContentPart::Text("".to_string())],
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    });
+                    chat.messages.push(Message {
+                        role: "user".to_string(),
+                        content: vec![ContentPart::Text("You are doing great, please continue!".to_string())],
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    });
+
+                    // Continue to retry instead of exiting
+                    continue 'retry_loop;
+                }
+                
+                return Ok(text_content);
             }
         }
+
+        return Ok(String::new());
+    }
 }
