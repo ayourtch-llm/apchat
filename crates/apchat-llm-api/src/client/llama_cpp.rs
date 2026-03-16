@@ -82,6 +82,9 @@ impl LlmClient for LlamaCppClient {
         }
 
         let response_text = response.text().await?;
+        if self.verbose {
+            print_heart_yellow(&format!("[LLAMA.CPP DEBUG] Raw HTTP response: {}", &response_text), true);
+        }
         let chat_response: apchat_models::ChatResponse = serde_json::from_str(&response_text)?;
 
         let (message, finish_reason) = if let Some(choice) = chat_response.choices.into_iter().next() {
