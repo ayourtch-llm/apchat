@@ -198,11 +198,18 @@ pub(crate) async fn chat(
                 if chat.non_interactive {
                     let text = response.text_only();
                     let has_tools = response.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty());
+                    let content_parts_debug: Vec<String> = response.content.iter().map(|p| match p {
+                        ContentPart::Text(t) => format!("Text({} chars): {:?}", t.len(), if t.len() > 200 { &t[..200] } else { t }),
+                        ContentPart::ImageUrl { url } => format!("ImageUrl({} chars)", url.len()),
+                    }).collect();
                     print_heart_yellow(&format!(
-                        "[TASK DEBUG] completion={} tokens, has_tool_calls={}, finish_reason={:?}, response text: {:?}",
+                        "[TASK DEBUG] completion={} tokens, has_tool_calls={}, finish_reason={:?}, \
+                        content_parts={:?}, reasoning={:?}, response text: {:?}",
                         usage.completion_tokens,
                         has_tools,
                         &finish_reason,
+                        content_parts_debug,
+                        response.reasoning,
                         text,
                     ), true);
                 }
