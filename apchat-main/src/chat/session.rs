@@ -628,8 +628,8 @@ pub(crate) async fn chat(
                     chat.messages.push(Message {
                         role: "user".to_string(),
                         content: vec![ContentPart::Text(
-                            "Could you please have a look at the task, and verify that you had done everything? \
-                            After that - please enumerate here what exactly has been done. Thank you!".to_string()
+                            "Please continue, you are doing great! If you are done - please enumerate what \
+                            exactly was done and confirm that you have verified that nothing is left. Thank you!".to_string()
                         )],
                         tool_calls: None,
                         tool_call_id: None,
