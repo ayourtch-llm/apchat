@@ -157,9 +157,13 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1", env = "APCHAT_WEB_BIND")]
     pub web_bind: String,
 
+    /// Enable memory tools (store_memory, query_memory, etc.)
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub memory_tools: bool,
+
     /// Enable scheduled instructions feature
     /// When enabled, allows scheduling instructions to be injected at future times
-    /// and starts a background poller to process them
+    /// and starts a background poller to process them (requires --memory-tools)
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub delayed_instructions: bool,
 

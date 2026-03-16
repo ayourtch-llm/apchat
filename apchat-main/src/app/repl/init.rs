@@ -57,6 +57,7 @@ pub async fn initialize_repl(
         image_processing: cli.image_processing,
         pptx_tools: cli.pptx_tools,
         pty_tools: cli.pty_tools,
+        memory_tools: cli.memory_tools,
     };
 
     let mut chat = APChat::new_with_config(

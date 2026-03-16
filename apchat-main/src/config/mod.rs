@@ -40,6 +40,7 @@ pub struct FeatureFlags {
     pub image_processing: bool,
     pub pptx_tools: bool,
     pub pty_tools: bool,
+    pub memory_tools: bool,
 }
 
 impl Default for FeatureFlags {
@@ -71,6 +72,7 @@ impl Default for FeatureFlags {
             image_processing: false,
             pptx_tools: false,
             pty_tools: false, // PTY tools disabled by default
+            memory_tools: false, // Memory tools disabled by default
         }
     }
 }
@@ -244,12 +246,16 @@ pub fn initialize_tool_registry(
         );
     }
 
-    // Register memory tools
-    registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);
-    registry.register_with_categories(QueryMemoryTool, vec!["memory".to_string()]);
-    registry.register_with_categories(UpdateMemoryTool, vec!["memory".to_string()]);
-    registry.register_with_categories(DeleteMemoryTool, vec!["memory".to_string()]);
-    registry.register_with_categories(ListMemoriesTool, vec!["memory".to_string()]);
+    // Register memory tools (only if enabled via --memory-tools CLI flag)
+    if flags.memory_tools {
+        use apchat_memory::*;
+        registry.register_with_categories(StoreMemoryTool, vec!["memory".to_string()]);
+        registry.register_with_categories(QueryMemoryTool, vec!["memory".to_string()]);
+        registry.register_with_categories(UpdateMemoryTool, vec!["memory".to_string()]);
+        registry.register_with_categories(DeleteMemoryTool, vec!["memory".to_string()]);
+        registry.register_with_categories(ListMemoriesTool, vec!["memory".to_string()]);
+        print_heart_red("✓ Memory tools enabled (store_memory, query_memory, etc.)", true);
+    }
 
     // Register wait/sleep tools
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
@@ -269,8 +275,9 @@ pub fn initialize_tool_registry(
         );
     }
 
-    // Register scheduled instruction tools (only if enabled via CLI flag)
-    if flags.delayed_instructions {
+    // Register scheduled instruction tools (only if both memory tools and delayed instructions are enabled)
+    if flags.memory_tools && flags.delayed_instructions {
+        use apchat_memory::*;
         registry.register_with_categories(AddScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
         registry.register_with_categories(ListScheduledInstructionsTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);
         registry.register_with_categories(DeleteScheduledInstructionTool, vec!["scheduled_instruction".to_string(), "memory".to_string()]);

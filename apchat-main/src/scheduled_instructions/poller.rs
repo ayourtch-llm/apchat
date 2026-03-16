@@ -8,7 +8,7 @@ use apchat_mspc::{MspcChannel, MspcMessage};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use chrono::Utc;
-use apchat_tools::memory::{
+use apchat_memory::{
     connect_pool, init_db, get_memory_db_path,
     get_due_scheduled_instructions, mark_scheduled_instruction_as_processed,
 };

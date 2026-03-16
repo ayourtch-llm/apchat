@@ -2,7 +2,7 @@
 
 use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use apchat_policy::PolicyManager;
-use apchat_tools::{AddScheduledInstructionTool, DeleteScheduledInstructionTool, ListScheduledInstructionsTool};
+use apchat_memory::{AddScheduledInstructionTool, DeleteScheduledInstructionTool, ListScheduledInstructionsTool};
 use std::path::PathBuf;
 use chrono::Utc;
 

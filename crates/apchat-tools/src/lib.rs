@@ -19,7 +19,6 @@ pub mod read_file;
 pub mod subagent_tools;
 pub mod web;
 
-pub mod memory;
 pub mod file_curly_glance;
 pub mod pdf_reader;
 pub mod pdf_tool;
@@ -63,7 +62,6 @@ pub use subagent_tools::*;
 pub use web::*;
 pub use llm_oneshot::*;
 pub use file_curly_glance::*;
-pub use memory::*;
 pub use pdf_tool::*;
 pub use long_wait::*;
 pub use metacog::*;

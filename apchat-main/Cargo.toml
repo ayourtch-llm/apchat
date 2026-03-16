@@ -28,6 +28,7 @@ apchat-terminal = { path = "../crates/apchat-terminal" }
 apchat-todo = { path = "../crates/apchat-todo" }
 apchat-toolcore = { path = "../crates/apchat-toolcore" }
 apchat-tools = { path = "../crates/apchat-tools" }
+apchat-memory = { path = "../crates/apchat-memory" }
 apchat-webex = { path = "../crates/apchat-webex" }
 apchat-vty = { path = "../crates/apchat-vty" }
 apchat-common = { path = "../crates/apchat-common" }

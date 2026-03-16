@@ -2,7 +2,7 @@
 
 use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use apchat_policy::PolicyManager;
-use apchat_tools::memory::tools::UpdateMemoryTool;
+use apchat_memory::memory::tools::UpdateMemoryTool;
 use std::path::PathBuf;
 
 #[tokio::test]
@@ -124,7 +124,7 @@ async fn test_update_memory_tool_wrong_owner() {
     let context = ToolContext::new(PathBuf::from("/tmp"), "test-session".to_string(), PolicyManager::default());
     
     // First, store a memory
-    use apchat_tools::StoreMemoryTool;
+    use apchat_memory::StoreMemoryTool;
     let store_tool = StoreMemoryTool;
     let mut store_params = ToolParameters::new();
     store_params.set("user_id", "owner-user");

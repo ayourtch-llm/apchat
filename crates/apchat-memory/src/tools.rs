@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use sqlx::Row;
 
-use crate::memory::{Memory, connect_pool, init_db, get_memory_db_path, search_memories, delete_memory, list_memories, add_scheduled_instruction, list_scheduled_instructions, delete_scheduled_instruction, mark_scheduled_instruction_as_processed};
+use crate::{Memory, connect_pool, init_db, get_memory_db_path, search_memories, delete_memory, list_memories, add_scheduled_instruction, list_scheduled_instructions, delete_scheduled_instruction, mark_scheduled_instruction_as_processed};
 
 /// Tool for storing a new memory
 pub struct StoreMemoryTool;

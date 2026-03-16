@@ -211,7 +211,7 @@ pub async fn run_repl_mode(
     // Create and start the scheduled instruction poller only if enabled
     let poller_handle = if cli.delayed_instructions {
         print_heart_yellow(&format!("{} Scheduled instructions enabled - starting poller", "⏰".bright_cyan()), true);
-        let db_path = apchat_tools::memory::get_memory_db_path();
+        let db_path = apchat_memory::get_memory_db_path();
         let mut scheduled_instruction_poller = ScheduledInstructionPoller::new(db_path);
         scheduled_instruction_poller.set_channel(mspc_channel.clone());
         Some(scheduled_instruction_poller.start())
