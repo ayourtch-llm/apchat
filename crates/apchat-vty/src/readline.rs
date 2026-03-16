@@ -83,16 +83,15 @@ fn strip_ansi_codes(s: &str) -> String {
 ///
 /// * `usize` - The display width in columns
 fn display_width(s: &str) -> usize {
+    use unicode_width::UnicodeWidthStr;
     let stripped = strip_ansi_codes(s);
-    stripped.chars().map(|c| {
-        // Simple heuristic: emojis and wide characters are typically 2 columns
-        // Regular ASCII and most unicode is 1 column
-        if c as u32 > 0x1F300 {
-            2  // Emoji range and other wide characters
-        } else {
-            1
-        }
-    }).sum()
+    UnicodeWidthStr::width(stripped.as_str())
+}
+
+/// Get the display width of a single character in terminal columns.
+fn char_display_width(c: char) -> usize {
+    use unicode_width::UnicodeWidthChar;
+    UnicodeWidthChar::width(c).unwrap_or(0)
 }
 
 /// Result type for the readline operation.
@@ -1710,7 +1709,7 @@ impl Readline {
 
         // Iterate through characters to find where we exceed available width
         for (idx, ch) in line.char_indices() {
-            let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+            let char_width = char_display_width(ch);
             if current_width + char_width > available_width {
                 // We've exceeded the limit - this is our overflow point
                 split_idx = idx;
@@ -1935,7 +1934,7 @@ impl Readline {
                 let mut current_width = 0;
                 let mut truncated = String::new();
                 for ch in title.chars() {
-                    let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                    let char_width = char_display_width(ch);
                     if current_width + char_width > screen_width {
                         break;
                     }
@@ -1967,7 +1966,7 @@ impl Readline {
                     let mut current_width = 0;
                     let mut truncated = String::new();
                     for ch in line.chars() {
-                        let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                        let char_width = char_display_width(ch);
                         if current_width + char_width > screen_width {
                             break;
                         }
@@ -2004,7 +2003,7 @@ impl Readline {
             let cursor_col = if line_display_width > screen_width {
                 screen_width
             } else {
-                current_line.chars().count()
+                line_display_width
             };
             stdout.queue(MoveToColumn(cursor_col as u16)).ok();
 
@@ -2062,9 +2061,9 @@ impl Readline {
         let prompt = &pr;
 
 
-        // Get the prompt visible length (excluding ANSI codes)
+        // Get the prompt visible display width (excluding ANSI codes)
         let prompt_visible = strip_ansi_codes(prompt);
-        let prompt_len = prompt_visible.chars().count();
+        let prompt_len = display_width(&prompt_visible);
 
         // Move to the top of the editor area
         // We need to move up from the current cursor position to the top
@@ -2160,7 +2159,7 @@ impl Readline {
                 let mut current_width = 0;
                 let mut truncated = String::new();
                 for ch in title.chars() {
-                    let char_width = if ch as u32 > 0x1F300 { 2 } else { 1 };
+                    let char_width = char_display_width(ch);
                     if current_width + char_width > screen_width {
                         break;
                     }
@@ -2217,8 +2216,15 @@ impl Readline {
             }
         }
 
-        // Move to correct column
-        let mut visual_col = self.cursor_col;
+        // Move to correct column - convert char position to display width
+        let current_line = if self.cursor_line < self.lines.len() {
+            &self.lines[self.cursor_line]
+        } else {
+            ""
+        };
+        // Calculate display width of text before cursor (cursor_col is char index)
+        let text_before_cursor: String = current_line.chars().take(self.cursor_col).collect();
+        let mut visual_col = display_width(&text_before_cursor);
         if visual_line == 0 {
             visual_col += prompt_len;
         }
@@ -2700,7 +2706,7 @@ impl Readline {
         // We need to account for this when calculating the available width
         let full_prompt = format!("[{}]{}", std::process::id(), current_prompt);
         let prompt_visible = strip_ansi_codes(&full_prompt);
-        self.prompt_width = prompt_visible.chars().count();
+        self.prompt_width = display_width(&prompt_visible);
 
         // Display the initial prompt
         self.redraw(&current_prompt);

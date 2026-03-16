@@ -512,16 +512,9 @@ fn strip_ansi_codes(s: &str) -> String {
 ///
 /// * `usize` - The display width in columns
 fn display_width(s: &str) -> usize {
+    use unicode_width::UnicodeWidthStr;
     let stripped = strip_ansi_codes(s);
-    stripped.chars().map(|c| {
-        // Simple heuristic: emojis and wide characters are typically 2 columns
-        // Regular ASCII and most unicode is 1 column
-        if c as u32 > 0x1F300 {
-            2  // Emoji range and other wide characters
-        } else {
-            1
-        }
-    }).sum()
+    UnicodeWidthStr::width(stripped.as_str())
 }
 
 /// Wraps text to fit within a specified width.
