@@ -249,6 +249,7 @@ pub async fn run_repl_mode(
                     let mut guard = current_token.lock().unwrap();
                     *guard = Some(cancel_token.clone());
                 }
+                chat.cancellation_token = Some(cancel_token.clone());
                 add_msg_to_history(&mut chat, &mut llm_channels, &urgent_input, &cancel_token).await;
 		tool_call_iterations = 0;
                 total_tokens_start = chat.total_tokens_used;
@@ -269,6 +270,7 @@ pub async fn run_repl_mode(
                     let mut guard = current_token.lock().unwrap();
                     *guard = Some(cancel_token.clone());
                 }
+                chat.cancellation_token = Some(cancel_token.clone());
 		tool_call_iterations = 0;
                 add_msg_to_history(&mut chat, &mut llm_channels, &input, &cancel_token).await;
                 total_tokens_start = chat.total_tokens_used;

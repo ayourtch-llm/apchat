@@ -135,6 +135,19 @@ impl Tool for LaunchSubagentTool {
         let pid = child.id();
         let pid_prefix = format!("[{}] ", pid);
 
+        // Spawn a cancellation watcher that kills the child process on Ctrl-C
+        let _cancel_watcher = if let Some(ref token) = context.cancellation_token {
+            let token = token.clone();
+            let child_pid = pid;
+            Some(tokio::spawn(async move {
+                token.cancelled().await;
+                #[cfg(unix)]
+                unsafe { libc::kill(child_pid as i32, libc::SIGTERM); }
+            }))
+        } else {
+            None
+        };
+
         // Read stdout and stderr concurrently to avoid pipe deadlock.
         // Reading them sequentially can deadlock if the child fills the stderr
         // pipe buffer while we're still reading stdout.
@@ -317,6 +330,19 @@ impl Tool for LaunchSubagentPrettyTool {
 
         let pid = child.id();
         let pid_prefix = format!("[{}] ", pid);
+
+        // Spawn a cancellation watcher that kills the child process on Ctrl-C
+        let _cancel_watcher = if let Some(ref token) = context.cancellation_token {
+            let token = token.clone();
+            let child_pid = pid;
+            Some(tokio::spawn(async move {
+                token.cancelled().await;
+                #[cfg(unix)]
+                unsafe { libc::kill(child_pid as i32, libc::SIGTERM); }
+            }))
+        } else {
+            None
+        };
 
         // Read stdout and stderr concurrently to avoid pipe deadlock.
         // Reading them sequentially can deadlock if the child fills the stderr

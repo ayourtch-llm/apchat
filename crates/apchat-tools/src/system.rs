@@ -103,10 +103,11 @@ impl Tool for RunCommandTool {
 
         // Execute command in work directory with timeout
         let timeout_duration = std::time::Duration::from_millis(timeout_msecs);
+        let cancel_token = context.cancellation_token.clone();
         let (stdout, stderr, exit_code) = match tokio::time::timeout(timeout_duration, async {
             // Clear marquee after command execution starts
             clear_marquee();
-            
+
             // Spawn the process
             let mut child = match AsyncCommand::new("bash")
                 .args(["-c", &orig_command])
@@ -132,7 +133,18 @@ impl Tool for RunCommandTool {
             let mut stdout_lines = Vec::new();
             let mut stderr_lines = Vec::new();
 
-            // Drain both streams concurrently
+            // Create a future that resolves when cancelled (or never if no token)
+            let cancel_fut = async {
+                if let Some(ref token) = cancel_token {
+                    token.cancelled().await;
+                } else {
+                    // Never resolve if no cancellation token
+                    std::future::pending::<()>().await;
+                }
+            };
+            tokio::pin!(cancel_fut);
+
+            // Drain both streams concurrently, with cancellation support
             loop {
                 select! {
                     // Read stdout line
@@ -154,6 +166,11 @@ impl Tool for RunCommandTool {
                     // Wait for process to exit if both streams are done
                     _ = child.wait() => {
                         break;
+                    }
+                    // Handle Ctrl-C cancellation
+                    _ = &mut cancel_fut => {
+                        let _ = child.kill().await;
+                        return Err("Command cancelled by user (Ctrl-C)".to_string());
                     }
                 };
             }

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc as tokio_mpsc};
+use tokio_util::sync::CancellationToken;
 use apchat_policy::PolicyManager;
 use apchat_terminal::TerminalManager;
 use apchat_skills::SkillRegistry;
@@ -53,6 +54,7 @@ pub struct ToolContext {
     pub searxng_url: Option<String>, // SearXNG URL for web search (propagated to subagents)
     pub python_sandbox: bool, // Whether python sandbox is enabled (propagated to subagents)
     pub skip_content_limiter: bool, // Whether to skip content limiter for this tool execution (per-tool bypass)
+    pub cancellation_token: Option<CancellationToken>, // Cancellation token for Ctrl-C propagation
 }
 
 impl Clone for ToolContext {
@@ -82,6 +84,7 @@ impl Clone for ToolContext {
             searxng_url: self.searxng_url.clone(),
             python_sandbox: self.python_sandbox,
             skip_content_limiter: self.skip_content_limiter,
+            cancellation_token: self.cancellation_token.clone(),
         }
     }
 }
@@ -111,6 +114,7 @@ impl std::fmt::Debug for ToolContext {
             .field("searxng_url", &self.searxng_url.as_ref().map(|s| "***"))
             .field("python_sandbox", &self.python_sandbox)
             .field("skip_content_limiter", &self.skip_content_limiter)
+            .field("cancellation_token", &self.cancellation_token.is_some())
             .finish()
     }
 }
@@ -141,6 +145,7 @@ impl ToolContext {
             searxng_url: None,
             python_sandbox: false,
             skip_content_limiter: false,
+            cancellation_token: None,
         }
     }
 
@@ -242,6 +247,17 @@ impl ToolContext {
     pub fn with_skip_content_limiter(mut self, skip: bool) -> Self {
         self.skip_content_limiter = skip;
         self
+    }
+
+    pub fn with_cancellation_token(mut self, token: CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
+    /// Check if cancellation has been requested (Ctrl-C).
+    /// Returns true if cancelled, false if no token or not cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation_token.as_ref().map_or(false, |t| t.is_cancelled())
     }
 
     /// Get an LLM client for a specific model color

@@ -88,6 +88,8 @@ pub struct APChat {
     pub(crate) bogus_ack_msg: Option<String>,
     // Task mode completion marker - random token the LLM must include when truly done
     pub(crate) task_completion_marker: Option<String>,
+    // Current cancellation token for Ctrl-C propagation to tools
+    pub(crate) cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl APChat {
@@ -338,6 +340,7 @@ impl APChat {
             feature_flags: flags,
             bogus_ack_msg: None, // Default to no bogus ack message
             task_completion_marker: None,
+            cancellation_token: None,
         };
 
         chat.messages.push(Message {
@@ -616,6 +619,11 @@ impl APChat {
                 // Propagate feature flags to subagents
                 context = context.with_searxng_url(self.feature_flags.searxng_url.clone());
                 context = context.with_python_sandbox(self.feature_flags.python_sandbox);
+
+                // Propagate cancellation token for Ctrl-C
+                if let Some(ref token) = self.cancellation_token {
+                    context = context.with_cancellation_token(token.clone());
+                }
 
                 let context = context;
 

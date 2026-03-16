@@ -89,12 +89,24 @@ impl Tool for LlmCallTool {
         // Try to get the LLM client from context
         match context.get_llm_client(&model_color) {
             Some(client) => {
-                match client.chat_completion(&[message]).await {
-                    Ok(response) => {
-                        ToolResult::success(response)
+                // Race the LLM call against cancellation token (Ctrl-C)
+                let messages = vec![message];
+                if let Some(ref token) = context.cancellation_token {
+                    tokio::select! {
+                        result = client.chat_completion(&messages) => {
+                            match result {
+                                Ok(response) => ToolResult::success(response),
+                                Err(e) => ToolResult::error(format!("LLM call failed: {}", e)),
+                            }
+                        }
+                        _ = token.cancelled() => {
+                            ToolResult::error("LLM call cancelled by user (Ctrl-C)".to_string())
+                        }
                     }
-                    Err(e) => {
-                        ToolResult::error(format!("LLM call failed: {}", e))
+                } else {
+                    match client.chat_completion(&messages).await {
+                        Ok(response) => ToolResult::success(response),
+                        Err(e) => ToolResult::error(format!("LLM call failed: {}", e)),
                     }
                 }
             }
