@@ -430,7 +430,7 @@ impl<'de> Deserialize<'de> for Message {
                         "name" => {
                             name = Some(map.next_value()?);
                         }
-                        "reasoning" => {
+                        "reasoning" | "reasoning_content" => {
                             reasoning = Some(map.next_value()?);
                         }
                         _ => {

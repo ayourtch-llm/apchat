@@ -344,10 +344,22 @@ pub(crate) async fn call_api_stateless(
         // If no structured tool calls were received, check for XML format in content
         if message.tool_calls.is_none() {
             if let Some(parsed_calls) = parse_xml_tool_calls(&message.text_only()) {
-                print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+                print_heart_yellow(&format!("{} Detected XML-format tool calls in content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
                 message.tool_calls = Some(parsed_calls);
                 // Clear the XML from content to avoid displaying it
                 message.content = vec![];
+            }
+        }
+
+        // Also check reasoning field for XML tool calls (some models like Qwen put them there)
+        if message.tool_calls.is_none() {
+            if let Some(ref reasoning) = message.reasoning {
+                if let Some(parsed_calls) = parse_xml_tool_calls(reasoning) {
+                    print_heart_yellow(&format!("{} Detected XML-format tool calls in reasoning_content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+                    message.tool_calls = Some(parsed_calls);
+                    // Clear reasoning since we extracted the tool calls from it
+                    message.reasoning = None;
+                }
             }
         }
 
