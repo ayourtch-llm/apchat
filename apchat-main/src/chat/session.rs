@@ -618,20 +618,28 @@ pub(crate) async fn chat(
                 chat.messages.push(response.clone());
                 
                 // In task mode: check for the completion marker to confirm the LLM is truly done.
-                // If the marker is missing (or text is empty), nudge the LLM to keep working.
+                // Check both text content and reasoning (some models put everything in reasoning_content).
+                // If the marker is missing, nudge the LLM to keep working.
                 if chat.non_interactive && finish_reason.as_deref() == Some("stop") {
+                    let reasoning_text = response.reasoning.as_deref().unwrap_or("");
                     let has_completion_marker = chat.task_completion_marker.as_ref()
-                        .map_or(false, |marker| text_content.contains(marker));
+                        .map_or(false, |marker| text_content.contains(marker) || reasoning_text.contains(marker));
 
                     if has_completion_marker {
                         print_heart_yellow(&format!(
                             "✅ [TASK DEBUG] Completion marker found, task is done"
                         ), true);
-                        // Strip the marker from the output
-                        let clean_text = if let Some(ref marker) = chat.task_completion_marker {
-                            text_content.replace(marker, "").trim().to_string()
+                        // Use reasoning as output if text_content is empty (Qwen puts everything in reasoning)
+                        let output = if text_content.trim().is_empty() && !reasoning_text.is_empty() {
+                            reasoning_text.to_string()
                         } else {
                             text_content
+                        };
+                        // Strip the marker from the output
+                        let clean_text = if let Some(ref marker) = chat.task_completion_marker {
+                            output.replace(marker, "").trim().to_string()
+                        } else {
+                            output
                         };
                         return Ok(clean_text);
                     }
