@@ -41,7 +41,7 @@ pub(crate) async fn chat(
 ) -> Result<String> {
     // Empty response retry configuration
     const MAX_EMPTY_RESPONSE_RETRIES: usize = 3;
-    const MAX_TASK_MODE_RETRIES: usize = 10;
+    const MAX_TASK_MODE_RETRIES: usize = 3;
     let mut empty_response_retries: usize = 0;
 
     // ── Main retry loop for empty responses ──────────────────────────────────
