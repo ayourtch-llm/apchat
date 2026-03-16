@@ -764,6 +764,7 @@ async fn prep_and_send_request(
         debug_level: chat.debug_level,
         http_client: chat.client.clone(),
         llm_overrides: Some(chat.llm_overrides.clone()),
+        non_interactive: chat.non_interactive,
     };
 
     // Prepare streaming channel if needed

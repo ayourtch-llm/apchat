@@ -16,6 +16,7 @@ pub struct ApiCallParams {
     pub debug_level: u32,
     pub http_client: reqwest::Client,
     pub llm_overrides: Option<Arc<std::sync::Mutex<Option<LlmRequestOverrides>>>>,
+    pub non_interactive: bool,
 }
 
 impl ApiCallParams {
@@ -32,6 +33,7 @@ impl ApiCallParams {
             debug_level: chat.debug_level,
             http_client: chat.client.clone(),
             llm_overrides: Some(chat.llm_overrides.clone()),
+            non_interactive: chat.non_interactive,
         }
     }
 

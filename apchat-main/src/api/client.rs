@@ -292,6 +292,11 @@ pub(crate) async fn call_api_stateless(
 
         let latency_ms = request_start.elapsed().as_millis() as u64;
 
+        // In task mode, dump raw HTTP response for debugging vanishing tokens
+        if params.verbose && params.non_interactive {
+            print_heart_yellow(&format!("[TASK DEBUG] Raw API response: {}", &response_text), true);
+        }
+
         // Log successful response in verbose mode
         log_response(&status, &headers, &response_text, params.verbose);
         let _ = log_response_to_file(&status, &headers, &response_text, request_timestamp, &current_model);
