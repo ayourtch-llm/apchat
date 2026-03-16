@@ -6,6 +6,7 @@ use crate::APChat;
 use apchat_vty::{print_heart_red, print_heart_yellow};
 use crate::cli::Cli;
 use crate::config::{ClientConfig, FeatureFlags};
+use apchat_models::types::ContentPart;
 use apchat_policy::PolicyManager;
 
 /// Subagent task summary structure
@@ -82,6 +83,25 @@ pub async fn run_subagent_mode(
 
     // Disable logging for subagent mode to avoid clutter
     subagent.logger = None;
+
+    // Append task-mode instructions to the system prompt so the LLM knows
+    // it must actively use tools to complete the task, not just acknowledge it.
+    if let Some(system_msg) = subagent.messages.first_mut() {
+        if system_msg.role == "system" {
+            if let Some(ContentPart::Text(ref mut text)) = system_msg.content.first_mut() {
+                text.push_str("\n\n\
+# Task Mode\n\n\
+You are running in TASK MODE as a subagent. You have been given a specific task to complete.\n\
+\n\
+CRITICAL INSTRUCTIONS:\n\
+- You MUST use your tools to actively work on and complete the task.\n\
+- Do NOT just acknowledge the task or describe what you would do — actually DO it using tool calls.\n\
+- Keep working until the task is fully complete. Do not stop after a single tool call if more work is needed.\n\
+- When you are truly finished, provide a concise summary of what you accomplished.\n\
+- If you encounter errors, try alternative approaches before giving up.");
+            }
+        }
+    }
 
     // Track initial state to detect changes
     let initial_file_count = count_files(&work_dir)?;
