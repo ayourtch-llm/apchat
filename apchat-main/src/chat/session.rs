@@ -609,6 +609,37 @@ pub(crate) async fn chat(
                 let text_content = response.text_only();
                 chat.messages.push(response.clone());
                 
+                // In task mode: if finish_reason is "stop" but text is empty,
+                // nudge the LLM to verify its work and report back instead of exiting silently.
+                if chat.non_interactive && finish_reason.as_deref() == Some("stop") && text_content.trim().is_empty() {
+                    empty_response_retries += 1;
+                    print_heart_yellow(&format!(
+                        "⚠️ [TASK DEBUG] Empty stop response in task mode, nudging LLM (attempt {}/{})",
+                        empty_response_retries, MAX_EMPTY_RESPONSE_RETRIES
+                    ), true);
+
+                    if empty_response_retries >= MAX_EMPTY_RESPONSE_RETRIES {
+                        print_heart_yellow(&format!("❌ [TASK DEBUG] Max empty stop retries ({}) exceeded, giving up", MAX_EMPTY_RESPONSE_RETRIES), true);
+                        empty_response_retries = 0;
+                        break 'retry_loop Ok(String::new());
+                    }
+
+                    // Inject a synthetic user message asking for verification and summary
+                    chat.messages.push(Message {
+                        role: "user".to_string(),
+                        content: vec![ContentPart::Text(
+                            "Could you please have a look at the task, and verify that you had done everything? \
+                            After that - please enumerate here what exactly has been done. Thank you!".to_string()
+                        )],
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    });
+
+                    continue 'retry_loop;
+                }
+
                 // If finish_reason is "stop", the agent has naturally finished
                 // This explicit check allows agents to signal completion
                 if finish_reason.as_deref() == Some("stop") {
@@ -617,8 +648,8 @@ pub(crate) async fn chat(
                     }
                     return Ok(text_content);
                 }
-                
-                // Check if we got an empty response
+
+                // Check if we got an empty response (non-task mode)
                 if text_content.trim().is_empty() {
                     empty_response_retries += 1;
                     print_heart_yellow(&format!("⚠️ [DEBUG] Empty response detected! Retry attempt {}/{}", empty_response_retries, MAX_EMPTY_RESPONSE_RETRIES), true);
