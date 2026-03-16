@@ -86,6 +86,8 @@ pub struct APChat {
     pub(crate) feature_flags: FeatureFlags,
     // Bogus acknowledgment message for deduplication
     pub(crate) bogus_ack_msg: Option<String>,
+    // Task mode completion marker - random token the LLM must include when truly done
+    pub(crate) task_completion_marker: Option<String>,
 }
 
 impl APChat {
@@ -335,6 +337,7 @@ impl APChat {
             mcp_clients: Vec::new(),
             feature_flags: flags,
             bogus_ack_msg: None, // Default to no bogus ack message
+            task_completion_marker: None,
         };
 
         chat.messages.push(Message {

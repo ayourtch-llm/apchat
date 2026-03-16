@@ -85,12 +85,19 @@ pub async fn run_subagent_mode(
     // Disable logging for subagent mode to avoid clutter
     subagent.logger = None;
 
+    // Generate a random completion token for this task session using process id + timestamp
+    let completion_token = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() % 1_000_000;
+    let completion_marker = format!("TASK_COMPLETE_{}", completion_token);
+
     // Append task-mode instructions to the system prompt so the LLM knows
     // it must actively use tools to complete the task, not just acknowledge it.
     if let Some(system_msg) = subagent.messages.first_mut() {
         if system_msg.role == "system" {
             if let Some(ContentPart::Text(ref mut text)) = system_msg.content.first_mut() {
-                text.push_str("\n\n\
+                text.push_str(&format!("\n\n\
 # Task Mode\n\n\
 You are running in TASK MODE as a subagent. You have been given a specific task to complete.\n\
 \n\
@@ -98,11 +105,17 @@ CRITICAL INSTRUCTIONS:\n\
 - You MUST use your tools to actively work on and complete the task.\n\
 - Do NOT just acknowledge the task or describe what you would do — actually DO it using tool calls.\n\
 - Keep working until the task is fully complete. Do not stop after a single tool call if more work is needed.\n\
-- When you are truly finished, provide a concise summary of what you accomplished.\n\
-- If you encounter errors, try alternative approaches before giving up.");
+- If you encounter errors, try alternative approaches before giving up.\n\
+- When you are truly finished, provide a concise summary of what you accomplished, \
+and end your FINAL response with exactly: {}\n\
+- You MUST include this completion marker in your final message. Without it, the system \
+will assume you are not done and will ask you to continue.", completion_marker));
             }
         }
     }
+
+    // Store the completion marker for checking in the chat loop
+    subagent.task_completion_marker = Some(completion_marker.clone());
 
     // Track initial state to detect changes
     let initial_file_count = count_files(&work_dir)?;
