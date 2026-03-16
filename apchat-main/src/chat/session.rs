@@ -193,6 +193,19 @@ pub(crate) async fn chat(
                     chat.total_tokens_used.to_string().cyan(),
                     &finish_reason,
                 ), true);
+
+                // In task mode, dump the actual response text when completion is suspiciously low
+                if chat.non_interactive && usage.completion_tokens < 150 {
+                    let text = response.text_only();
+                    let has_tools = response.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty());
+                    print_heart_yellow(&format!(
+                        "⚠️ [TASK DEBUG] Low completion ({} tokens), has_tool_calls={}, finish_reason={:?}, response text: {:?}",
+                        usage.completion_tokens,
+                        has_tools,
+                        &finish_reason,
+                        text,
+                    ), true);
+                }
             }
 
             // Display streaming metrics if streaming was used
