@@ -117,6 +117,75 @@ pub(crate) fn evaluate_text_response(
     TextResponseAction::Done(text_content.to_string())
 }
 
+/// Format a tool execution error into a message suitable for the LLM.
+///
+/// Cancellation errors get special formatting that instructs the LLM not to retry,
+/// and includes user feedback if present. Other errors get a simple "Error: ..." prefix.
+pub(crate) fn format_tool_error(error_msg: &str) -> String {
+    if error_msg.contains("cancelled by user") ||
+       error_msg.contains("Edit cancelled") ||
+       error_msg.contains("Command cancelled") {
+        let user_feedback = if error_msg.contains(" - ") {
+            error_msg.split(" - ").skip(1).collect::<Vec<_>>().join(" - ")
+        } else {
+            String::new()
+        };
+
+        let feedback_section = if !user_feedback.is_empty() {
+            format!("\n\nUSER'S FEEDBACK: {}\nThis feedback explains why the operation was cancelled. Address this concern in your next approach.", user_feedback)
+        } else {
+            String::new()
+        };
+
+        format!(
+            "OPERATION CANCELLED BY USER. The user explicitly cancelled this operation. \
+            DO NOT retry this same approach. Please acknowledge the cancellation and either:\n\
+            1. Ask the user what they would like to do instead\n\
+            2. Try a completely different approach that addresses the user's concerns\n\
+            3. Stop if this was the only viable option\
+            {}\n\
+            \nOriginal message: {}",
+            feedback_section, error_msg
+        )
+    } else {
+        format!("Error: {}", error_msg)
+    }
+}
+
+/// Truncate a tool result for display purposes. File reading results are
+/// shown with only the first 10 lines to keep the output manageable.
+pub(crate) fn truncate_for_display(tool_name: &str, result: &str) -> String {
+    if tool_name == "read_file" {
+        let lines: Vec<&str> = result.lines().collect();
+        if lines.len() > 10 {
+            let first_10 = lines[..10].join("\n");
+            let remaining = lines.len() - 10;
+            format!("{}\n\n...and {} more lines", first_10, remaining)
+        } else {
+            result.to_string()
+        }
+    } else {
+        result.to_string()
+    }
+}
+
+/// Build the content parts for a tool result message.
+/// For read_image, the result is treated as an image URL if it's a valid data: URI.
+pub(crate) fn tool_result_content(tool_name: &str, result: String) -> Vec<ContentPart> {
+    if tool_name == "read_image" {
+        if result.starts_with("data:image/") && result.contains(";base64,") {
+            vec![
+                ContentPart::Text("Attached image(s) from tool result:".to_string()),
+                ContentPart::ImageUrl { url: result }
+            ]
+        } else {
+            vec![ContentPart::Text(result)]
+        }
+    } else {
+        vec![ContentPart::Text(result)]
+    }
+}
+
 /// Check if the tool call signature matches a read-only pattern (less likely to be a problematic loop).
 fn is_read_only_tool_calls(tool_calls: &[apchat_models::ToolCall]) -> bool {
     tool_calls.iter().all(|tc|
@@ -582,59 +651,15 @@ pub async fn chat(
                         Ok(r) => r,
                         Err(e) => {
                             let error_msg = e.to_string();
-			    if error_msg.contains("Failed to parse") {
+                            if error_msg.contains("Failed to parse") {
                                 rollback = true;
                             }
-
-                            // Track error for progress evaluation
                             errors_encountered.push(format!("{}: {}", tool_call.function.name, error_msg));
-                            // Make cancellation errors very explicit to the model
-                            if error_msg.contains("cancelled by user") ||
-                               error_msg.contains("Edit cancelled") ||
-                               error_msg.contains("Command cancelled") {
-                                // Extract user's comment if present
-                                let user_feedback = if error_msg.contains(" - ") {
-                                    error_msg.split(" - ").skip(1).collect::<Vec<_>>().join(" - ")
-                                } else {
-                                    String::new()
-                                };
-
-                                let feedback_section = if !user_feedback.is_empty() {
-                                    format!("\n\nUSER'S FEEDBACK: {}\nThis feedback explains why the operation was cancelled. Address this concern in your next approach.", user_feedback)
-                                } else {
-                                    String::new()
-                                };
-
-                                format!(
-                                    "OPERATION CANCELLED BY USER. The user explicitly cancelled this operation. \
-                                    DO NOT retry this same approach. Please acknowledge the cancellation and either:\n\
-                                    1. Ask the user what they would like to do instead\n\
-                                    2. Try a completely different approach that addresses the user's concerns\n\
-                                    3. Stop if this was the only viable option\
-                                    {}\n\
-                                    \nOriginal message: {}",
-                                    feedback_section,
-                                    error_msg
-                                )
-                            } else {
-                                format!("Error: {}", error_msg)
-                            }
+                            format_tool_error(&error_msg)
                         }
                     };
 
-                    // Display result to user (truncate for file reading tools)
-                    let display_result = if tool_call.function.name == "read_file" {
-                        let lines: Vec<&str> = result.lines().collect();
-                        if lines.len() > 10 {
-                            let first_10 = lines[..10].join("\n");
-                            let remaining = lines.len() - 10;
-                            format!("{}\n\n...and {} more lines", first_10, remaining)
-                        } else {
-                            result.clone()
-                        }
-                    } else {
-                        result.clone()
-                    };
+                    let display_result = truncate_for_display(&tool_call.function.name, &result);
 
                     print_heart_red(&format!("{} {}", "📋 Result:".green(), display_result.bright_black()), true);
 
@@ -677,24 +702,7 @@ pub async fn chat(
                     };
                     tool_call_history.push(call_info);
 
-                    // Determine content type based on tool name
-                    // For read_image tool, the result is a data: URI that should be treated as an image
-                    // However, if the tool failed (e.g., file not found), the result will be an error message
-                    // In that case, we should treat it as plain text, not as an image URL
-                    let content_parts = if tool_call.function.name == "read_image" {
-                        // Check if the result is a valid data: URL (not an error message)
-                        if result.starts_with("data:image/") && result.contains(";base64,") {
-                            vec![
-                                ContentPart::Text("Attached image(s) from tool result:".to_string()),
-                                ContentPart::ImageUrl { url: result.clone() }
-                            ]
-                        } else {
-                            // Tool failed, treat as plain text error
-                            vec![ContentPart::Text(result)]
-                        }
-                    } else {
-                        vec![ContentPart::Text(result)]
-                    };
+                    let content_parts = tool_result_content(&tool_call.function.name, result);
 
                     chat.messages.push(Message {
                         role: "tool".to_string(),

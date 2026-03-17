@@ -649,6 +649,93 @@ mod tests {
         }
     }
 
+    // ─── format_tool_error ─────────────────────────────────────────────────────
+
+    use crate::chat::session::{format_tool_error, truncate_for_display, tool_result_content};
+
+    #[test]
+    fn test_format_tool_error_normal() {
+        let result = format_tool_error("Something went wrong");
+        assert_eq!(result, "Error: Something went wrong");
+    }
+
+    #[test]
+    fn test_format_tool_error_cancellation() {
+        let result = format_tool_error("Edit cancelled by user");
+        assert!(result.contains("OPERATION CANCELLED BY USER"));
+        assert!(result.contains("DO NOT retry"));
+    }
+
+    #[test]
+    fn test_format_tool_error_cancellation_with_feedback() {
+        let result = format_tool_error("Command cancelled by user - I don't want to delete that file");
+        assert!(result.contains("OPERATION CANCELLED BY USER"));
+        assert!(result.contains("USER'S FEEDBACK"));
+        assert!(result.contains("don't want to delete"));
+    }
+
+    // ─── truncate_for_display ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_truncate_display_read_file_short() {
+        let result = truncate_for_display("read_file", "line1\nline2\nline3");
+        assert_eq!(result, "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn test_truncate_display_read_file_long() {
+        let lines: Vec<String> = (1..=20).map(|i| format!("line {}", i)).collect();
+        let result = truncate_for_display("read_file", &lines.join("\n"));
+        assert!(result.contains("line 1"));
+        assert!(result.contains("line 10"));
+        assert!(result.contains("...and 10 more lines"));
+        assert!(!result.contains("line 11"));
+    }
+
+    #[test]
+    fn test_truncate_display_other_tool_no_truncation() {
+        let long = "x\n".repeat(100);
+        let result = truncate_for_display("search_files", &long);
+        assert_eq!(result, long);
+    }
+
+    // ─── tool_result_content ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_tool_result_content_text() {
+        let parts = tool_result_content("read_file", "file content".to_string());
+        assert_eq!(parts.len(), 1);
+        match &parts[0] {
+            ContentPart::Text(t) => assert_eq!(t, "file content"),
+            _ => panic!("Expected Text"),
+        }
+    }
+
+    #[test]
+    fn test_tool_result_content_image() {
+        let data_uri = "data:image/png;base64,iVBORw0KGgo=".to_string();
+        let parts = tool_result_content("read_image", data_uri.clone());
+        assert_eq!(parts.len(), 2);
+        match &parts[0] {
+            ContentPart::Text(t) => assert!(t.contains("Attached image")),
+            _ => panic!("Expected Text prefix"),
+        }
+        match &parts[1] {
+            ContentPart::ImageUrl { url } => assert_eq!(url, &data_uri),
+            _ => panic!("Expected ImageUrl"),
+        }
+    }
+
+    #[test]
+    fn test_tool_result_content_image_error() {
+        let parts = tool_result_content("read_image", "File not found".to_string());
+        assert_eq!(parts.len(), 1);
+        match &parts[0] {
+            ContentPart::Text(t) => assert_eq!(t, "File not found"),
+            _ => panic!("Expected Text for failed image read"),
+        }
+    }
+
     // ─── safe_truncate ───────────────────────────────────────────────────────────
 
     #[test]
