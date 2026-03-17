@@ -58,6 +58,7 @@ pub async fn initialize_repl(
         pptx_tools: cli.pptx_tools,
         pty_tools: cli.pty_tools,
         memory_tools: cli.memory_tools,
+        context_compact: cli.context_compact || std::env::var("APCHAT_CONTEXT_COMPACT").as_deref() == Ok("early"),
     };
 
     let mut chat = APChat::new_with_config(

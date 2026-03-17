@@ -157,6 +157,11 @@ pub struct Cli {
     #[arg(long, default_value = "127.0.0.1", env = "APCHAT_WEB_BIND")]
     pub web_bind: String,
 
+    /// Enable early context compaction (removes error tool pairs, summarizes large outputs)
+    /// Also enabled by setting APCHAT_CONTEXT_COMPACT=early
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub context_compact: bool,
+
     /// Enable memory tools (store_memory, query_memory, etc.)
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub memory_tools: bool,

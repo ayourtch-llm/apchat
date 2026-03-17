@@ -41,6 +41,7 @@ pub struct FeatureFlags {
     pub pptx_tools: bool,
     pub pty_tools: bool,
     pub memory_tools: bool,
+    pub context_compact: bool,
 }
 
 impl Default for FeatureFlags {
@@ -73,6 +74,7 @@ impl Default for FeatureFlags {
             pptx_tools: false,
             pty_tools: false, // PTY tools disabled by default
             memory_tools: false, // Memory tools disabled by default
+            context_compact: false,
         }
     }
 }

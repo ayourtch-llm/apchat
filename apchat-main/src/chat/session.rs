@@ -246,6 +246,15 @@ pub(crate) async fn chat(
                     }
                 }
 
+                // Early compaction: remove error pairs and summarize large outputs
+                if chat.feature_flags.context_compact
+                    && crate::chat::early_compaction::should_run(tool_call_iterations)
+                {
+                    if let Err(e) = crate::chat::early_compaction::run_early_compaction(chat, tool_call_iterations).await {
+                        print_heart_yellow(&format!("{} Early compaction failed: {}", "⚠️".yellow(), e), true);
+                    }
+                }
+
                 // Enhanced loop detection with lower false positive rate
                 let tool_signature = tool_calls.iter()
                     .map(|tc| format!("{}:{}", tc.function.name, tc.function.arguments))
