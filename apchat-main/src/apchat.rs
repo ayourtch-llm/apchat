@@ -95,6 +95,70 @@ pub struct APChat {
 }
 
 impl APChat {
+    /// Create a minimal APChat for testing (no tools, no skills, non-interactive).
+    pub fn new_for_test(
+        work_dir: PathBuf,
+        client_config: crate::config::ClientConfig,
+        tool_registry: ToolRegistry,
+    ) -> Self {
+        Self {
+            api_key: "test-key".to_string(),
+            work_dir: work_dir.clone(),
+            client: reqwest::Client::new(),
+            messages: Vec::new(),
+            current_model: ModelColor::GrnModel,
+            total_tokens_used: 0,
+            logger: None,
+            tool_registry,
+            client_config,
+            policy_manager: PolicyManager::new(),
+            terminal_manager: Arc::new(tokio::sync::Mutex::new(TerminalManager::new(work_dir))),
+            skill_registry: None,
+            non_interactive: true,
+            todo_manager: Arc::new(apchat_todo::TodoManager::new()),
+            stream_responses: false,
+            verbose: false,
+            debug_level: 0,
+            inference_debug: false,
+            webex_debug: false,
+            process_id: 99999,
+            readline_history: None,
+            content_limiter: None,
+            mspc_channel: None,
+            signal_sender: None,
+            signal_receiver: None,
+            confirmation_registry: None,
+            llm_overrides: Arc::new(std::sync::Mutex::new(None)),
+            context_edits: Arc::new(std::sync::Mutex::new(Vec::new())),
+            summarize_subagents: true,
+            mcp_clients: Vec::new(),
+            feature_flags: crate::config::FeatureFlags::default(),
+            bogus_ack_msg: None,
+            task_completion_marker: None,
+            cancellation_token: None,
+            ipc_mailbox: None,
+        }
+    }
+
+    /// Access conversation messages (for testing/inspection).
+    pub fn messages(&self) -> &[Message] {
+        &self.messages
+    }
+
+    /// Total tokens used in this session.
+    pub fn total_tokens_used(&self) -> usize {
+        self.total_tokens_used
+    }
+
+    /// Add a message to the conversation history.
+    pub fn push_message(&mut self, message: Message) {
+        self.messages.push(message);
+    }
+
+    /// Set the task completion marker for task mode.
+    pub fn set_task_completion_marker(&mut self, marker: Option<String>) {
+        self.task_completion_marker = marker;
+    }
 
     /// Create a new APChat with content limiter
     pub fn with_content_limiter(mut self, content_limiter: Arc<apchat_toolcore::content_limiter::ContentLimiter>) -> Self {

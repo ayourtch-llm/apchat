@@ -34,7 +34,7 @@ pub(crate) async fn prepare_for_llm_call(chat: &mut APChat, user_message: &str) 
 }
 
 /// Main chat loop - handles user messages, tool calls, and model interactions
-pub(crate) async fn chat(
+pub async fn chat(
     chat: &mut APChat,
     user_message: &str,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
