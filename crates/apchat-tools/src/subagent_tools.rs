@@ -82,7 +82,8 @@ impl Tool for LaunchSubagentTool {
             .unwrap_or(true);
 
         // Build the apchat command
-        let mut cmd = Command::new("apchat");
+        let exe = std::env::current_exe().unwrap_or_else(|_| "apchat".into());
+        let mut cmd = Command::new(&exe);
         cmd.arg("--task")
            .arg(&task)
            .arg("--auto-confirm"); // Always use auto-confirm for subagent calls
@@ -277,7 +278,8 @@ impl Tool for LaunchSubagentPrettyTool {
             .unwrap_or(true);
 
         // Build the apchat command with --pretty flag
-        let mut cmd = Command::new("apchat");
+        let exe = std::env::current_exe().unwrap_or_else(|_| "apchat".into());
+        let mut cmd = Command::new(&exe);
         cmd.arg("--task")
            .arg(&task)
            .arg("--pretty")
