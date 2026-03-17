@@ -57,13 +57,12 @@ pub async fn run_subagent_mode(
     };
 
     // Create a subagent instance - this runs without showing output to user
-    // Always enable verbose in task mode for debugging LLM responses
     let mut subagent = APChat::new_with_config(
         client_config.clone(),
         work_dir.clone(),
         policy_manager.clone(),
         false, // No streaming in subagent mode
-        true,  // Always verbose in task mode
+        cli.verbose,
         backend_type,
         flags.clone(),
     );
