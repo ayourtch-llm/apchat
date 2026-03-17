@@ -291,6 +291,10 @@ pub struct Readline {
     original_cursor_line: usize,
     /// Original cursor column before entering search mode
     original_cursor_col: usize,
+    /// Original editor height before entering confirmation mode
+    original_editor_height: usize,
+    /// Original cursor offset from bottom before entering confirmation mode
+    original_cursor_offset: usize,
     /// Kill ring (circular buffer for killed text)
     kill_ring: Vec<String>,
     /// Current position in kill ring
@@ -389,6 +393,8 @@ impl Readline {
             original_lines: Vec::new(),
             original_cursor_line: 0,
             original_cursor_col: 0,
+            original_editor_height: 1,
+            original_cursor_offset: 0,
             kill_ring: Vec::new(),
             kill_ring_index: 0,
             max_kill_ring_size: 16,
@@ -858,13 +864,22 @@ impl Readline {
         self.original_lines = self.lines.clone();
         self.original_cursor_line = self.cursor_line;
         self.original_cursor_col = self.cursor_col;
-        self.confirmation_prompt = Some(prompt);
+        self.original_editor_height = self.editor_height;
+        self.original_cursor_offset = self.cursor_offset_from_bottom;
+        self.confirmation_prompt = Some(prompt.clone());
         self.confirmation_id = confirmation_id;
         self.mode = EditMode::Confirmation;
-        // Clear the current line for user response
-        self.lines = vec![String::new()];
-        self.cursor_line = 0;
+        // Set up lines as the confirmation prompt lines + empty input line
+        // This way the normal multiline rendering code handles it
+        let mut lines: Vec<String> = prompt.lines().map(|l| l.to_string()).collect();
+        lines.push(String::new()); // empty line for user input ([Y/n])
+        let last_idx = lines.len() - 1;
+        self.lines = lines;
+        self.cursor_line = last_idx;
         self.cursor_col = 0;
+        self.editor_height = 1; // will expand on first redraw
+        self.cursor_offset_from_bottom = 0;
+        self.scroll_offset = 0;
     }
 
     /// Exits confirmation mode.
@@ -875,6 +890,8 @@ impl Readline {
         self.lines = self.original_lines.clone();
         self.cursor_line = self.original_cursor_line;
         self.cursor_col = self.original_cursor_col;
+        self.editor_height = self.original_editor_height;
+        self.cursor_offset_from_bottom = self.original_cursor_offset;
         self.confirmation_prompt = None;
         self.confirmation_id = None;
     }
@@ -2011,27 +2028,9 @@ impl Readline {
             return;
         }
 
-        // In confirmation mode, display the confirmation prompt
-        if self.mode == EditMode::Confirmation {
-            // Move cursor to start of line (column 0)
-            stdout.queue(MoveToColumn(0)).ok();
-
-            // Clear the current line
-            stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-
-            // Display the confirmation prompt with color
-            use colored::Colorize;
-            if let Some(ref prompt) = self.confirmation_prompt {
-                let prompt_display = format!("{} [Y/n]: ", prompt);
-                write!(stdout, "{}", prompt_display.bright_yellow()).ok();
-            } else {
-                write!(stdout, "{}", "Confirm [Y/n]: ".bright_yellow()).ok();
-            }
-
-            // Flush all queued commands
-            stdout.flush().ok();
-            return;
-        }
+        // In confirmation mode: fall through to normal multiline rendering.
+        // The confirmation text is stored in self.lines (set up by enter_confirmation_mode).
+        // We just override the prompt to show "[Y/n]: " instead of the normal user prompt.
 
         // Normal mode: display multiline input with scrolling
         {
@@ -2057,7 +2056,11 @@ impl Readline {
 	let start = self.scroll_offset;
 	let end = start + self.editor_height; // NOTE: without .min(self.lines.len());
 	let display_count = end - start;
-        let pr = format!("[{}]{}", std::process::id(), prompt);
+        let pr = if self.mode == EditMode::Confirmation {
+            "[Y/n]: ".to_string()
+        } else {
+            format!("[{}]{}", std::process::id(), prompt)
+        };
         let prompt = &pr;
 
 
@@ -2139,8 +2142,10 @@ impl Readline {
                 "ERROR".to_string()
             };
 
+            let mode_label = if self.mode == EditMode::Confirmation { "CONFIRM" } else { "User entry" };
             let mut title = format!(
-                "User entry lines: {}, time: {} {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {}",
+                "{} lines: {}, time: {} {} tok: {} queued: {} history: {} ctx: {} urgent: {} pid: {}",
+                mode_label,
                 self.lines.len(),
                 &local_time,
                 status_zone,
@@ -2825,14 +2830,11 @@ impl Readline {
                             continue;
                         }
                         MspcMessage::EmojiText { emoji, content, newline } => {
-                            // Issue 137: Handle EmojiText by saving cursor, clearing line, printing emoji text, and restoring
+                            // Both modes: clear line, print text (scrolls naturally), redraw prompt
                             let mut stdout = std::io::stdout();
-                            // Save cursor position
                             let _ = self.cursor();
-                            // Clear the current line
                             stdout.queue(MoveToColumn(0)).ok();
                             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
-                            // Print emoji text
                             if !emoji.is_empty() && !content.is_empty() {
                                 if *newline {
                                     writeln!(stdout, "{} {}", emoji, content).ok();
@@ -2847,7 +2849,6 @@ impl Readline {
                                 }
                             }
                             stdout.flush().ok();
-                            // Restore cursor position and redraw prompt
                             self.redraw(&current_prompt);
                             continue;
                         }
