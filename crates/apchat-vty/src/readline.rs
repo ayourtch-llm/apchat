@@ -2784,7 +2784,12 @@ impl Readline {
             }
             counter -= 1;
             if counter == 0 {
-                self.redraw(&current_prompt);
+                // During active inference (streaming), skip the periodic redraw
+                // to prevent the title bar from overwriting streaming output.
+                // The title bar will refresh once inference completes.
+                if request_counter::get_count() == 0 || self.mode == EditMode::Confirmation {
+                    self.redraw(&current_prompt);
+                }
                 counter = COUNTDOWN;
             }
 
@@ -2830,23 +2835,40 @@ impl Readline {
                             continue;
                         }
                         MspcMessage::EmojiText { emoji, content, newline } => {
-                            // Both modes: clear line, print text (scrolls naturally), redraw prompt
                             let mut stdout = std::io::stdout();
+
+                            // During active inference (streaming), write tokens directly
+                            // without clearing lines or redrawing the title bar.
+                            // This prevents the status bar from overwriting streaming output.
+                            if request_counter::get_count() > 0 {
+                                if !content.is_empty() {
+                                    if *newline {
+                                        writeln!(stdout, "{}", content).ok();
+                                    } else {
+                                        write!(stdout, "{}", content).ok();
+                                    }
+                                    stdout.flush().ok();
+                                }
+                                continue;
+                            }
+
+                            if !*newline {
+                                // Non-inference streaming fragment: just append
+                                if !content.is_empty() {
+                                    write!(stdout, "{}", content).ok();
+                                    stdout.flush().ok();
+                                }
+                                continue;
+                            }
+
+                            // Complete line in idle mode: clear, print, redraw
                             let _ = self.cursor();
                             stdout.queue(MoveToColumn(0)).ok();
                             stdout.queue(Clear(crossterm::terminal::ClearType::CurrentLine)).ok();
                             if !emoji.is_empty() && !content.is_empty() {
-                                if *newline {
-                                    writeln!(stdout, "{} {}", emoji, content).ok();
-                                } else {
-                                    write!(stdout, "{} {}", emoji, content).ok();
-                                }
+                                writeln!(stdout, "{} {}", emoji, content).ok();
                             } else if !content.is_empty() {
-                                if *newline {
-                                    writeln!(stdout, "{}", content).ok();
-                                } else {
-                                    write!(stdout, "{}", content).ok();
-                                }
+                                writeln!(stdout, "{}", content).ok();
                             }
                             stdout.flush().ok();
                             self.redraw(&current_prompt);
