@@ -390,6 +390,7 @@ impl LlamaCppClient {
                 delta: String::new(),
                 finish_reason: Some("stop".to_string()),
                 tool_call_event: None,
+                reasoning: None,
             }));
         }
 
@@ -418,12 +419,18 @@ impl LlamaCppClient {
 
                 // Extract delta content
                 if let Some(delta) = first_choice.get("delta") {
-                    if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+                    // Check for regular content
+                    let content = delta.get("content").and_then(|v| v.as_str());
+                    // Check for reasoning_content (Qwen puts thinking here)
+                    let reasoning = delta.get("reasoning_content").and_then(|v| v.as_str());
+
+                    if content.is_some() || reasoning.is_some() {
                         return Ok(Some(StreamingChunk {
                             content: String::new(),
-                            delta: content.to_string(),
+                            delta: content.unwrap_or("").to_string(),
                             finish_reason,
                             tool_call_event: None,
+                            reasoning: reasoning.map(|s| s.to_string()),
                         }));
                     }
 
@@ -434,6 +441,7 @@ impl LlamaCppClient {
                             delta: String::new(),
                             finish_reason: None,
                             tool_call_event: None,
+                            reasoning: None,
                         }));
                     }
                 }
@@ -445,6 +453,7 @@ impl LlamaCppClient {
                         delta: String::new(),
                         finish_reason,
                         tool_call_event: None,
+                        reasoning: None,
                     }));
                 }
             }

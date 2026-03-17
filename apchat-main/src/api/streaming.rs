@@ -619,16 +619,27 @@ pub(crate) async fn call_api_streaming_stateless(
         tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
         tool_call_id: None,
         name: None,
-        reasoning: None,
+        reasoning: if accumulated_reasoning.is_empty() { None } else { Some(accumulated_reasoning.clone()) },
     };
 
     // If no structured tool calls were received, check for XML format in content
     if message.tool_calls.is_none() {
         if let Some(parsed_calls) = parse_xml_tool_calls(&accumulated_content) {
-            print_heart_yellow(&format!("{} Detected XML-format tool calls, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+            print_heart_yellow(&format!("{} Detected XML-format tool calls in content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
             message.tool_calls = Some(parsed_calls);
             // Clear the XML from content to avoid displaying it
             message.content = vec![ContentPart::Text(String::new())];
+        }
+    }
+
+    // Also check reasoning for XML tool calls (Qwen puts tool calls in reasoning_content)
+    if message.tool_calls.is_none() {
+        if let Some(ref reasoning) = message.reasoning {
+            if let Some(parsed_calls) = parse_xml_tool_calls(reasoning) {
+                print_heart_yellow(&format!("{} Detected XML-format tool calls in reasoning_content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+                message.tool_calls = Some(parsed_calls);
+                message.reasoning = None;
+            }
         }
     }
 
@@ -723,6 +734,7 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
 
     // Initialize response accumulation
     let mut accumulated_content = String::new();
+    let mut accumulated_reasoning = String::new();
     let mut accumulated_tool_calls: Vec<ToolCall> = Vec::new();
     let mut tool_calls_in_progress: std::collections::HashMap<usize, (String, String, String)> = std::collections::HashMap::new(); // index -> (id, name, arguments)
     let mut role = String::new();
@@ -752,10 +764,20 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
                     first_chunk = false;
                 }
 
+                // Accumulate reasoning content (Qwen puts thinking in reasoning_content)
+                if let Some(ref reasoning) = chunk.reasoning {
+                    if !reasoning.is_empty() {
+                        accumulated_reasoning.push_str(reasoning);
+                        // Display reasoning in dim color
+                        io::stdout().write_all(reasoning.as_bytes()).unwrap();
+                        io::stdout().flush().unwrap();
+                    }
+                }
+
                 // Print the delta immediately without any buffering
                 if !chunk.delta.is_empty() {
                     let chunk_text = chunk.delta.clone();
-                    
+
                     // Send to channel if provided
                     if let Some(ref tx) = output_tx {
                         let _ = tx.try_send(OutputChunk {
@@ -763,7 +785,7 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
                             is_final: false,
                         });
                     }
-                    
+
                     // Use direct write and flush for minimal latency
                     io::stdout().write_all(chunk.delta.as_bytes()).unwrap();
                     io::stdout().flush().unwrap();
@@ -827,14 +849,34 @@ pub(crate) async fn call_api_streaming_with_llm_client_stateless(
     metrics.finish();
 
     // Convert the response back to the old format
-    let message = Message {
+    let mut message = Message {
         role: if role.is_empty() { "assistant".to_string() } else { role },
         content: vec![ContentPart::Text(accumulated_content.clone())],
         tool_calls: if accumulated_tool_calls.is_empty() { None } else { Some(accumulated_tool_calls) },
         tool_call_id: None,
         name: None,
-        reasoning: None,
+        reasoning: if accumulated_reasoning.is_empty() { None } else { Some(accumulated_reasoning.clone()) },
     };
+
+    // If no structured tool calls, check content for XML format
+    if message.tool_calls.is_none() {
+        if let Some(parsed_calls) = parse_xml_tool_calls(&accumulated_content) {
+            print_heart_yellow(&format!("{} Detected XML-format tool calls in content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+            message.tool_calls = Some(parsed_calls);
+            message.content = vec![ContentPart::Text(String::new())];
+        }
+    }
+
+    // Also check reasoning for XML tool calls (Qwen puts tool calls in reasoning_content)
+    if message.tool_calls.is_none() {
+        if let Some(ref reasoning) = message.reasoning {
+            if let Some(parsed_calls) = parse_xml_tool_calls(reasoning) {
+                print_heart_yellow(&format!("{} Detected XML-format tool calls in reasoning_content, parsing {} call(s)", "🔧".bright_yellow(), parsed_calls.len()), true);
+                message.tool_calls = Some(parsed_calls);
+                message.reasoning = None;
+            }
+        }
+    }
 
     // For now, we don't have usage information from streaming
     // This could be enhanced by extracting usage from the final message_stop event

@@ -610,6 +610,7 @@ impl AnthropicLlmClient {
                 delta: String::new(),
                 finish_reason: Some("stop".to_string()),
                 tool_call_event: None,
+                reasoning: None,
             }));
         }
 
@@ -644,6 +645,7 @@ impl AnthropicLlmClient {
                                 delta: text.to_string(),
                                 finish_reason: None,
                                 tool_call_event: None,
+                                reasoning: None,
                             }));
                         }
 
@@ -658,6 +660,7 @@ impl AnthropicLlmClient {
                                         index,
                                         arguments_delta: partial_json.to_string(),
                                     }),
+                                    reasoning: None,
                                 }));
                             }
                         }
@@ -678,6 +681,7 @@ impl AnthropicLlmClient {
                                     delta: text.to_string(),
                                     finish_reason: None,
                                     tool_call_event: None,
+                                    reasoning: None,
                                 }));
                             }
                         }
@@ -697,6 +701,7 @@ impl AnthropicLlmClient {
                                         id: id.to_string(),
                                         name: name.to_string(),
                                     }),
+                                    reasoning: None,
                                 }));
                             }
                         }
@@ -708,6 +713,7 @@ impl AnthropicLlmClient {
                         delta: String::new(),
                         finish_reason: Some("stop".to_string()),
                         tool_call_event: None,
+                        reasoning: None,
                     }));
                 }
                 // Other event types (ping, message_start, content_block_stop, etc.) are valid but don't contain content

@@ -179,6 +179,7 @@ pub struct StreamingChunk {
     pub delta: String,
     pub finish_reason: Option<String>,
     pub tool_call_event: Option<ToolCallEvent>,
+    pub reasoning: Option<String>,
 }
 
 /// Temporary overrides for LLM request parameters.
