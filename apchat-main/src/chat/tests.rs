@@ -543,47 +543,110 @@ mod tests {
         assert!(26 % PROGRESSIVE_CHECK_INTERVAL != 0);
     }
 
-    // ─── Task mode completion marker logic (mirrors session.rs:661-723) ──────────
+    // ─── evaluate_text_response (extracted from session.rs) ─────────────────────
+
+    use crate::chat::session::{evaluate_text_response, TextResponseAction};
 
     #[test]
-    fn test_completion_marker_in_text() {
-        let marker = "TASK_DONE_abc123";
-        let text = "I've completed the task. TASK_DONE_abc123";
-        assert!(text.contains(marker));
+    fn test_eval_task_mode_with_marker_returns_complete() {
+        let action = evaluate_text_response(
+            "All done! __DONE__", None, Some("stop"),
+            true, Some("__DONE__"), 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::Complete(text) => {
+                assert!(text.contains("All done"));
+                assert!(!text.contains("__DONE__"));
+            }
+            other => panic!("Expected Complete, got {:?}", std::mem::discriminant(&other)),
+        }
     }
 
     #[test]
-    fn test_completion_marker_in_reasoning() {
-        let marker = "TASK_DONE_abc123";
-        let text_content = "";
-        let reasoning = "Analysis complete. TASK_DONE_abc123";
-        let has_marker = text_content.contains(marker) || reasoning.contains(marker);
-        assert!(has_marker);
+    fn test_eval_task_mode_marker_in_reasoning() {
+        let action = evaluate_text_response(
+            "", Some("Reasoning with __DONE__"), Some("stop"),
+            true, Some("__DONE__"), 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::Complete(text) => {
+                assert!(text.contains("Reasoning with"));
+                assert!(!text.contains("__DONE__"));
+            }
+            _ => panic!("Expected Complete"),
+        }
     }
 
     #[test]
-    fn test_completion_marker_strip() {
-        let marker = "TASK_DONE_abc123";
-        let output = "Here is the result. TASK_DONE_abc123 Extra text.";
-        let clean = output.replace(marker, "").trim().to_string();
-        assert_eq!(clean, "Here is the result.  Extra text.");
-        assert!(!clean.contains(marker));
+    fn test_eval_task_mode_missing_marker_nudges() {
+        let action = evaluate_text_response(
+            "Working on it...", None, Some("stop"),
+            true, Some("__DONE__"), 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::NudgeAndRetry { retries, .. } => assert_eq!(retries, 1),
+            _ => panic!("Expected NudgeAndRetry"),
+        }
     }
 
-    // ─── Empty response retry logic (mirrors session.rs:733-767) ─────────────────
+    #[test]
+    fn test_eval_task_mode_max_retries_gives_up() {
+        let action = evaluate_text_response(
+            "Still working...", None, Some("stop"),
+            true, Some("__DONE__"), 2, 3, 3, // retries=2, max=3 → 2+1 >= 3
+        );
+        match action {
+            TextResponseAction::GiveUp(text) => assert!(text.contains("Still working")),
+            _ => panic!("Expected GiveUp"),
+        }
+    }
 
     #[test]
-    fn test_empty_response_retry_limits() {
-        const MAX_EMPTY_RESPONSE_RETRIES: usize = 3;
-        const MAX_TASK_MODE_RETRIES: usize = 3;
+    fn test_eval_interactive_stop_returns_done() {
+        let action = evaluate_text_response(
+            "Here's your answer.", None, Some("stop"),
+            false, None, 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::Done(text) => assert!(text.contains("answer")),
+            _ => panic!("Expected Done"),
+        }
+    }
 
-        let mut retries = 0;
-        let should_give_up = |retries: usize| retries >= MAX_EMPTY_RESPONSE_RETRIES;
+    #[test]
+    fn test_eval_empty_response_retries() {
+        let action = evaluate_text_response(
+            "", None, None,
+            false, None, 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::RetryEmpty { retries } => assert_eq!(retries, 1),
+            _ => panic!("Expected RetryEmpty"),
+        }
+    }
 
-        assert!(!should_give_up(0));
-        assert!(!should_give_up(1));
-        assert!(!should_give_up(2));
-        assert!(should_give_up(3));
+    #[test]
+    fn test_eval_empty_response_max_retries() {
+        let action = evaluate_text_response(
+            "  ", None, None,
+            false, None, 2, 3, 3, // 2+1 >= 3
+        );
+        match action {
+            TextResponseAction::GiveUpEmpty => {},
+            _ => panic!("Expected GiveUpEmpty"),
+        }
+    }
+
+    #[test]
+    fn test_eval_non_empty_no_stop_returns_done() {
+        let action = evaluate_text_response(
+            "Some text here", None, Some("length"),
+            false, None, 0, 3, 3,
+        );
+        match action {
+            TextResponseAction::Done(text) => assert_eq!(text, "Some text here"),
+            _ => panic!("Expected Done"),
+        }
     }
 
     // ─── safe_truncate ───────────────────────────────────────────────────────────

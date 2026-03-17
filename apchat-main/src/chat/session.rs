@@ -42,6 +42,81 @@ async fn make_llm_call(chat: &mut APChat) -> Result<LlmCallResult> {
     }
 }
 
+/// Result of checking a text response (no tool calls) for completion.
+pub(crate) enum TextResponseAction {
+    /// Task is complete — return this cleaned text.
+    Complete(String),
+    /// Need to nudge the LLM to continue (task mode, missing marker).
+    NudgeAndRetry { retries: usize, marker_reminder: String },
+    /// Max retries exceeded — return whatever we have.
+    GiveUp(String),
+    /// Normal interactive completion.
+    Done(String),
+    /// Empty response — retry with encouragement.
+    RetryEmpty { retries: usize },
+    /// Max empty retries exceeded.
+    GiveUpEmpty,
+}
+
+/// Evaluate a text response (no tool calls) and determine what action to take.
+pub(crate) fn evaluate_text_response(
+    text_content: &str,
+    reasoning: Option<&str>,
+    finish_reason: Option<&str>,
+    non_interactive: bool,
+    task_completion_marker: Option<&str>,
+    empty_response_retries: usize,
+    max_task_retries: usize,
+    max_empty_retries: usize,
+) -> TextResponseAction {
+    let reasoning_text = reasoning.unwrap_or("");
+
+    // Task mode: check for completion marker
+    if non_interactive && finish_reason == Some("stop") {
+        let has_marker = task_completion_marker
+            .map_or(false, |marker| text_content.contains(marker) || reasoning_text.contains(marker));
+
+        if has_marker {
+            let output = if text_content.trim().is_empty() && !reasoning_text.is_empty() {
+                reasoning_text.to_string()
+            } else {
+                text_content.to_string()
+            };
+            let clean = task_completion_marker
+                .map(|m| output.replace(m, "").trim().to_string())
+                .unwrap_or(output);
+            return TextResponseAction::Complete(clean);
+        }
+
+        // No marker — nudge
+        let retries = empty_response_retries + 1;
+        if retries >= max_task_retries {
+            return TextResponseAction::GiveUp(text_content.to_string());
+        }
+
+        let marker_reminder = task_completion_marker
+            .map(|m| format!(" Remember to end your final message with: {}", m))
+            .unwrap_or_default();
+        return TextResponseAction::NudgeAndRetry { retries, marker_reminder };
+    }
+
+    // Non-task mode: finish_reason "stop" means done
+    if finish_reason == Some("stop") {
+        return TextResponseAction::Done(text_content.to_string());
+    }
+
+    // Empty response retry
+    if text_content.trim().is_empty() {
+        let retries = empty_response_retries + 1;
+        if retries >= max_empty_retries {
+            return TextResponseAction::GiveUpEmpty;
+        }
+        return TextResponseAction::RetryEmpty { retries };
+    }
+
+    TextResponseAction::Done(text_content.to_string())
+}
+
 /// Check if the tool call signature matches a read-only pattern (less likely to be a problematic loop).
 fn is_read_only_tool_calls(tool_calls: &[apchat_models::ToolCall]) -> bool {
     tool_calls.iter().all(|tc|
@@ -638,122 +713,78 @@ pub async fn chat(
                 // Apply any pending context edits from self-edit tools
                 crate::chat::context_edit::apply_pending_context_edits(chat, rollback_len);
             } else {
-                // No tool calls - this is the final response
+                // No tool calls — evaluate the text response
                 let text_content = response.text_only();
                 chat.messages.push(response.clone());
-                
-                // In task mode: check for the completion marker to confirm the LLM is truly done.
-                // Check both text content and reasoning (some models put everything in reasoning_content).
-                // If the marker is missing, nudge the LLM to keep working.
-                if chat.non_interactive && finish_reason.as_deref() == Some("stop") {
-                    let reasoning_text = response.reasoning.as_deref().unwrap_or("");
-                    let has_completion_marker = chat.task_completion_marker.as_ref()
-                        .map_or(false, |marker| text_content.contains(marker) || reasoning_text.contains(marker));
 
-                    if has_completion_marker {
-                        print_heart_yellow(&format!(
-                            "✅ [TASK DEBUG] Completion marker found, task is done"
-                        ), true);
-                        // Use reasoning as output if text_content is empty (Qwen puts everything in reasoning)
-                        let output = if text_content.trim().is_empty() && !reasoning_text.is_empty() {
-                            reasoning_text.to_string()
-                        } else {
-                            text_content
-                        };
-                        // Strip the marker from the output
-                        let clean_text = if let Some(ref marker) = chat.task_completion_marker {
-                            output.replace(marker, "").trim().to_string()
-                        } else {
-                            output
-                        };
+                let action = evaluate_text_response(
+                    &text_content,
+                    response.reasoning.as_deref(),
+                    finish_reason.as_deref(),
+                    chat.non_interactive,
+                    chat.task_completion_marker.as_deref(),
+                    empty_response_retries,
+                    MAX_TASK_MODE_RETRIES,
+                    MAX_EMPTY_RESPONSE_RETRIES,
+                );
+
+                match action {
+                    TextResponseAction::Complete(clean_text) => {
+                        print_heart_yellow("✅ [TASK DEBUG] Completion marker found, task is done", true);
                         return Ok(clean_text);
                     }
+                    TextResponseAction::NudgeAndRetry { retries, marker_reminder } => {
+                        empty_response_retries = retries;
+                        let is_empty = text_content.trim().is_empty();
+                        print_heart_yellow(&format!(
+                            "⚠️ [TASK DEBUG] {} stop response without completion marker, nudging LLM ({} kind reminder, {}/{})",
+                            if is_empty { "Empty" } else { "Non-empty" },
+                            retries, retries, MAX_TASK_MODE_RETRIES,
+                        ), true);
 
-                    // No marker — nudge the LLM
-                    empty_response_retries += 1;
-                    let is_empty = text_content.trim().is_empty();
-                    print_heart_yellow(&format!(
-                        "⚠️ [TASK DEBUG] {} stop response without completion marker, nudging LLM ({} kind reminder, {}/{})",
-                        if is_empty { "Empty" } else { "Non-empty" },
-                        empty_response_retries,
-                        empty_response_retries,
-                        MAX_TASK_MODE_RETRIES,
-                    ), true);
-
-                    if empty_response_retries >= MAX_TASK_MODE_RETRIES {
+                        chat.messages.push(Message {
+                            role: "user".to_string(),
+                            content: vec![ContentPart::Text(format!(
+                                "It is {} kind reminder. Please continue, you are doing great! \
+                                If you are done - please enumerate what exactly was done and confirm \
+                                that you have verified that nothing is left. Thank you!{}",
+                                retries, marker_reminder
+                            ))],
+                            tool_calls: None, tool_call_id: None, name: None, reasoning: None,
+                        });
+                        continue 'retry_loop;
+                    }
+                    TextResponseAction::GiveUp(text) => {
                         print_heart_yellow(&format!("❌ [TASK DEBUG] Max task mode retries ({}) exceeded, giving up", MAX_TASK_MODE_RETRIES), true);
-                        empty_response_retries = 0;
-                        // Return whatever text we have, even without the marker
-                        break 'retry_loop Ok(text_content);
+                        break 'retry_loop Ok(text);
                     }
-
-                    // Inject a synthetic user message asking for continuation/verification
-                    let marker_reminder = chat.task_completion_marker.as_ref()
-                        .map(|m| format!(" Remember to end your final message with: {}", m))
-                        .unwrap_or_default();
-
-                    chat.messages.push(Message {
-                        role: "user".to_string(),
-                        content: vec![ContentPart::Text(format!(
-                            "It is {} kind reminder. Please continue, you are doing great! \
-                            If you are done - please enumerate what exactly was done and confirm \
-                            that you have verified that nothing is left. Thank you!{}",
-                            empty_response_retries, marker_reminder
-                        ))],
-                        tool_calls: None,
-                        tool_call_id: None,
-                        name: None,
-                        reasoning: None,
-                    });
-
-                    continue 'retry_loop;
-                }
-
-                // Non-task mode: if finish_reason is "stop", the agent has naturally finished
-                if finish_reason.as_deref() == Some("stop") {
-                    if chat.should_show_debug(1) {
-                        print_heart_red("🔧 DEBUG: Agent signaled completion via finish_reason: stop", true);
+                    TextResponseAction::Done(text) => {
+                        if chat.should_show_debug(1) {
+                            print_heart_red("🔧 DEBUG: Agent signaled completion via finish_reason: stop", true);
+                        }
+                        return Ok(text);
                     }
-                    return Ok(text_content);
-                }
+                    TextResponseAction::RetryEmpty { retries } => {
+                        empty_response_retries = retries;
+                        print_heart_yellow(&format!("⚠️ [DEBUG] Empty response detected! Retry attempt {}/{}", retries, MAX_EMPTY_RESPONSE_RETRIES), true);
 
-                // Check if we got an empty response (non-task mode)
-                if text_content.trim().is_empty() {
-                    empty_response_retries += 1;
-                    print_heart_yellow(&format!("⚠️ [DEBUG] Empty response detected! Retry attempt {}/{}", empty_response_retries, MAX_EMPTY_RESPONSE_RETRIES), true);
-
-                    if empty_response_retries >= MAX_EMPTY_RESPONSE_RETRIES {
+                        chat.messages.push(Message {
+                            role: "assistant".to_string(),
+                            content: vec![ContentPart::Text("".to_string())],
+                            tool_calls: None, tool_call_id: None, name: None, reasoning: None,
+                        });
+                        chat.messages.push(Message {
+                            role: "user".to_string(),
+                            content: vec![ContentPart::Text("You are doing great, please continue!".to_string())],
+                            tool_calls: None, tool_call_id: None, name: None, reasoning: None,
+                        });
+                        continue 'retry_loop;
+                    }
+                    TextResponseAction::GiveUpEmpty => {
                         print_heart_yellow(&format!("❌ [DEBUG] Max empty response retries ({}) exceeded", MAX_EMPTY_RESPONSE_RETRIES), true);
-                        empty_response_retries = 0;
                         break 'retry_loop Ok(String::new());
                     }
-
-                    // Retry: inject encouragement message
-                    print_heart_yellow(&format!("✅ [DEBUG] Empty response retry {} - injecting encouragement", empty_response_retries), true);
-
-                    // Add a bogus assistant message and encouragement before retry
-                    chat.messages.push(Message {
-                        role: "assistant".to_string(),
-                        content: vec![ContentPart::Text("".to_string())],
-                        tool_calls: None,
-                        tool_call_id: None,
-                        name: None,
-                        reasoning: None,
-                    });
-                    chat.messages.push(Message {
-                        role: "user".to_string(),
-                        content: vec![ContentPart::Text("You are doing great, please continue!".to_string())],
-                        tool_calls: None,
-                        tool_call_id: None,
-                        name: None,
-                        reasoning: None,
-                    });
-
-                    // Continue to retry instead of exiting
-                    continue 'retry_loop;
                 }
-                
-                return Ok(text_content);
             }
         }
 
