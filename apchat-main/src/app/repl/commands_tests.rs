@@ -199,6 +199,9 @@ mod tests {
             mcp_clients: Vec::new(),
             feature_flags: FeatureFlags::default(),
             bogus_ack_msg: None,
+            task_completion_marker: None,
+            cancellation_token: None,
+            ipc_mailbox: None,
         };
 
         let current_model = Arc::new(std::sync::RwLock::new(ModelColor::GrnModel));

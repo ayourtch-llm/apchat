@@ -47,7 +47,7 @@ pub fn should_compact_session(chat: &APChat, model: &ModelColor) -> bool {
 /// 1. If we keep an assistant message with tool_calls, we also keep all corresponding tool results
 /// 2. If we keep a tool result, we also keep the assistant message with the tool_call
 /// 3. We don't orphan any tool calls or tool results
-fn find_cutoff_preserving_tool_pairs(
+pub(crate) fn find_cutoff_preserving_tool_pairs(
     messages: &[Message],
     target_keep_count: usize,
 ) -> usize {
@@ -133,7 +133,7 @@ fn find_cutoff_preserving_tool_pairs(
 /// Ensure proper role alternation after system messages
 /// After system messages, conversation must alternate between user and assistant roles
 /// This function ensures that after system messages, the first non-system message is user
-fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
+pub(crate) fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
     print_heart_red("in ensure_proper_role_alternation", true);
     if messages.len() <= 2 {
         return; // Not enough messages to have an issue
@@ -210,7 +210,7 @@ fn ensure_proper_role_alternation(messages: &mut Vec<Message>) {
 /// and extracts the most recent task state from them. This is useful for preserving
 /// the current todo list state during compaction when the actual tool results
 /// might be trimmed.
-fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
+pub(crate) fn extract_latest_todo_state(messages: &[Message]) -> Option<Vec<Task>> {
     // Scan backwards through messages to find the most recent todo_write tool call
     for i in (0..messages.len()).rev() {
         let message = &messages[i];

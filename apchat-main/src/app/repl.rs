@@ -1223,6 +1223,9 @@ mod repl_compact_tests {
             mcp_clients: Vec::new(),
             feature_flags: FeatureFlags::default(),
             bogus_ack_msg: None,
+            task_completion_marker: None,
+            cancellation_token: None,
+            ipc_mailbox: None,
         }
     }
 
