@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 
 use apchat_models::{Message, ModelColor};
+use apchat_todo::Task;
 
 /// Serializable state for saving/loading conversations
 #[derive(Debug, Serialize, Deserialize)]
@@ -11,6 +12,9 @@ pub struct ChatState {
     pub current_model: ModelColor,
     pub total_tokens_used: usize,
     pub version: String,
+    /// Todo tasks (optional for backward compatibility with old save files)
+    #[serde(default)]
+    pub tasks: Vec<Task>,
 }
 
 impl ChatState {
@@ -19,12 +23,14 @@ impl ChatState {
         messages: Vec<Message>,
         current_model: ModelColor,
         total_tokens_used: usize,
+        tasks: Vec<Task>,
     ) -> Self {
         Self {
             messages,
             current_model,
             total_tokens_used,
             version: env!("CARGO_PKG_VERSION").to_string(),
+            tasks,
         }
     }
 
@@ -37,9 +43,10 @@ impl ChatState {
             .with_context(|| format!("Failed to write state to file: {}", file_path))?;
 
         Ok(format!(
-            "Saved conversation state to {} ({} messages, {} total tokens)",
+            "Saved conversation state to {} ({} messages, {} tasks, {} total tokens)",
             file_path,
             self.messages.len(),
+            self.tasks.len(),
             self.total_tokens_used
         ))
     }
@@ -61,23 +68,26 @@ pub fn save_state(
     messages: &[Message],
     current_model: &ModelColor,
     total_tokens_used: usize,
+    tasks: &[Task],
     file_path: &str,
 ) -> Result<String> {
     let state = ChatState::new(
         messages.to_vec(),
         current_model.clone(),
         total_tokens_used,
+        tasks.to_vec(),
     );
     state.save(file_path)
 }
 
 /// Load conversation state from a file (standalone function)
-pub fn load_state(file_path: &str) -> Result<(Vec<Message>, ModelColor, usize, String)> {
+pub fn load_state(file_path: &str) -> Result<(Vec<Message>, ModelColor, usize, String, Vec<Task>)> {
     let state = ChatState::load(file_path)?;
     Ok((
         state.messages,
         state.current_model,
         state.total_tokens_used,
         state.version,
+        state.tasks,
     ))
 }

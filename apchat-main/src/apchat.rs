@@ -454,7 +454,8 @@ impl APChat {
     }
 
     pub fn save_state(&self, file_path: &str) -> Result<String> {
-        save_state(&self.messages, &self.current_model, self.total_tokens_used, file_path)
+        let tasks = self.todo_manager.get_tasks();
+        save_state(&self.messages, &self.current_model, self.total_tokens_used, &tasks, file_path)
     }
 
     /// Save conversation history automatically to logs directory
@@ -464,21 +465,34 @@ impl APChat {
         let file_name = format!("history-{}.json", self.process_id);
         let file_path = history_dir.join(file_name);
 
-        save_state(&self.messages, &self.current_model, self.total_tokens_used, file_path.to_str().unwrap())
+        let tasks = self.todo_manager.get_tasks();
+        save_state(&self.messages, &self.current_model, self.total_tokens_used, &tasks, file_path.to_str().unwrap())
     }
 
     pub fn load_state(&mut self, file_path: &str) -> Result<String> {
-        let (messages, current_model, total_tokens_used, version) = load_state(file_path)?;
+        let (messages, current_model, total_tokens_used, version, tasks) = load_state(file_path)?;
 
         // Restore state
         self.messages = messages;
         self.current_model = current_model;
         self.total_tokens_used = total_tokens_used;
 
+        // Restore todo tasks (gracefully — don't crash if it fails)
+        if !tasks.is_empty() {
+            self.todo_manager.set_tasks(tasks.clone());
+        }
+
+        let task_info = if !tasks.is_empty() {
+            format!(", {} tasks", tasks.len())
+        } else {
+            String::new()
+        };
+
         Ok(format!(
-            "Loaded conversation state from {} ({} messages, {} total tokens, version: {})",
+            "Loaded conversation state from {} ({} messages{}, {} total tokens, version: {})",
             file_path,
             self.messages.len(),
+            task_info,
             self.total_tokens_used,
             version
         ))

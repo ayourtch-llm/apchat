@@ -222,6 +222,7 @@ impl SessionManager {
                 apchat.messages.clone(),
                 apchat.current_model.clone(),
                 apchat.total_tokens_used,
+                apchat.todo_manager.get_tasks(),
             );
 
             let persistent_session = PersistentSession {
