@@ -972,6 +972,15 @@ async fn process_llm_response(
                         print_heart_yellow(&format!("🔢 [DEBUG] tool_call_iterations = {}", tool_call_iterations), true);
                     }
 
+                    // Early compaction: remove error pairs and summarize large outputs
+                    if chat.feature_flags.context_compact
+                        && crate::chat::early_compaction::should_run(*tool_call_iterations)
+                    {
+                        if let Err(e) = crate::chat::early_compaction::run_early_compaction(chat, *tool_call_iterations).await {
+                            print_heart_yellow(&format!("{} Early compaction failed: {}", "⚠️".yellow(), e), true);
+                        }
+                    }
+
                     if *tool_call_iterations > MAX_TOOL_ITERATIONS {
                         if chat.get_inference_debug() {
                             print_heart_yellow(&format!("⚠️ [DEBUG] MAX_TOOL_ITERATIONS exceeded: {} > {}", tool_call_iterations, MAX_TOOL_ITERATIONS), true);
