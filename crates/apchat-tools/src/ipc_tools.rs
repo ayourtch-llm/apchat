@@ -2,7 +2,7 @@ use apchat_toolcore::{param, Tool, ToolParameters, ToolResult, ParameterDefiniti
 use apchat_toolcore::tool_context::ToolContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use apchat_mspc::ipc::{get_ipc_msg_dir, get_socket_path};
+use apchat_mspc::ipc::{get_ipc_msg_dir, get_socket_path, read_agent_meta, set_agent_title};
 
 /// Tool to discover all running apchat agents.
 pub struct GetAgentTreeTool;
@@ -44,11 +44,16 @@ impl Tool for GetAgentTreeTool {
 
                         let cmdline = get_process_cmdline(pid);
                         let task = extract_task_from_cmdline(&cmdline);
+                        let meta = read_agent_meta(pid);
+                        let work_dir = meta.as_ref().map(|m| m.work_dir.as_str()).unwrap_or("");
+                        let title = meta.as_ref().map(|m| m.title.as_str()).unwrap_or("");
 
                         agents.push(serde_json::json!({
                             "pid": pid,
                             "cmdline": cmdline,
                             "task": task,
+                            "work_dir": work_dir,
+                            "title": title,
                             "state": if pid == our_pid { "active (self)" } else { "active" },
                             "is_self": pid == our_pid,
                         }));
@@ -168,4 +173,35 @@ fn extract_task_from_cmdline(cmdline: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Tool to set the current agent's title (shown in /tree and get_agent_tree).
+pub struct SetMyAgentTitleTool;
+
+#[async_trait]
+impl Tool for SetMyAgentTitleTool {
+    fn name(&self) -> &str { "set_my_agent_title" }
+
+    fn description(&self) -> &str {
+        "Set a human-readable title for this agent, visible in /tree and get_agent_tree. \
+         Use this to describe what you're currently working on."
+    }
+
+    fn parameters(&self) -> HashMap<String, ParameterDefinition> {
+        HashMap::from([
+            param!("title", "string", "Short description of what this agent is doing", required),
+        ])
+    }
+
+    async fn execute(&self, params: ToolParameters, _context: &ToolContext) -> ToolResult {
+        let title = match params.get_required::<String>("title") {
+            Ok(t) => t,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        let pid = std::process::id();
+        set_agent_title(pid, &title);
+
+        ToolResult::success(format!("Agent title set to: {}", title))
+    }
 }

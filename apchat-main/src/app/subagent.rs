@@ -87,7 +87,7 @@ pub async fn run_subagent_mode(
     // Start IPC socket listener for inter-agent messaging
     let ipc_mailbox = apchat_mspc::ipc::new_shared_mailbox();
     subagent.ipc_mailbox = Some(ipc_mailbox.clone());
-    let _socket_guard = crate::ipc::start_socket_listener(ipc_mailbox);
+    let _socket_guard = crate::ipc::start_socket_listener(ipc_mailbox, &work_dir);
 
     // Generate a random completion token for this task session using process id + timestamp
     let completion_token = std::time::SystemTime::now()

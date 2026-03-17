@@ -6,13 +6,14 @@
 //! Senders bind their own socket so `recv_from` reveals the sender PID.
 
 use std::path::PathBuf;
-use apchat_mspc::ipc::{SharedMailbox, IpcMessage, get_ipc_msg_dir, get_socket_path};
+use apchat_mspc::ipc::{SharedMailbox, IpcMessage, AgentMeta, get_ipc_msg_dir, get_socket_path, get_meta_path, write_agent_meta};
 use apchat_vty::print_heart_yellow;
 use tokio::task::JoinHandle;
 
-/// Guard that removes the socket file on drop.
+/// Guard that removes the socket and metadata files on drop.
 pub struct SocketGuard {
     path: PathBuf,
+    meta_path: PathBuf,
     reader_handle: JoinHandle<()>,
 }
 
@@ -20,15 +21,17 @@ impl Drop for SocketGuard {
     fn drop(&mut self) {
         self.reader_handle.abort();
         let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(&self.meta_path);
     }
 }
 
 /// Start the datagram socket listener for this process.
-/// Returns a guard that cleans up the socket on drop.
-pub fn start_socket_listener(mailbox: SharedMailbox) -> Option<SocketGuard> {
+/// Returns a guard that cleans up the socket and metadata on drop.
+pub fn start_socket_listener(mailbox: SharedMailbox, work_dir: &std::path::Path) -> Option<SocketGuard> {
     let pid = std::process::id();
     let msg_dir = get_ipc_msg_dir();
     let sock_path = get_socket_path(pid);
+    let meta_path = get_meta_path(pid);
 
     // Create the message directory
     if let Err(e) = std::fs::create_dir_all(&msg_dir) {
@@ -64,10 +67,18 @@ pub fn start_socket_listener(mailbox: SharedMailbox) -> Option<SocketGuard> {
         socket_reader_loop(async_socket, mailbox).await;
     });
 
+    // Write agent metadata
+    write_agent_meta(&AgentMeta {
+        pid,
+        work_dir: work_dir.to_string_lossy().to_string(),
+        title: String::new(),
+    });
+
     print_heart_yellow(&format!("✓ IPC socket bound at {:?}", sock_path_clone), true);
 
     Some(SocketGuard {
         path: sock_path,
+        meta_path,
         reader_handle: handle,
     })
 }

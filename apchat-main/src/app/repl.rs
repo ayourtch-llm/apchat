@@ -210,7 +210,7 @@ pub async fn run_repl_mode(
     // ── IPC socket listener ────────────────────────────────────────────────
     let ipc_mailbox = apchat_mspc::ipc::new_shared_mailbox();
     chat.ipc_mailbox = Some(ipc_mailbox.clone());
-    let _socket_guard = crate::ipc::start_socket_listener(ipc_mailbox.clone());
+    let _socket_guard = crate::ipc::start_socket_listener(ipc_mailbox.clone(), &chat.work_dir);
 
     // ── Scheduled instruction poller ───────────────────────────────────────
     // Create and start the scheduled instruction poller only if enabled

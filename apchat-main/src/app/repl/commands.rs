@@ -586,6 +586,9 @@ fn print_agent_node(
 
     let cmdline = get_cmdline_short(pid);
     let task = extract_task(&cmdline);
+    let meta = apchat_mspc::ipc::read_agent_meta(pid);
+    let work_dir = meta.as_ref().map(|m| m.work_dir.as_str()).unwrap_or("");
+    let title = meta.as_ref().and_then(|m| if m.title.is_empty() { None } else { Some(m.title.as_str()) });
 
     let pid_str = if pid == our_pid {
         format!("{}", format!("PID {} (self)", pid).bright_green().bold())
@@ -593,13 +596,17 @@ fn print_agent_node(
         format!("{}", format!("PID {}", pid).bright_yellow())
     };
 
-    let task_str = match task {
-        Some(t) => format!(" task={}", t.bright_cyan()),
-        None => if cmdline.contains("-i") || cmdline.contains("--interactive") {
-            format!(" {}", "[interactive]".bright_green())
-        } else {
-            String::new()
-        },
+    let title_str = if let Some(t) = title {
+        format!(" \"{}\"", t.bright_white().bold())
+    } else {
+        match task {
+            Some(t) => format!(" task={}", t.bright_cyan()),
+            None => if cmdline.contains("-i") || cmdline.contains("--interactive") {
+                format!(" {}", "[interactive]".bright_green())
+            } else {
+                String::new()
+            },
+        }
     };
 
     let state_str = if pid == our_pid {
@@ -612,7 +619,13 @@ fn print_agent_node(
         format!(" [{}]", "active".bright_black())
     };
 
-    print_heart_red(&format!("{}{}{}{}{}", prefix, connector, pid_str, task_str, state_str), true);
+    let dir_str = if !work_dir.is_empty() {
+        format!(" {}", work_dir.bright_black())
+    } else {
+        String::new()
+    };
+
+    print_heart_red(&format!("{}{}{}{}{}{}", prefix, connector, pid_str, title_str, state_str, dir_str), true);
 
     let empty = Vec::new();
     let children = children_map.get(&pid).unwrap_or(&empty);
