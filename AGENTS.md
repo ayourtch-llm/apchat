@@ -6,7 +6,7 @@
 **File Operations**: Use specific patterns like `"src/*.rs"` instead of `"*.rs"` to locate files in the src directory
 **Repeat operations**: If your history already has a file read, do not read it again - as this will overload the history. Likewise, if you are doing an edit - do not attempt to do it multiple times, if something fails, ask the user to verify.
 
-**Tools Documentation**: For best practices on using tools efficiently (especially the `read_file` tool), see [docs/tools/README.md](docs/tools/README.md) for an overview, or [docs/tools/QUICK_REFERENCE.md](docs/tools/QUICK_REFERENCE.md) for immediate guidance.
+**Tools Documentation**: For best practices on using tools efficiently (especially the `read_file` tool), see [docs/tools/README.md](docs/tools/README.md).
 
 ## Useful shortcuts
 
@@ -172,7 +172,7 @@ Skills are proven workflows that agents MUST follow when applicable. This is non
 - `testing-skills-with-subagents` - Skill testing
 - `using-git-worktrees` - Git isolation
 
-**See [docs/agents/REFERENCE.md](docs/agents/REFERENCE.md) for complete skills list (38 total)**
+**See [docs/agents/REFERENCE.md](docs/agents/REFERENCE.md) for complete reference (skills, CLI options, build commands)**
 
 ### Agent Configuration System
 
@@ -303,8 +303,8 @@ Agents are **not hardcoded** - they're defined by JSON configs in `agents/config
 
 ## Quick Reference Links
 
-- **Build/Test Commands**: See [docs/agents/QUICKSTART.md](docs/agents/QUICKSTART.md)
-- **Configuration & CLI Options**: See [docs/agents/CONFIG.md](docs/agents/CONFIG.md)
-- **Complete Skills List**: See [docs/agents/REFERENCE.md](docs/agents/REFERENCE.md)
-- **Tool Documentation**: See [docs/tools/README.md](docs/tools/README.md)
-- **Architecture Details**: See [docs/project/CLAUDE.md](docs/project/CLAUDE.md)
+- **Complete Reference** (build, CLI, skills, agents, tools): See [docs/agents/REFERENCE.md](docs/agents/REFERENCE.md)
+- **Tool Usage Best Practices**: See [docs/tools/README.md](docs/tools/README.md)
+- **Adding New Tools**: See [docs/dev/how_to_new_tool.md](docs/dev/how_to_new_tool.md)
+- **Customizing Agents & Skills**: See [docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md](docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md)
+- **Architecture**: See [docs/architecture/](docs/architecture/)

@@ -308,7 +308,9 @@ Focus areas with test coverage:
 
 ## Additional Documentation
 
-**For comprehensive architecture details**: See `docs/project/CLAUDE.md`
-**Tool documentation**: See `docs/tools/` directory
+**All docs are traceable from** `AGENTS.md` — see its Quick Reference Links section.
+**Complete reference** (build, CLI, skills, agents): See `docs/agents/REFERENCE.md`
+**Tool usage guides**: See `docs/tools/` directory
 **Development guides**: See `docs/dev/` directory
-**Architecture decisions**: See `docs/architecture/` directory
+**Architecture**: See `docs/architecture/` directory
+**Archived/historical docs**: See `docs/archived/` directory

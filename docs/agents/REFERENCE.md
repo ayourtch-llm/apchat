@@ -288,73 +288,126 @@ apchat/
 - `store_memory`, `query_memory`, `update_memory`, `delete_memory`
 - `list_memories`
 
+## Build & Test Commands
+
+```bash
+# Build all workspace members
+cargo build
+
+# Build without warnings
+RUSTFLAGS=-Awarnings cargo build
+
+# Release build
+cargo build --release
+
+# Build without embeddings feature (faster)
+cargo build --no-default-features
+
+# Run all tests
+cargo test
+
+# Run tests for a specific crate
+cargo test -p apchat-tools
+cargo test -p apchat-agents
+cargo test -p apchat-llm-api
+
+# Run a specific test
+cargo test -p apchat-tools llm_oneshot
+cargo test -p apchat-main test_mspc_repl
+
+# Format and lint
+cargo fmt
+cargo clippy
+```
+
+## CLI Options
+
+### Model Configuration
+```bash
+--api-url-blu-model <URL>        # Custom API URL for blu_model
+--api-url-grn-model <URL>        # Custom API URL for grn_model
+--api-url-red-model <URL>        # Custom API URL for red_model
+--model-blu-model <NAME>          # Override model name for blu_model
+--model-grn-model <NAME>          # Override model name for grn_model
+--model-red-model <NAME>          # Override model name for red_model
+--model <NAME>                    # Base model for all models
+--llama-cpp-url <URL>             # Quick llama.cpp setup for all models
+--blu-backend <BACKEND>           # Backend (groq, anthropic, llama, openai)
+--grn-backend <BACKEND>           # Backend for grn_model
+--red-backend <BACKEND>           # Backend for red_model
+```
+
+### Mode Selection
+```bash
+--agents                          # Enable multi-agent system
+--task "Your task"                # One-shot task mode
+--web                             # Web server mode
+--interactive / -i                # Force interactive REPL
+```
+
+### Behavior
+```bash
+--stream                          # Streaming responses (default)
+--auto-confirm                    # Skip confirmations
+--early-superpowers               # Load all skills at startup
+--policy-file <PATH>              # Custom policy file
+--learn-policies                  # Learn from user decisions
+```
+
+### Web Server
+```bash
+--web                             # Enable web server
+--web-port <PORT>                 # Web server port (default: 8080)
+--web-bind <ADDRESS>              # Bind address (default: 127.0.0.1)
+--web-attachable                  # Allow TUI session attachment from web
+--sessions-dir <PATH>             # Persistent web session storage
+```
+
+### Debug
+```bash
+--verbose / -v                    # Verbose output
+--debug <LEVEL>                   # Debug level 0-5
+--pretty                          # Pretty-print JSON
+```
+
+### Environment Variables
+```bash
+export GROQ_API_KEY=your_groq_api_key
+export ANTHROPIC_AUTH_TOKEN_BLU=your_claude_key_for_blu_model
+export ANTHROPIC_AUTH_TOKEN_GRN=your_claude_key_for_grn_model
+export ANTHROPIC_AUTH_TOKEN_RED=your_claude_key_for_red_model
+export OPENAI_API_KEY=your_openai_api_key
+```
+
+## Code Style and Conventions
+
+- Use standard `cargo fmt` formatting
+- Clippy lints: `cargo clippy`
+- Async/await throughout (tokio runtime)
+- `anyhow::Error` for application errors, `thiserror` for library errors
+- Workspace dependencies managed in root `Cargo.toml`
+- `#[tokio::test]` for async tests
+
 ## Git Operations Best Practices
 
 ### Safe Rebasing
 ```bash
-# Always use GIT_EDITOR=true to avoid interactive prompts
 GIT_EDITOR=true git rebase --continue
 GIT_EDITOR=true git cherry-pick --continue
-```
-
-### Force Push Safety
-```bash
-# Always try normal push first
-git push origin main
-
-# Only use force-with-lease after user confirmation
-git push origin main --force-with-lease
 ```
 
 ### Commit Guidelines
 - Verify `git status` before committing
 - Group logically related files together
-- Check file sizes with `git add --dry-run`
-- Use environment variables for sensitive config
+- Always try normal push first; only `--force-with-lease` after user confirmation
 
-## Common Development Workflows
+## Adding New Components
 
-### Adding a New Feature
-1. Use `test-driven-development` skill
-2. Write failing test first
-3. Implement minimal code to pass
-4. Refactor with `refactoring-for-clarity`
-5. Run `cargo test` and `cargo clippy`
-6. Request code review via `code_reviewer` agent
+### Adding a New Tool
+See [docs/dev/how_to_new_tool.md](../dev/how_to_new_tool.md) for detailed guide.
 
-### Debugging an Issue
-1. Use `systematic-debugging` skill
-2. Complete all 4 phases: root cause, pattern analysis, hypothesis testing, implementation
-3. Use `root-cause-tracing` for deep errors
-4. Verify fix with `verification-before-completion`
+### Adding a New Agent
+See [docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md](../dev/CUSTOMIZING_AGENTS_AND_SKILLS.md).
 
-### Code Review Process
-1. Complete implementation
-2. Use `requesting-code-review` skill
-3. Dispatch `code_reviewer` agent
-4. Receive feedback
-5. Use `receiving-code-review` skill
-6. Implement improvements
-7. Verify with `verification-before-completion`
-
-## Documentation Structure
-
-### Core Documentation
-- `AGENTS.md` - Agent system overview (core)
-- `docs/project/CLAUDE.md` - Comprehensive architecture
-- `docs/architecture/` - Architecture decision records
-
-### Tool Documentation
-- `docs/tools/README.md` - Tool overview
-- `docs/tools/QUICK_REFERENCE.md` - Quick reference
-- `docs/tools/curly_glance_usage.md` - Curly glance tool guide
-
-### Development Guides
-- `docs/dev/how_to_new_tool.md` - Adding tools
-- `docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md` - Customization guide
-
-### Agent Documentation
-- `AGENTS.md` - Agent system overview (core)
-- `docs/agents/QUICKSTART.md` - Build/test commands
-- `docs/agents/CONFIG.md` - Configuration reference
-- `docs/agents/REFERENCE.md` - Complete skills list
+### Adding a New Skill
+See [docs/dev/CUSTOMIZING_AGENTS_AND_SKILLS.md](../dev/CUSTOMIZING_AGENTS_AND_SKILLS.md).
