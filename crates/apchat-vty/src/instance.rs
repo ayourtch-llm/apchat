@@ -353,10 +353,30 @@ mod tests {
     use serial_test::serial;
     use std::time::Duration;
 
+    /// Ensure stdin is backed by a PTY so `tcgetattr(STDIN_FILENO)` succeeds.
+    fn ensure_pty_stdin() {
+        use std::sync::Once;
+        static PTY_INIT: Once = Once::new();
+        PTY_INIT.call_once(|| {
+            unsafe {
+                let mut master: libc::c_int = 0;
+                let mut slave: libc::c_int = 0;
+                let ret = libc::openpty(
+                    &mut master, &mut slave,
+                    std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(),
+                );
+                assert_eq!(ret, 0, "openpty() failed");
+                libc::dup2(slave, libc::STDIN_FILENO);
+                libc::close(slave);
+                // master kept alive as leaked fd — fine for tests
+            }
+        });
+    }
+
     #[test]
     #[serial]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
     fn test_singleton_instance() {
+        ensure_pty_stdin();
         // Clear history before test to ensure clean state
         let _ = ReadlineInstance::clear_history_for_tests_only();
 
@@ -387,8 +407,8 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
     fn test_instance_initialization() {
+        ensure_pty_stdin();
         // Get the instance
         let _guard = ReadlineInstance::get().unwrap();
 
@@ -398,8 +418,8 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
     fn test_thread_safety() {
+        ensure_pty_stdin();
         // Clear history before test to ensure clean state
         let _ = ReadlineInstance::clear_history_for_tests_only();
 
@@ -418,8 +438,8 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
     fn test_history_addition() {
+        ensure_pty_stdin();
         // Clear history before test to ensure clean state
         let _ = ReadlineInstance::clear_history_for_tests_only();
 
@@ -435,8 +455,8 @@ mod tests {
 
     #[test]
     #[serial]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
     fn test_save_history() {
+        ensure_pty_stdin();
         // Add some history entries
         ReadlineInstance::add_history("test command 1").unwrap();
         ReadlineInstance::add_history("test command 2").unwrap();
@@ -453,8 +473,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Requires TTY environment - Readline::new() fails without terminal"]
+    #[serial]
     fn test_cleanup() {
+        ensure_pty_stdin();
         // Add some history entries
         ReadlineInstance::add_history("cleanup test 1").unwrap();
         ReadlineInstance::add_history("cleanup test 2").unwrap();
