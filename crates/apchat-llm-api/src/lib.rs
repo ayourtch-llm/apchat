@@ -78,6 +78,7 @@ pub use config::{
     normalize_api_url,
     get_default_url_for_backend,
     get_default_model_for_backend,
+    parse_model_attings,
 };
 
 // Re-export BackendType from apchat-models to maintain API compatibility
