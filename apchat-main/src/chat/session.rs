@@ -3,9 +3,95 @@ use colored::Colorize;
 
 use crate::APChat;
 use apchat_vty::{print_heart_red, print_heart_yellow};
-use apchat_models::{ModelColor, Message};
+use apchat_models::{ModelColor, Message, Usage};
 use apchat_models::types::ContentPart;
 use apchat_logging::safe_truncate;
+
+/// Return type for a single LLM API call.
+type LlmCallResult = (Message, Option<Usage>, ModelColor, Option<String>, crate::api::StreamingMetrics);
+
+/// Make a single LLM API call, choosing the appropriate backend (streaming/non-streaming,
+/// Anthropic/OpenAI-compatible) based on the APChat configuration.
+///
+/// This unifies the 3-way dispatch that was previously duplicated between the
+/// cancellation-token and no-cancellation-token code paths.
+async fn make_llm_call(chat: &mut APChat) -> Result<LlmCallResult> {
+    if chat.stream_responses {
+        let should_use_anthropic =
+            (chat.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
+            (chat.client_config.get_api_url(ModelColor::GrnModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
+
+        if should_use_anthropic {
+            if chat.should_show_debug(1) {
+                print_heart_red("🔧 DEBUG: Using Anthropic-compatible streaming with format translation", true);
+            }
+            crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await
+        } else {
+            crate::api::call_api_streaming(chat, &chat.messages).await
+        }
+    } else {
+        let (response, usage, current_model, finish_reason) = crate::api::call_api(chat, &chat.messages).await?;
+        let metrics = crate::api::StreamingMetrics {
+            start_time: std::time::Instant::now(),
+            total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
+            completion_tokens: usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0),
+            prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
+            duration: Some(std::time::Duration::from_millis(100)),
+        };
+        Ok((response, usage, current_model, finish_reason, metrics))
+    }
+}
+
+/// Check if the tool call signature matches a read-only pattern (less likely to be a problematic loop).
+fn is_read_only_tool_calls(tool_calls: &[apchat_models::ToolCall]) -> bool {
+    tool_calls.iter().all(|tc|
+        tc.function.name == "read_file" ||
+        tc.function.name == "list_files" ||
+        tc.function.name == "search_files" ||
+        tc.function.name == "grep_search"
+    )
+}
+
+/// Detect if tool calls are stuck in a loop by checking for consecutive and scattered repetitions.
+///
+/// Returns Some(pattern_description) if a loop is detected, None otherwise.
+fn detect_tool_loop(
+    recent_tool_calls: &[(String, String)],
+    tool_signature: &str,
+    is_read_only: bool,
+) -> Option<String> {
+    const CONSECUTIVE_REPEAT_THRESHOLD: usize = 25;
+    const SCATTERED_REPEAT_THRESHOLD: usize = 40;
+
+    let consecutive_count = recent_tool_calls
+        .iter()
+        .rev()
+        .take_while(|(sig, _)| sig == tool_signature)
+        .count();
+
+    let total_repetition_count = recent_tool_calls
+        .iter()
+        .filter(|(sig, _)| sig == tool_signature)
+        .count();
+
+    let is_likely_stuck = if is_read_only {
+        consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD + 2 ||
+        total_repetition_count >= SCATTERED_REPEAT_THRESHOLD + 2
+    } else {
+        consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD ||
+        total_repetition_count >= SCATTERED_REPEAT_THRESHOLD
+    };
+
+    if is_likely_stuck {
+        if consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD {
+            Some(format!("{} consecutive identical calls", consecutive_count))
+        } else {
+            Some(format!("{} identical calls in last {} operations", total_repetition_count, recent_tool_calls.len()))
+        }
+    } else {
+        None
+    }
+}
 
 /// Prepare for an LLM call by adding the user message and summarizing history.
 ///
@@ -64,8 +150,8 @@ pub async fn chat(
         const MAX_TOOL_ITERATIONS: usize = 250; // Increased limit with intelligent evaluation
         const LOOP_DETECTION_WINDOW: usize = 8; // Check last 8 tool calls
         const PROGRESS_EVAL_INTERVAL: u32 = 50; // Evaluate progress every 50 tool calls
-        const CONSECUTIVE_REPEAT_THRESHOLD: usize = 25;
-        const SCATTERED_REPEAT_THRESHOLD: usize = 40;
+        // Note: CONSECUTIVE_REPEAT_THRESHOLD and SCATTERED_REPEAT_THRESHOLD
+        // are defined in detect_tool_loop()
 
         // Initialize progress evaluator for all operations
         let blu_model_url = crate::config::get_api_url(&chat.client_config, &ModelColor::BluModel);
@@ -132,75 +218,16 @@ pub async fn chat(
                 }
             }
 
-            // Race API call against cancellation token
+            // Make the LLM API call, with optional cancellation
             let (response, usage, current_model, finish_reason, streaming_metrics) = if let Some(ref token) = cancellation_token {
                 tokio::select! {
-                    result = async {
-                        if chat.stream_responses {
-                            // Check if this should use the new streaming system
-                            // The new system works with all model types now
-                            let should_use_anthropic =
-                                (chat.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-                                (chat.client_config.get_api_url(ModelColor::GrnModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
-
-                            if should_use_anthropic {
-                                // Use the new streaming implementation for Anthropic-compatible APIs
-                                if chat.should_show_debug(1) {
-                                    print_heart_red("🔧 DEBUG: Using Anthropic-compatible streaming with format translation", true);
-                                }
-                                crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await
-                            } else {
-                                // Use old streaming for OpenAI-compatible APIs
-                                crate::api::call_api_streaming(chat, &chat.messages).await
-                            }
-                        } else {
-                            // For non-streaming calls, create dummy metrics
-                            let (response, usage, current_model, finish_reason) = crate::api::call_api(chat, &chat.messages).await?;
-                            let metrics = crate::api::StreamingMetrics {
-                                start_time: std::time::Instant::now(),
-                                total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
-                                completion_tokens: usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0),
-                                prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
-                                duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
-                            };
-                            Ok((response, usage, current_model, finish_reason, metrics))
-                        }
-                    } => result?,
+                    result = make_llm_call(chat) => result?,
                     _ = token.cancelled() => {
                         return Err(anyhow::anyhow!("LLM call interrupted by user"));
                     }
                 }
             } else {
-                // No cancellation token, call normally
-                if chat.stream_responses {
-                    // Check if this should use the new streaming system
-                    // The new system works with all model types now
-                    let should_use_anthropic =
-                        (chat.client_config.get_api_url(ModelColor::BluModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false)) ||
-                        (chat.client_config.get_api_url(ModelColor::GrnModel).as_ref().map(|u| u.contains("anthropic")).unwrap_or(false));
-
-                    if should_use_anthropic {
-                        // Use the new streaming implementation for Anthropic-compatible APIs
-                        if chat.should_show_debug(1) {
-                            print_heart_red("🔧 DEBUG: Using Anthropic-compatible streaming with format translation", true);
-                        }
-                        crate::api::call_api_streaming_with_llm_client(chat, &chat.messages, &chat.current_model).await?
-                    } else {
-                        // Use old streaming for OpenAI-compatible APIs
-                        crate::api::call_api_streaming(chat, &chat.messages).await?
-                    }
-                } else {
-                    // For non-streaming calls, create dummy metrics
-                    let (response, usage, current_model, finish_reason) = crate::api::call_api(chat, &chat.messages).await?;
-                    let metrics = crate::api::StreamingMetrics {
-                        start_time: std::time::Instant::now(),
-                        total_tokens: usage.as_ref().map(|u| u.total_tokens).unwrap_or(0),
-                        completion_tokens: usage.as_ref().map(|u| u.completion_tokens).unwrap_or(0),
-                        prompt_tokens: usage.as_ref().map(|u| Some(u.prompt_tokens)).unwrap_or(None),
-                        duration: Some(std::time::Duration::from_millis(100)), // Dummy duration
-                    };
-                    (response, usage, current_model, finish_reason, metrics)
-                }
+                make_llm_call(chat).await?
             };
 
             if chat.current_model != current_model {
@@ -284,59 +311,19 @@ pub async fn chat(
                     }
                 }
 
-                // Enhanced loop detection with lower false positive rate
+                // Loop detection: build signature and check for repetition
                 let tool_signature = tool_calls.iter()
                     .map(|tc| format!("{}:{}", tc.function.name, tc.function.arguments))
                     .collect::<Vec<_>>()
                     .join("|");
 
-                // We'll store the result signature later after execution
-                // For now, just track the call signature
                 recent_tool_calls.push((tool_signature.clone(), String::new()));
-
-                // Keep only recent tool calls
                 if recent_tool_calls.len() > LOOP_DETECTION_WINDOW {
                     recent_tool_calls.remove(0);
                 }
 
-                // Check for consecutive identical calls (stronger signal of being stuck)
-                let consecutive_count = recent_tool_calls.iter()
-                    .rev()
-                    .take_while(|(sig, _)| sig == &tool_signature)
-                    .count();
-
-                // Check for scattered repetitions in the window
-                let total_repetition_count = recent_tool_calls.iter()
-                    .filter(|(sig, _)| sig == &tool_signature)
-                    .count();
-
-                // Detect if tool is read-only (less likely to be problematic loop)
-                let is_read_only = tool_calls.iter().all(|tc|
-                    tc.function.name == "read_file" ||
-                    
-                    tc.function.name == "list_files" ||
-                    tc.function.name == "search_files" ||
-                    tc.function.name == "grep_search"
-                );
-
-                // More strict threshold for consecutive repeats
-                let is_likely_stuck = if is_read_only {
-                    // Read-only tools can repeat more before we worry
-                    consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD + 2 ||
-                    total_repetition_count >= SCATTERED_REPEAT_THRESHOLD + 2
-                } else {
-                    // Write operations are more concerning
-                    consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD ||
-                    total_repetition_count >= SCATTERED_REPEAT_THRESHOLD
-                };
-
-                if is_likely_stuck {
-                    let pattern_type = if consecutive_count >= CONSECUTIVE_REPEAT_THRESHOLD {
-                        format!("{} consecutive identical calls", consecutive_count)
-                    } else {
-                        format!("{} identical calls in last {} operations", total_repetition_count, LOOP_DETECTION_WINDOW)
-                    };
-
+                let is_read_only = is_read_only_tool_calls(tool_calls);
+                if let Some(pattern_type) = detect_tool_loop(&recent_tool_calls, &tool_signature, is_read_only) {
                     print_heart_yellow(&format!(
                         "{} Detected repeated tool call pattern ({}). Likely stuck in a loop.",
                         "⚠️".red().bold(),
