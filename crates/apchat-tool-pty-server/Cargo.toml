@@ -10,7 +10,7 @@ name = "apchat_tool_pty_server"
 path = "src/lib.rs"
 
 [[bin]]
-name = "apchat-mcp-pty-server"
+name = "apchat-tool-pty-server"
 path = "src/main.rs"
 
 [dependencies]
