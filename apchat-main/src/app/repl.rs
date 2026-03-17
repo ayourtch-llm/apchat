@@ -227,6 +227,9 @@ pub async fn run_repl_mode(
 
     let mut llm_running = false;
     let mut request_guard = None;
+    // Error retry configuration
+    let mut error_retry_count: u32 = 0;
+    const MAX_ERROR_RETRIES: u32 = 3;
     // Tool loop configuration
     let mut tool_call_iterations = 0;
     let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
@@ -314,7 +317,8 @@ pub async fn run_repl_mode(
                 match outcome {
                     InferenceOutcome::Response(response) => {
                         print_heart_yellow(&format!("✅ [DEBUG] InferenceOutcome::Response - response length: {}", response.len()), true);
-                        
+                        error_retry_count = 0; // Reset error retries on successful response
+
                         // Check for empty response and apply retry logic
                         if response.trim().is_empty() {
                             empty_response_retries += 1;
@@ -409,24 +413,69 @@ pub async fn run_repl_mode(
                         }
                     }
 
-                    InferenceOutcome::Interrupted | InferenceOutcome::Error => {
-                        print_heart_yellow(&format!("🚫 [DEBUG] InferenceOutcome::Interrupted or Error - continuing outer loop"), true);
-                        // Clear cancellation token on interrupt/error
+                    InferenceOutcome::Interrupted => {
+                        print_heart_yellow(&format!("🚫 [DEBUG] InferenceOutcome::Interrupted - continuing outer loop"), true);
+                        // Clear cancellation token on interrupt
                         {
                             let mut guard = current_token.lock().unwrap();
                             *guard = None;
                         }
-                        // Reset empty response retries on error/interrupt
                         empty_response_retries = 0;
-                        // Error/interrupted messages were already pushed by run_tool_loop
+                        error_retry_count = 0;
+                        continue 'outer;
+                    }
+
+                    InferenceOutcome::Error => {
+                        error_retry_count += 1;
+                        if error_retry_count <= MAX_ERROR_RETRIES {
+                            let wait_secs = 2u64.pow(error_retry_count);
+                            print_heart_yellow(&format!(
+                                "⏳ LLM API error, retrying in {} seconds (attempt {}/{})...",
+                                wait_secs, error_retry_count, MAX_ERROR_RETRIES
+                            ), true);
+                            tokio::time::sleep(tokio::time::Duration::from_secs(wait_secs)).await;
+
+                            // Retry: remove the error message that was pushed, and re-send
+                            // Pop the "[Error: ...]" assistant message that was added
+                            if let Some(last) = chat.messages.last() {
+                                if last.text_only().starts_with("[Error:") {
+                                    chat.messages.pop();
+                                }
+                            }
+
+                            let cancel_token = tokio_util::sync::CancellationToken::new();
+                            {
+                                let mut guard = current_token.lock().unwrap();
+                                *guard = Some(cancel_token.clone());
+                            }
+                            chat.cancellation_token = Some(cancel_token.clone());
+                            if prep_and_send_request(&mut chat, &mut llm_channels, &cancel_token, None, None, webex_sink.as_ref()).await {
+                                llm_running = true;
+                                request_guard = Some(RequestGuard::new());
+                            }
+                            continue 'outer;
+                        }
+
+                        print_heart_yellow(&format!(
+                            "❌ LLM API error after {} retries, giving up. Type your message to try again.",
+                            MAX_ERROR_RETRIES
+                        ), true);
+                        // Clear state
+                        {
+                            let mut guard = current_token.lock().unwrap();
+                            *guard = None;
+                        }
+                        empty_response_retries = 0;
+                        error_retry_count = 0;
                         continue 'outer;
                     }
                     InferenceOutcome::ToolsContinue => {
                         if chat.get_inference_debug() {
                             print_heart_yellow(&format!("🔄 [DEBUG] InferenceOutcome::ToolsContinue - will repeat inference"), true);
                         }
-                        // Reset empty response retries when we have a valid tool call response
+                        // Reset retries on successful tool call response
                         empty_response_retries = 0;
+                        error_retry_count = 0;
                         
                         // Should push the request again
                         let cancel_token = tokio_util::sync::CancellationToken::new();
