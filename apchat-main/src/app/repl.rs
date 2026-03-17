@@ -347,6 +347,12 @@ pub async fn run_repl_mode(
         if chat.debug_level > 0 {
             print_heart_yellow(&format!("Select start"), true);
         }
+        // Get IPC notify handle for the select (wake up when IPC message arrives)
+        let ipc_notify = {
+            let mb = ipc_mailbox.lock().await;
+            mb.notify.clone()
+        };
+
         tokio::select! {
             llm_response_res = llm_channels.response_rx.recv() => {
                 print_heart_yellow(&format!("📨 [DEBUG] LLM response received from channel"), true);
@@ -595,6 +601,11 @@ pub async fn run_repl_mode(
                         print_heart_yellow(&format!("📨 Pending message received (will be processed after current tool operations complete)"), true);
                     }
                 }
+            },
+            // Wake up when an IPC message arrives
+            _ = ipc_notify.notified() => {
+                // IPC message received — loop back to drain it at the top of 'outer
+                continue 'outer;
             },
         }
 

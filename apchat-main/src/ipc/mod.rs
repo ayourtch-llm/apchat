@@ -88,24 +88,31 @@ async fn socket_reader_loop(socket: tokio::net::UnixDatagram, mailbox: SharedMai
                     continue;
                 }
 
-                // Extract sender PID from the socket path
-                let sender_pid = addr.as_pathname()
+                // Extract sender PID from the socket path first
+                let addr_pid = addr.as_pathname()
                     .and_then(|p| p.file_name())
                     .and_then(|f| f.to_str())
                     .and_then(|name| name.strip_prefix("apchat_pid_"))
                     .and_then(|rest| rest.strip_suffix(".sock"))
-                    .and_then(|pid_str| pid_str.parse::<u32>().ok())
-                    .unwrap_or(0);
+                    .and_then(|pid_str| pid_str.parse::<u32>().ok());
 
                 // Parse as JSON if possible, otherwise treat as plain text
-                let content = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                    json.get("content")
+                // Also extract sender_pid from JSON payload as fallback
+                let (content, json_pid) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                    let c = json.get("content")
                         .and_then(|v| v.as_str())
                         .unwrap_or(&text)
-                        .to_string()
+                        .to_string();
+                    let p = json.get("sender_pid")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u32);
+                    (c, p)
                 } else {
-                    text
+                    (text, None)
                 };
+
+                // Use socket address PID if available, otherwise fall back to JSON payload
+                let sender_pid = addr_pid.or(json_pid).unwrap_or(0);
 
                 print_heart_yellow(&format!("📨 [IPC] Message from PID {}: {}",
                     sender_pid,
