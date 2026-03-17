@@ -64,6 +64,8 @@ pub fn get_meta_path(pid: u32) -> std::path::PathBuf {
 pub struct AgentMeta {
     pub pid: u32,
     #[serde(default)]
+    pub parent_pid: u32,
+    #[serde(default)]
     pub work_dir: String,
     #[serde(default)]
     pub title: String,

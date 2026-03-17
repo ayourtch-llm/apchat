@@ -67,9 +67,15 @@ pub fn start_socket_listener(mailbox: SharedMailbox, work_dir: &std::path::Path)
         socket_reader_loop(async_socket, mailbox).await;
     });
 
-    // Write agent metadata
+    // Write agent metadata (parent_pid from OS — for apchat hierarchy)
+    #[cfg(unix)]
+    let parent_pid = unsafe { libc::getppid() } as u32;
+    #[cfg(not(unix))]
+    let parent_pid = 0u32;
+
     write_agent_meta(&AgentMeta {
         pid,
+        parent_pid,
         work_dir: work_dir.to_string_lossy().to_string(),
         title: String::new(),
     });
@@ -151,8 +157,8 @@ async fn socket_reader_loop(socket: tokio::net::UnixDatagram, mailbox: SharedMai
     }
 }
 
-/// Find a child agent PID by scanning the socket directory for processes
-/// whose parent PID is the current process.
+/// Find a child agent PID by scanning metadata files for agents
+/// whose parent_pid matches ours.
 pub fn find_child_agent_pid() -> Option<u32> {
     let our_pid = std::process::id();
     let msg_dir = get_ipc_msg_dir();
@@ -166,13 +172,15 @@ pub fn find_child_agent_pid() -> Option<u32> {
     if let Ok(entries) = std::fs::read_dir(&msg_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Some(pid_str) = name.strip_prefix("apchat_pid_").and_then(|s| s.strip_suffix(".sock")) {
+            if let Some(pid_str) = name.strip_prefix("apchat_pid_").and_then(|s| s.strip_suffix(".meta")) {
                 if let Ok(pid) = pid_str.parse::<u32>() {
                     if pid == our_pid {
                         continue;
                     }
-                    if get_parent_pid(pid) == Some(our_pid) {
-                        candidates.push(pid);
+                    if let Some(meta) = apchat_mspc::ipc::read_agent_meta(pid) {
+                        if meta.parent_pid == our_pid {
+                            candidates.push(pid);
+                        }
                     }
                 }
             }
@@ -182,35 +190,9 @@ pub fn find_child_agent_pid() -> Option<u32> {
     candidates.into_iter().max()
 }
 
-/// Get the parent PID of a process (public wrapper).
+/// Get the parent PID of an agent from its metadata file.
 pub fn get_parent_pid_pub(pid: u32) -> Option<u32> {
-    get_parent_pid(pid)
-}
-
-fn get_parent_pid(pid: u32) -> Option<u32> {
-    #[cfg(target_os = "linux")]
-    {
-        std::fs::read_to_string(format!("/proc/{}/stat", pid))
-            .ok()
-            .and_then(|stat| {
-                let after_comm = stat.rfind(')')?;
-                let fields: Vec<&str> = stat[after_comm + 2..].split_whitespace().collect();
-                fields.get(1)?.parse::<u32>().ok()
-            })
-    }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("ps")
-            .args(["-p", &pid.to_string(), "-o", "ppid="])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .and_then(|s| s.trim().parse::<u32>().ok())
-    }
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-    {
-        None
-    }
+    apchat_mspc::ipc::read_agent_meta(pid).map(|m| m.parent_pid).filter(|&p| p != 0)
 }
 
 /// Send a message to a specific PID's socket (synchronous, for REPL use).
