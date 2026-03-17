@@ -114,9 +114,16 @@ async fn socket_reader_loop(socket: tokio::net::UnixDatagram, mailbox: SharedMai
                 // Use socket address PID if available, otherwise fall back to JSON payload
                 let sender_pid = addr_pid.or(json_pid).unwrap_or(0);
 
+                let display_content: &str = if content.len() > 100 {
+                    // Find a char boundary at or before 100
+                    let mut end = 100;
+                    while end > 0 && !content.is_char_boundary(end) { end -= 1; }
+                    &content[..end]
+                } else {
+                    &content
+                };
                 print_heart_yellow(&format!("📨 [IPC] Message from PID {}: {}",
-                    sender_pid,
-                    if content.len() > 100 { &content[..100] } else { &content }
+                    sender_pid, display_content
                 ), true);
 
                 let mut mb = mailbox.lock().await;
