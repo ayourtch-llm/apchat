@@ -207,6 +207,11 @@ pub async fn run_repl_mode(
 
     let interrupt_sender_for_main = interrupt_sender;
 
+    // ── IPC socket listener ────────────────────────────────────────────────
+    let ipc_mailbox = apchat_mspc::ipc::new_shared_mailbox();
+    chat.ipc_mailbox = Some(ipc_mailbox.clone());
+    let _socket_guard = crate::ipc::start_socket_listener(ipc_mailbox.clone());
+
     // ── Scheduled instruction poller ───────────────────────────────────────
     // Create and start the scheduled instruction poller only if enabled
     let poller_handle = if cli.delayed_instructions {
@@ -243,6 +248,52 @@ pub async fn run_repl_mode(
     'outer: loop {
         // ── Inference with interrupt support ───────────────────────────────
         if !llm_running {
+            // Drain IPC mailbox — route messages based on context
+            {
+                let mut mb = ipc_mailbox.lock().await;
+                for msg in mb.drain() {
+                    // @user: messages are displayed directly to the interactive user
+                    if msg.content.starts_with("@user:") {
+                        let user_msg = msg.content.strip_prefix("@user:").unwrap_or(&msg.content).trim();
+                        print_heart_yellow(&format!(
+                            "📨 [Agent PID {}] {}",
+                            msg.sender_pid, user_msg
+                        ), true);
+                        continue;
+                    }
+
+                    // If a subagent tool is active, forward the message to the child agent
+                    if apchat_vty::is_tool_active() {
+                        if let Some(tool_name) = apchat_vty::get_current_tool_name() {
+                            if tool_name.contains("subagent") || tool_name.contains("launch") {
+                                if let Some(child_pid) = crate::ipc::find_child_agent_pid() {
+                                    let our_pid = std::process::id();
+                                    let fwd_msg = format!(
+                                        "Forwarded from interactive user (PID {}). \
+                                        If you want to reply to the user, start your response IPC message with @user: — \
+                                        Original message: {}",
+                                        our_pid, msg.content
+                                    );
+                                    crate::ipc::send_message_to_pid(child_pid, our_pid, &fwd_msg);
+                                    print_heart_yellow(&format!(
+                                        "📨 [IPC] Forwarded message to child agent PID {}",
+                                        child_pid
+                                    ), true);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Default: queue as urgent message for this agent
+                    let ipc_text = format!(
+                        "=== INTERPROCESS MESSAGE from PID {} ===\n{}\n=== END INTERPROCESS MESSAGE ===",
+                        msg.sender_pid, msg.content
+                    );
+                    urgent_messages.push(ipc_text);
+                }
+            }
+
             // First, inject urgent messages in FIFO order before regular queued messages
             if !urgent_messages.is_empty() {
                 let mut urgent_input = get_urgent_input(&mut urgent_messages);

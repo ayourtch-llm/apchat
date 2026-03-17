@@ -4,6 +4,7 @@
 
 pub mod channel;
 pub mod output;
+pub mod ipc;
 
 pub use channel::{
     MspcChannel,

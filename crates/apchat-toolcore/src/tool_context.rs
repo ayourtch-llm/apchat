@@ -12,6 +12,7 @@ use crate::content_limiter::ContentLimiter;
 use crate::tool_registry::ToolRegistry;
 use apchat_models::types::ModelColor;
 use apchat_mspc::MspcMessage;
+use apchat_mspc::ipc::SharedMailbox;
 use apchat_llm_api::LlmRequestOverrides;
 use crate::context_edit::ContextEdit;
 
@@ -55,6 +56,7 @@ pub struct ToolContext {
     pub python_sandbox: bool, // Whether python sandbox is enabled (propagated to subagents)
     pub skip_content_limiter: bool, // Whether to skip content limiter for this tool execution (per-tool bypass)
     pub cancellation_token: Option<CancellationToken>, // Cancellation token for Ctrl-C propagation
+    pub ipc_mailbox: Option<SharedMailbox>, // Interprocess messaging mailbox
 }
 
 impl Clone for ToolContext {
@@ -85,6 +87,7 @@ impl Clone for ToolContext {
             python_sandbox: self.python_sandbox,
             skip_content_limiter: self.skip_content_limiter,
             cancellation_token: self.cancellation_token.clone(),
+            ipc_mailbox: self.ipc_mailbox.clone(),
         }
     }
 }
@@ -115,6 +118,7 @@ impl std::fmt::Debug for ToolContext {
             .field("python_sandbox", &self.python_sandbox)
             .field("skip_content_limiter", &self.skip_content_limiter)
             .field("cancellation_token", &self.cancellation_token.is_some())
+            .field("ipc_mailbox", &self.ipc_mailbox.is_some())
             .finish()
     }
 }
@@ -146,6 +150,7 @@ impl ToolContext {
             python_sandbox: false,
             skip_content_limiter: false,
             cancellation_token: None,
+            ipc_mailbox: None,
         }
     }
 
@@ -258,6 +263,11 @@ impl ToolContext {
     /// Returns true if cancelled, false if no token or not cancelled.
     pub fn is_cancelled(&self) -> bool {
         self.cancellation_token.as_ref().map_or(false, |t| t.is_cancelled())
+    }
+
+    pub fn with_ipc_mailbox(mut self, mailbox: SharedMailbox) -> Self {
+        self.ipc_mailbox = Some(mailbox);
+        self
     }
 
     /// Get an LLM client for a specific model color

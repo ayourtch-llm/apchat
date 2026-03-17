@@ -95,6 +95,35 @@ pub(crate) async fn chat(
                 }
             }
 
+            // Drain IPC messages and inject into conversation
+            if let Some(ref mailbox) = chat.ipc_mailbox {
+                let mut mb = mailbox.lock().await;
+                for msg in mb.drain() {
+                    // @user: messages in non-interactive mode are just logged
+                    if msg.content.starts_with("@user:") {
+                        let user_msg = msg.content.strip_prefix("@user:").unwrap_or(&msg.content).trim();
+                        print_heart_yellow(&format!(
+                            "📨 [IPC @user from PID {} to PID {}] {}",
+                            msg.sender_pid, std::process::id(), user_msg
+                        ), true);
+                        continue;
+                    }
+
+                    let content = format!(
+                        "=== INTERPROCESS MESSAGE from PID {} ===\n{}\n=== END INTERPROCESS MESSAGE ===",
+                        msg.sender_pid, msg.content
+                    );
+                    chat.messages.push(Message {
+                        role: "user".to_string(),
+                        content: vec![ContentPart::Text(content)],
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                        reasoning: None,
+                    });
+                }
+            }
+
             // Validate and fix tool calls in the conversation history before sending to API
             // This ensures fixes are permanent and consistent across requests (preserving cache)
             if let Ok(fixed) = crate::tools_execution::validation::validate_and_fix_tool_calls_in_place(chat) {

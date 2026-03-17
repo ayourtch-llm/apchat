@@ -42,6 +42,7 @@ pub async fn dispatch_command(
     if line == "/compact"                                                 { return cmd_compact(chat).await; }
     if line == "/confirm"                                                 { return cmd_confirm(chat); }
     if line.starts_with("/set model url")                                 { return cmd_set_model_url(chat, line, current_model_shared).await; }
+    if line == "/tree"                                                      { return cmd_tree(); }
 
     CommandResult::NotACommand
 }
@@ -505,4 +506,148 @@ fn display_url(url: Option<&String>) -> String {
         Some(u) => format!("{}", u.bright_blue()),
         None => "not set".bright_black().to_string(),
     }
+}
+
+fn cmd_tree() -> CommandResult {
+    use apchat_mspc::ipc::get_ipc_msg_dir;
+    use std::collections::HashMap;
+
+    let our_pid = std::process::id();
+    let msg_dir = get_ipc_msg_dir();
+
+    if !msg_dir.exists() {
+        print_heart_yellow("No IPC directory found. No agents running.", true);
+        return CommandResult::Handled;
+    }
+
+    let mut agents: Vec<u32> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&msg_dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if let Some(pid_str) = name.strip_prefix("apchat_pid_").and_then(|s| s.strip_suffix(".sock")) {
+                if let Ok(pid) = pid_str.parse::<u32>() {
+                    #[cfg(unix)]
+                    let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+                    #[cfg(not(unix))]
+                    let alive = true;
+                    if alive {
+                        agents.push(pid);
+                    } else {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
+    }
+
+    if agents.is_empty() {
+        print_heart_yellow("No agents running.", true);
+        return CommandResult::Handled;
+    }
+
+    // Build parent->children map
+    let mut children_map: HashMap<u32, Vec<u32>> = HashMap::new();
+    let mut has_parent: std::collections::HashSet<u32> = std::collections::HashSet::new();
+    let agent_set: std::collections::HashSet<u32> = agents.iter().copied().collect();
+
+    for &pid in &agents {
+        if let Some(ppid) = crate::ipc::get_parent_pid_pub(pid) {
+            if agent_set.contains(&ppid) {
+                children_map.entry(ppid).or_default().push(pid);
+                has_parent.insert(pid);
+            }
+        }
+    }
+
+    let mut roots: Vec<u32> = agents.iter()
+        .filter(|pid| !has_parent.contains(pid))
+        .copied()
+        .collect();
+    roots.sort();
+
+    print_heart_red(&format!("{}", "Agent Tree:".bright_cyan().bold()), true);
+
+    for (i, &root) in roots.iter().enumerate() {
+        let is_last = i == roots.len() - 1;
+        print_agent_node(root, our_pid, &children_map, "", is_last);
+    }
+
+    CommandResult::Handled
+}
+
+fn print_agent_node(
+    pid: u32,
+    our_pid: u32,
+    children_map: &std::collections::HashMap<u32, Vec<u32>>,
+    prefix: &str,
+    is_last: bool,
+) {
+    let connector = if prefix.is_empty() { "" } else if is_last { "└── " } else { "├── " };
+
+    let cmdline = get_cmdline_short(pid);
+    let task = extract_task(&cmdline);
+
+    let pid_str = if pid == our_pid {
+        format!("{}", format!("PID {} (self)", pid).bright_green().bold())
+    } else {
+        format!("{}", format!("PID {}", pid).bright_yellow())
+    };
+
+    let task_str = match task {
+        Some(t) => format!(" task={}", t.bright_cyan()),
+        None => if cmdline.contains("-i") || cmdline.contains("--interactive") {
+            format!(" {}", "[interactive]".bright_green())
+        } else {
+            String::new()
+        },
+    };
+
+    let state_str = if pid == our_pid {
+        if apchat_vty::is_tool_active() {
+            format!(" [{}]", format!("tool:{}", apchat_vty::get_current_tool_name().unwrap_or("?".into())).bright_black())
+        } else {
+            format!(" [{}]", "idle".bright_black())
+        }
+    } else {
+        format!(" [{}]", "active".bright_black())
+    };
+
+    print_heart_red(&format!("{}{}{}{}{}", prefix, connector, pid_str, task_str, state_str), true);
+
+    let empty = Vec::new();
+    let children = children_map.get(&pid).unwrap_or(&empty);
+
+    let child_prefix = if prefix.is_empty() {
+        "  ".to_string()
+    } else if is_last {
+        format!("{}    ", prefix)
+    } else {
+        format!("{}│   ", prefix)
+    };
+
+    for (i, &child) in children.iter().enumerate() {
+        print_agent_node(child, our_pid, children_map, &child_prefix, i == children.len() - 1);
+    }
+}
+
+fn get_cmdline_short(pid: u32) -> String {
+    #[cfg(target_os = "linux")]
+    { std::fs::read_to_string(format!("/proc/{}/cmdline", pid)).unwrap_or_default().replace('\0', " ").trim().to_string() }
+    #[cfg(target_os = "macos")]
+    { std::process::Command::new("ps").args(["-p", &pid.to_string(), "-o", "command="]).output().ok().and_then(|o| String::from_utf8(o.stdout).ok()).unwrap_or_default().trim().to_string() }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    { String::new() }
+}
+
+fn extract_task(cmdline: &str) -> Option<String> {
+    let parts: Vec<&str> = cmdline.split_whitespace().collect();
+    for (i, part) in parts.iter().enumerate() {
+        if *part == "--task" {
+            return parts.get(i + 1).map(|s| {
+                let t = s.to_string();
+                if t.len() > 60 { format!("{}...", &t[..57]) } else { t }
+            });
+        }
+    }
+    None
 }

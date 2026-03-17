@@ -116,8 +116,22 @@ async fn wait_with_progress(duration: f64, message: &str, context: &ToolContext)
             last_update_time = now;
         }
         
-        // Sleep for a small interval to avoid busy-waiting
-        sleep(Duration::from_millis(100)).await;
+        // Sleep for a small interval, but wake early on IPC message
+        if let Some(ref mailbox) = context.ipc_mailbox {
+            let notify = mailbox.lock().await.notify.clone();
+            tokio::select! {
+                _ = sleep(Duration::from_millis(100)) => {},
+                _ = notify.notified() => {
+                    let progress_pct = (elapsed.as_secs_f64() / duration) * 100.0;
+                    return Ok(format!(
+                        "Wait interrupted by interprocess message after {:.1} seconds ({:.1}% of {:.1}s)",
+                        elapsed.as_secs_f64(), progress_pct, duration
+                    ));
+                },
+            }
+        } else {
+            sleep(Duration::from_millis(100)).await;
+        }
         elapsed = start_time.elapsed();
     }
     

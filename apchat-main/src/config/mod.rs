@@ -262,6 +262,10 @@ pub fn initialize_tool_registry(
     // Register wait/sleep tools
     registry.register_with_categories(LongWaitTool, vec!["system".to_string()]);
 
+    // Register IPC tools (agent discovery and inter-agent messaging)
+    registry.register_with_categories(GetAgentTreeTool, vec!["ipc".to_string(), "agent_control".to_string()]);
+    registry.register_with_categories(SendAgentMessageTool, vec!["ipc".to_string(), "agent_control".to_string()]);
+
     // Register RLM context chunking tool
     registry.register_with_categories(RlmContextChunkTool, vec!["file_ops".to_string(), "rlm".to_string()]);
 

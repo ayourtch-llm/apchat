@@ -49,8 +49,9 @@ pub fn get_system_prompt(
     and making informed decisions about subsequent tasks.\n\n\
     Model switches may happen automatically during the conversation based on tool usage and errors. \
     The currently active model will be indicated in system messages as the conversation progresses.\n
-    📅 Current Date: {}",
-    grn_model_name, blu_model_name, red_model_name, current_date);
+    📅 Current Date: {}\n\
+    🆔 Agent PID: {}",
+    grn_model_name, blu_model_name, red_model_name, current_date, std::process::id());
 
     // Add early superpowers section if enabled
     if early_superpowers {

@@ -90,6 +90,8 @@ pub struct APChat {
     pub(crate) task_completion_marker: Option<String>,
     // Current cancellation token for Ctrl-C propagation to tools
     pub(crate) cancellation_token: Option<tokio_util::sync::CancellationToken>,
+    // Interprocess messaging mailbox
+    pub(crate) ipc_mailbox: Option<apchat_mspc::ipc::SharedMailbox>,
 }
 
 impl APChat {
@@ -341,6 +343,7 @@ impl APChat {
             bogus_ack_msg: None, // Default to no bogus ack message
             task_completion_marker: None,
             cancellation_token: None,
+            ipc_mailbox: None,
         };
 
         chat.messages.push(Message {
@@ -623,6 +626,11 @@ impl APChat {
                 // Propagate cancellation token for Ctrl-C
                 if let Some(ref token) = self.cancellation_token {
                     context = context.with_cancellation_token(token.clone());
+                }
+
+                // Propagate IPC mailbox
+                if let Some(ref mailbox) = self.ipc_mailbox {
+                    context = context.with_ipc_mailbox(mailbox.clone());
                 }
 
                 let context = context;

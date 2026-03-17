@@ -11,6 +11,7 @@ pub mod app;
 pub mod terminal;
 pub mod web;
 pub mod scheduled_instructions;
+pub mod ipc;
 
 
 mod apchat;
