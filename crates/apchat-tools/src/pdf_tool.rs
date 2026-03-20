@@ -23,6 +23,7 @@ impl Tool for ReadPdfTool {
         HashMap::from([
             param!("file_path", "string", "Path to the PDF file relative to the work directory", required),
             param!("max_pages", "integer", "Maximum number of pages to extract (optional, extracts all pages by default)", optional),
+            param!("start_page", "integer", "Starting page number to extract from (optional, defaults to 1)", optional),
         ])
     }
 
@@ -33,8 +34,9 @@ impl Tool for ReadPdfTool {
         };
 
         let max_pages = params.get_optional::<usize>("max_pages").unwrap_or(None);
+        let start_page = params.get_optional::<usize>("start_page").unwrap_or(None);
 
-        match pdf_reader::extract_text_from_pdf(&context.work_dir, &file_path, max_pages).await {
+        match pdf_reader::extract_text_from_pdf(&context.work_dir, &file_path, max_pages, start_page).await {
             Ok(content) => {
                 // Check if content is too large and needs truncation warning
                 const MAX_SIZE: usize = 100_000; // ~100k chars

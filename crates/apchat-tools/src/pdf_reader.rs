@@ -36,6 +36,7 @@ pub async fn extract_text_from_pdf(
     work_dir: &Path,
     file_path: impl AsRef<Path>,
     max_pages: Option<usize>,
+    start_page: Option<usize>,
 ) -> Result<String> {
     let abs_path = work_dir.join(file_path.as_ref());
 
@@ -79,10 +80,11 @@ pub async fn extract_text_from_pdf(
 
     let num_pages = doc.get_pages().len();
     let max_pages = max_pages.unwrap_or(num_pages).min(num_pages);
+    let start_page = start_page.unwrap_or(1).max(1);
 
     let mut text_content = String::new();
 
-    for (page_num, page_id) in doc.get_pages().iter().take(max_pages) {
+    for (page_num, page_id) in doc.get_pages().iter().skip(start_page.saturating_sub(1)).take(max_pages) {
         // Extract text from the page
         match extract_text_from_page(&doc, *page_id) {
             Ok(page_text) => {
