@@ -24,7 +24,6 @@ members = [
     "crates/apchat-ocr",
     "crates/apchat-types",
     "crates/apchat-pptx",
-    "crates/mockllm",
 ]
 resolver = "2"
 

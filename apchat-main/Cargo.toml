@@ -122,4 +122,4 @@ version = "5"
 
 [dev-dependencies]
 tempfile = "3.10"
-mockllm = { path = "../crates/mockllm" }
+mockllm = { git = "https://github.com/ayourtch-llm/mockllm" }
