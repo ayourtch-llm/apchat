@@ -3001,6 +3001,7 @@ impl Drop for Readline {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_strip_ansi_codes_basic() {
@@ -3076,7 +3077,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_readline_creation() {
         let readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3087,7 +3088,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_raw_mode_enabled_on_creation() {
         let readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3098,7 +3099,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_raw_mode_disabled_on_drop() {
         // Test with Readline struct
         {
@@ -3114,7 +3115,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_multiple_readline_instances() {
         // Skip this test if we can't create a readline instance
         // (e.g., in CI environments without a TTY)
@@ -3144,7 +3145,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_initial_state() {
         let readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3163,7 +3164,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_add_history_entry() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3179,7 +3180,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_add_history_empty_lines() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3197,7 +3198,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_add_history_consecutive_duplicates() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3219,7 +3220,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_history_up_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3252,7 +3253,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_history_down_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3280,7 +3281,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_history_navigation_with_saved_line() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3305,7 +3306,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_history_navigation_empty_history() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3319,7 +3320,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_exit_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3338,7 +3339,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_history_boundary_conditions() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3363,7 +3364,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_char() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3390,7 +3391,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_char_exits_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.add_history_entry("old");
@@ -3407,7 +3408,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_char_edits_history_in_middle() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.add_history_entry("hello");
@@ -3429,7 +3430,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_backspace() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hello");
@@ -3459,7 +3460,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_backspace_exits_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.add_history_entry("old");
@@ -3475,7 +3476,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_delete() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hello");
@@ -3501,7 +3502,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_delete_exits_history_navigation() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.add_history_entry("old");
@@ -3518,7 +3519,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_left() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hi");
@@ -3538,7 +3539,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_right() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hi");
@@ -3558,7 +3559,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_home() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hello");
@@ -3574,7 +3575,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_handle_end() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
         readline.set_line("hello");
@@ -3590,7 +3591,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_key_handlers_with_empty_line() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3608,7 +3609,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_unicode_handling() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3626,7 +3627,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_if_needed_no_split_short_line() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3643,7 +3644,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_if_needed_word_boundary() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3672,7 +3673,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_if_needed_forced_break() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3698,7 +3699,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_if_needed_subsequent_line() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3718,7 +3719,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_preserves_scroll_offset() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3742,7 +3743,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_uses_prompt_width() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3763,7 +3764,7 @@ mod tests {
     }
 
     #[test]
-
+    #[serial]
     fn test_split_line_no_prompt_on_subsequent_lines() {
         let mut readline = create_test_readline().expect("Failed to create Readline");
 
@@ -3785,5 +3786,598 @@ mod tests {
 
         // Verify split occurred (cursor moved to line 2 or 3)
         assert!(readline.cursor_line >= 2, "Cursor should be on line 2 or higher after split");
+    }
+
+    // ---- New tests for methods not previously covered ----
+
+    #[test]
+    #[serial]
+    fn test_redraw_does_not_panic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Redraw with empty line
+        readline.redraw("> ");
+
+        // Redraw with content
+        readline.set_line("hello world");
+        readline.set_cursor(5, None);
+        readline.redraw("prompt> ");
+
+        // Redraw with multiline content
+        readline.lines = vec!["line 1".to_string(), "line 2".to_string()];
+        readline.cursor_line = 1;
+        readline.cursor_col = 6;
+        readline.redraw("$ ");
+    }
+
+    #[test]
+    #[serial]
+    fn test_restore_terminal() {
+        let readline = create_test_readline().expect("Failed to create Readline");
+
+        // restore_terminal should succeed when raw mode is enabled
+        assert!(readline.is_raw_mode_enabled());
+        let result = readline.restore_terminal();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_end_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(5, None);
+
+        // Kill from cursor to end
+        assert!(readline.kill_to_end());
+        assert_eq!(readline.line(), "hello");
+        assert_eq!(readline.cursor(), 5);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_end_at_start() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(0, None);
+
+        // Kill entire line from start
+        assert!(readline.kill_to_end());
+        assert_eq!(readline.line(), "");
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_end_at_end() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
+
+        // Kill at end of line - kills the empty suffix
+        // The method still returns true because it adds empty string to kill ring
+        assert!(readline.kill_to_end());
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_end_empty_line() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Kill on empty single line - nothing to kill
+        assert!(!readline.kill_to_end());
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_start_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(5, None);
+
+        // Kill from start to cursor
+        assert!(readline.kill_to_start());
+        assert_eq!(readline.line(), " world");
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_start_at_start() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(0, None);
+
+        // Kill at start - nothing to kill
+        assert!(!readline.kill_to_start());
+        assert_eq!(readline.line(), "hello");
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_to_start_at_end() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
+
+        // Kill entire line from end
+        assert!(readline.kill_to_start());
+        assert_eq!(readline.line(), "");
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_yank_empty_kill_ring() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Yank with empty kill ring - should do nothing
+        assert!(!readline.yank());
+        assert_eq!(readline.line(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_yank_after_kill() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(5, None);
+
+        // Kill to end (kills " world")
+        readline.kill_to_end();
+        assert_eq!(readline.line(), "hello");
+
+        // Move cursor to beginning
+        readline.set_cursor(0, None);
+
+        // Yank - should insert " world" at cursor
+        assert!(readline.yank());
+        assert_eq!(readline.line(), " worldhello");
+        assert_eq!(readline.cursor(), 6);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_and_yank_roundtrip() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("abc def ghi");
+        readline.set_cursor(4, None);
+
+        // Kill to end
+        readline.kill_to_end();
+        assert_eq!(readline.line(), "abc ");
+
+        // Move to end
+        readline.handle_end();
+
+        // Yank killed text back
+        assert!(readline.yank());
+        assert_eq!(readline.line(), "abc def ghi");
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_left_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(11, None);
+
+        // Kill word left (kills "world")
+        assert!(readline.kill_word_left());
+        assert_eq!(readline.line(), "hello ");
+        assert_eq!(readline.cursor(), 6);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_left_at_start() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(0, None);
+
+        // Kill word left at start - nothing to kill
+        assert!(!readline.kill_word_left());
+        assert_eq!(readline.line(), "hello");
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_right_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(0, None);
+
+        // Kill word right (kills "hello")
+        assert!(readline.kill_word_right());
+        assert_eq!(readline.line(), " world");
+        assert_eq!(readline.cursor(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_right_at_end() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
+
+        // Kill word right at end - nothing to kill
+        assert!(!readline.kill_word_right());
+        assert_eq!(readline.line(), "hello");
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_history_entries_content() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        readline.add_history_entry("command 1");
+        readline.add_history_entry("command 2");
+        readline.add_history_entry("command 3");
+
+        let entries = readline.get_history_entries();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0], "command 1");
+        assert_eq!(entries[1], "command 2");
+        assert_eq!(entries[2], "command 3");
+    }
+
+    #[test]
+    #[serial]
+    fn test_exit_history_navigation_preserves_current_content() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("old command");
+
+        // Navigate to history
+        readline.history_up();
+        assert_eq!(readline.line(), "old command");
+
+        // Exit history navigation - content stays as-is (the history entry)
+        readline.exit_history_navigation();
+        assert_eq!(readline.line(), "old command");
+        assert!(readline.history_index.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_paste_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Paste some text
+        assert!(readline.handle_paste("pasted text".to_string()));
+        // The paste handler inserts char by char
+        assert!(readline.lines.iter().any(|l| l.contains("pasted")));
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_paste_empty() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Paste empty string - should return false
+        assert!(!readline.handle_paste(String::new()));
+        assert_eq!(readline.line(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_confirmation_mode() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Enter confirmation mode
+        readline.enter_confirmation_mode("Do you approve?".to_string(), None);
+        assert_eq!(readline.mode, EditMode::Confirmation);
+        assert_eq!(readline.confirmation_prompt(), Some("Do you approve?"));
+
+        // Exit confirmation mode
+        readline.exit_confirmation_mode();
+        assert_eq!(readline.mode, EditMode::Normal);
+        assert!(readline.confirmation_prompt().is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn test_search_mode_enter_exit() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("search target");
+
+        // Set some content
+        readline.set_line("current input");
+        readline.set_cursor(7, None);
+
+        // Enter search mode
+        readline.enter_search_mode();
+        assert_eq!(readline.mode, EditMode::Search);
+
+        // Exit search mode should restore original content
+        readline.exit_search_mode();
+        assert_eq!(readline.mode, EditMode::Normal);
+        assert_eq!(readline.line(), "current input");
+        assert_eq!(readline.cursor(), 7);
+    }
+
+    #[test]
+    #[serial]
+    fn test_set_load_filename() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        assert!(readline.load_filename.is_none());
+        readline.set_load_filename(Some("test.txt".to_string()));
+        assert_eq!(readline.load_filename, Some("test.txt".to_string()));
+
+        readline.set_load_filename(None);
+        assert!(readline.load_filename.is_none());
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_word_left_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world foo");
+        readline.set_cursor(15, None);
+
+        // Move word left from end -> start of "foo"
+        assert!(readline.handle_word_left());
+        assert_eq!(readline.cursor_col, 12);
+
+        // Move word left again -> start of "world"
+        assert!(readline.handle_word_left());
+        assert_eq!(readline.cursor_col, 6);
+
+        // Move word left again -> start of "hello"
+        assert!(readline.handle_word_left());
+        assert_eq!(readline.cursor_col, 0);
+
+        // At start, should return false
+        assert!(!readline.handle_word_left());
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_word_right_basic() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world foo");
+        readline.set_cursor(0, None);
+
+        // Move word right from start -> end of "hello"
+        assert!(readline.handle_word_right());
+        // Should skip the word and then non-alnum chars
+        assert!(readline.cursor_col > 0);
+
+        // Keep moving right until we reach the end
+        while readline.handle_word_right() {}
+        // Should be at end of line
+        assert_eq!(readline.cursor_col, 15);
+
+        // At end, should return false
+        assert!(!readline.handle_word_right());
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_newline_splits_line() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello world");
+        readline.set_cursor(5, None);
+        readline.cursor_col = 5;
+
+        readline.handle_newline();
+
+        assert_eq!(readline.lines.len(), 2);
+        assert_eq!(readline.lines[0], "hello");
+        assert_eq!(readline.lines[1], " world");
+        assert_eq!(readline.cursor_line, 1);
+        assert_eq!(readline.cursor_col, 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_newline_at_start() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(0, None);
+        readline.cursor_col = 0;
+
+        readline.handle_newline();
+
+        assert_eq!(readline.lines.len(), 2);
+        assert_eq!(readline.lines[0], "");
+        assert_eq!(readline.lines[1], "hello");
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_newline_at_end() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
+        readline.cursor_col = 5;
+
+        readline.handle_newline();
+
+        assert_eq!(readline.lines.len(), 2);
+        assert_eq!(readline.lines[0], "hello");
+        assert_eq!(readline.lines[1], "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_text_returns_joined_lines() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Single line
+        readline.set_line("hello");
+        assert_eq!(readline.text(), "hello");
+
+        // Multiple lines
+        readline.lines = vec!["line1".to_string(), "line2".to_string(), "line3".to_string()];
+        assert_eq!(readline.text(), "line1\nline2\nline3");
+
+        // Empty
+        readline.lines = vec![String::new()];
+        assert_eq!(readline.text(), "");
+    }
+
+    #[test]
+    #[serial]
+    fn test_reset_input() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Set up some state
+        readline.lines = vec!["line1".to_string(), "line2".to_string()];
+        readline.cursor_line = 1;
+        readline.cursor_col = 5;
+        readline.scroll_offset = 1;
+
+        readline.reset_input();
+
+        assert_eq!(readline.lines.len(), 1);
+        assert_eq!(readline.lines[0], "");
+        assert_eq!(readline.cursor_line, 0);
+        assert_eq!(readline.cursor_col, 0);
+        assert_eq!(readline.scroll_offset, 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_clear_history_for_tests_only() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        readline.add_history_entry("cmd1");
+        readline.add_history_entry("cmd2");
+        assert_eq!(readline.get_history_entries().len(), 2);
+
+        readline.clear_history_for_tests_only();
+        assert_eq!(readline.get_history_entries().len(), 0);
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_paste_multiline() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        // Paste text with newlines
+        assert!(readline.handle_paste("line1\nline2\nline3".to_string()));
+        // Should have multiple lines
+        assert!(readline.lines.len() >= 2);
+    }
+
+    #[test]
+    #[serial]
+    fn test_handle_paste_into_existing_text() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello");
+        readline.set_cursor(5, None);
+        readline.cursor_col = 5;
+
+        assert!(readline.handle_paste(" world".to_string()));
+        assert!(readline.text().contains("hello"));
+        assert!(readline.text().contains("world"));
+    }
+
+    #[test]
+    #[serial]
+    fn test_confirmation_mode_with_id() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        readline.enter_confirmation_mode(
+            "Approve edit?".to_string(),
+            Some("edit-123".to_string()),
+        );
+        assert_eq!(readline.mode, EditMode::Confirmation);
+        assert_eq!(readline.confirmation_prompt(), Some("Approve edit?"));
+
+        readline.exit_confirmation_mode();
+        assert_eq!(readline.mode, EditMode::Normal);
+    }
+
+    #[test]
+    #[serial]
+    fn test_search_mode_preserves_line_on_exit() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.add_history_entry("findme");
+        readline.add_history_entry("another");
+
+        readline.set_line("my input");
+        readline.set_cursor(3, None);
+
+        readline.enter_search_mode();
+        assert_eq!(readline.mode, EditMode::Search);
+
+        // Exit should restore
+        readline.exit_search_mode();
+        assert_eq!(readline.mode, EditMode::Normal);
+        assert_eq!(readline.line(), "my input");
+        assert_eq!(readline.cursor(), 3);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_left_multiple_spaces() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello   world");
+        readline.set_cursor(13, None);
+
+        // Kill word left should skip spaces then the word
+        assert!(readline.kill_word_left());
+        assert_eq!(readline.line(), "hello   ");
+    }
+
+    #[test]
+    #[serial]
+    fn test_kill_word_right_multiple_spaces() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("hello   world");
+        readline.set_cursor(0, None);
+
+        // Kill word right
+        assert!(readline.kill_word_right());
+        assert_eq!(readline.line(), "   world");
+    }
+
+    #[test]
+    #[serial]
+    fn test_multiple_kills_then_yank() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("alpha beta gamma");
+        readline.set_cursor(16, None);
+
+        // Kill word left twice
+        readline.kill_word_left(); // kills "gamma"
+        readline.kill_word_left(); // kills "beta "
+
+        // The kill ring should have the last killed text
+        // Move to start and yank
+        readline.set_cursor(0, None);
+        assert!(readline.yank());
+        // Yank should insert something from the kill ring
+        assert!(readline.text().len() > "alpha ".len());
+    }
+
+    #[test]
+    #[serial]
+    fn test_redraw_with_unicode_prompt() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+        readline.set_line("test content");
+        readline.set_cursor(4, None);
+
+        // Should not panic with unicode emoji in prompt
+        readline.redraw("\u{2764}\u{fe0f} > ");
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_history_entries_order_preserved() {
+        let mut readline = create_test_readline().expect("Failed to create Readline");
+
+        let cmds = vec!["first", "second", "third", "fourth", "fifth"];
+        for cmd in &cmds {
+            readline.add_history_entry(cmd);
+        }
+
+        let entries = readline.get_history_entries();
+        assert_eq!(entries.len(), 5);
+        for (i, cmd) in cmds.iter().enumerate() {
+            assert_eq!(entries[i], *cmd);
+        }
     }
 }

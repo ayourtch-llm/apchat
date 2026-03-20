@@ -770,3 +770,275 @@ fn print_with_emoji(emoji: &str, text: &str, newline: bool, mut writer: impl io:
     let _ = writer.flush();
 
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_print_heart_red_does_not_panic() {
+        // Single line
+        print_heart_red("Hello", true);
+        // Multi-line
+        print_heart_red("Hello\nWorld", true);
+        // Without trailing newline
+        print_heart_red("No newline", false);
+        // Empty string
+        print_heart_red("", true);
+    }
+
+    #[test]
+    fn test_print_heart_yellow_does_not_panic() {
+        // Single line
+        print_heart_yellow("Warning!", true);
+        // Without trailing newline
+        print_heart_yellow("Warning!", false);
+        // Empty string
+        print_heart_yellow("", true);
+        // Multi-line
+        print_heart_yellow("Line1\nLine2\nLine3", true);
+    }
+
+    #[test]
+    fn test_print_outcome_box_does_not_panic() {
+        use apchat_types::InferenceOutcome;
+
+        // Response variant
+        print_outcome_box("test title", &InferenceOutcome::Response("some text".to_string()));
+        // Interrupted variant
+        print_outcome_box("test title", &InferenceOutcome::Interrupted);
+        // Error variant
+        print_outcome_box("test title", &InferenceOutcome::Error);
+        // ToolsContinue variant
+        print_outcome_box("test title", &InferenceOutcome::ToolsContinue);
+    }
+
+    #[test]
+    fn test_scroll_insert_up_does_not_panic() {
+        // Basic call without scroll
+        scroll_insert_up(1, "test content", false);
+        // With scroll
+        scroll_insert_up(2, "scrolled content", true);
+        // Empty text
+        scroll_insert_up(1, "", false);
+    }
+
+    #[test]
+    fn test_print_with_emoji_single_line() {
+        let mut buf = Vec::new();
+        print_with_emoji("*", "hello", true, &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("hello"));
+    }
+
+    #[test]
+    fn test_print_with_emoji_multiline() {
+        let mut buf = Vec::new();
+        print_with_emoji("*", "line1\nline2", true, &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("line1"));
+        assert!(output.contains("line2"));
+    }
+
+    #[test]
+    fn test_print_with_emoji_no_newline() {
+        let mut buf = Vec::new();
+        print_with_emoji("*", "hello", false, &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+        // Should not end with newline
+        assert!(!output.ends_with('\n'));
+    }
+
+    #[test]
+    fn test_strip_ansi_codes() {
+        let input = "\x1b[31mRed\x1b[0m Normal";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Red Normal");
+    }
+
+    #[test]
+    fn test_display_width_plain() {
+        assert_eq!(display_width("hello"), 5);
+    }
+
+    #[test]
+    fn test_display_width_with_ansi() {
+        assert_eq!(display_width("\x1b[31mhello\x1b[0m"), 5);
+    }
+
+    #[test]
+    fn test_request_counter() {
+        let initial = request_counter::get_count();
+        {
+            let _guard = RequestGuard::new();
+            assert_eq!(request_counter::get_count(), initial + 1);
+        }
+        assert_eq!(request_counter::get_count(), initial);
+    }
+
+    #[test]
+    fn test_tool_counter() {
+        let initial = tool_counter::get_count();
+        {
+            let _guard = ToolGuard::new_with_tool_name("test_tool");
+            assert_eq!(tool_counter::get_count(), initial + 1);
+            assert!(tool_counter::is_tool_active());
+            assert_eq!(tool_counter::get_current_tool_name(), Some("test_tool".to_string()));
+        }
+        assert_eq!(tool_counter::get_count(), initial);
+    }
+
+    #[test]
+    fn test_compaction_counter() {
+        // Save and restore state to avoid affecting other tests
+        let was_active = compaction_counter::is_active();
+        compaction_counter::set_active();
+        assert!(compaction_counter::is_active());
+        compaction_counter::clear();
+        assert!(!compaction_counter::is_active());
+        if was_active {
+            compaction_counter::set_active();
+        }
+    }
+
+    #[test]
+    fn test_token_counter() {
+        let initial = token_counter::get_count();
+        token_counter::increment(42);
+        assert_eq!(token_counter::get_count(), initial + 42);
+    }
+
+    #[test]
+    fn test_status_info_queued() {
+        status_info::set_queued(5);
+        assert_eq!(status_info::get_queued(), 5);
+        status_info::set_queued(0);
+    }
+
+    #[test]
+    fn test_status_info_marquee() {
+        status_info::set_marquee("test marquee text");
+        let display = status_info::get_marquee_display();
+        // Display should be exactly 30 chars (MARQUEE_WIDTH)
+        assert_eq!(display.chars().count(), 30);
+        status_info::clear_marquee();
+    }
+
+    #[test]
+    fn test_status_info_history() {
+        status_info::set_history(42);
+        assert_eq!(status_info::get_history(), 42);
+        status_info::set_history(0);
+        assert_eq!(status_info::get_history(), 0);
+    }
+
+    #[test]
+    fn test_status_info_context_bytes() {
+        status_info::set_context_bytes(1024);
+        assert_eq!(status_info::get_context_bytes(), 1024);
+        status_info::set_context_bytes(0);
+        assert_eq!(status_info::get_context_bytes(), 0);
+    }
+
+    #[test]
+    fn test_status_info_urgent() {
+        status_info::set_urgent(3);
+        assert_eq!(status_info::get_urgent(), 3);
+        status_info::set_urgent(0);
+        assert_eq!(status_info::get_urgent(), 0);
+    }
+
+    #[test]
+    fn test_status_info_pid() {
+        status_info::set_pid(12345);
+        assert_eq!(status_info::get_pid(), 12345);
+    }
+
+    #[test]
+    fn test_tool_guard_without_name() {
+        let initial = tool_counter::get_count();
+        {
+            let _guard = ToolGuard::new();
+            assert_eq!(tool_counter::get_count(), initial + 1);
+            // Without a tool name, is_tool_active may or may not be set
+            // depending on prior state, but counter should increment
+        }
+        assert_eq!(tool_counter::get_count(), initial);
+    }
+
+    #[test]
+    fn test_marquee_clear() {
+        status_info::set_marquee("some text");
+        status_info::clear_marquee();
+        let display = status_info::get_marquee_display();
+        // After clearing, display should be 30 spaces
+        assert_eq!(display, " ".repeat(30));
+    }
+
+    #[test]
+    fn test_marquee_empty_text() {
+        status_info::set_marquee("");
+        let display = status_info::get_marquee_display();
+        assert_eq!(display, " ".repeat(30));
+        status_info::clear_marquee();
+    }
+
+    #[test]
+    fn test_marquee_with_newlines_sanitized() {
+        status_info::set_marquee("line1\nline2\rline3");
+        let display = status_info::get_marquee_display();
+        // Should not contain raw newlines
+        assert!(!display.contains('\n'));
+        assert!(!display.contains('\r'));
+        assert_eq!(display.chars().count(), 30);
+        status_info::clear_marquee();
+    }
+
+    #[test]
+    fn test_wrap_text_at_width_short_line() {
+        let result = wrap_text_at_width("hello", 80);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_wrap_text_at_width_long_line() {
+        let result = wrap_text_at_width("hello world foo bar baz", 12);
+        // Should wrap into multiple lines
+        assert!(result.contains('\n'));
+        // Each line should be at most 12 display chars
+        for line in result.split('\n') {
+            assert!(display_width(line) <= 12, "Line '{}' exceeds width 12", line);
+        }
+    }
+
+    #[test]
+    fn test_wrap_text_at_width_empty() {
+        let result = wrap_text_at_width("", 80);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_wrap_text_at_width_preserves_newlines() {
+        let result = wrap_text_at_width("line1\nline2\nline3", 80);
+        assert_eq!(result, "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn test_strip_ansi_codes_nested() {
+        let input = "\x1b[1m\x1b[31mBold Red\x1b[0m";
+        let output = strip_ansi_codes(input);
+        assert_eq!(output, "Bold Red");
+    }
+
+    #[test]
+    fn test_display_width_empty() {
+        assert_eq!(display_width(""), 0);
+    }
+
+    #[test]
+    fn test_print_heart_to_file_does_not_panic() {
+        // This writes to /tmp/apchat-debug.txt; just verify no panic
+        let _ = print_heart_to_file("test output", true);
+        let _ = print_heart_to_file("no newline", false);
+    }
+}

@@ -276,3 +276,182 @@ pub fn log_stream_chunk(chunk_num: usize, data: &str, verbose: bool) {
         }
     ).bright_black());
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use apchat_models::requests::ChatRequest;
+    use apchat_models::types::{Message, ContentPart};
+
+    fn make_test_request() -> ChatRequest {
+        ChatRequest {
+            model: "test-model".to_string(),
+            stream: None,
+            tool_choice: "auto".to_string(),
+            tools: vec![],
+            messages: vec![
+                Message {
+                    role: "user".to_string(),
+                    content: vec![ContentPart::Text("Hello".to_string())],
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                    reasoning: None,
+                },
+            ],
+        }
+    }
+
+    // --- log_request tests (console output, verbose gate) ---
+
+    #[test]
+    fn test_log_request_not_verbose_does_nothing() {
+        // Should not panic when verbose=false
+        let request = make_test_request();
+        log_request("https://api.example.com/v1/chat", &request, "sk-test1234567890", false);
+    }
+
+    #[test]
+    fn test_log_request_verbose_does_not_panic() {
+        let request = make_test_request();
+        log_request("https://api.example.com/v1/chat", &request, "sk-test1234567890", true);
+    }
+
+    #[test]
+    fn test_log_request_with_invalid_url() {
+        // Invalid URL should not panic, just print URL as-is
+        let request = make_test_request();
+        log_request("not-a-url", &request, "sk-test", true);
+    }
+
+    // --- log_response tests (console output, verbose gate) ---
+
+    #[test]
+    fn test_log_response_not_verbose_does_nothing() {
+        let status = reqwest::StatusCode::OK;
+        let headers = reqwest::header::HeaderMap::new();
+        log_response(&status, &headers, "{}", false);
+    }
+
+    #[test]
+    fn test_log_response_verbose_json_body() {
+        let status = reqwest::StatusCode::OK;
+        let headers = reqwest::header::HeaderMap::new();
+        log_response(&status, &headers, "{\"key\": \"value\"}", true);
+    }
+
+    #[test]
+    fn test_log_response_verbose_non_json_body() {
+        let status = reqwest::StatusCode::INTERNAL_SERVER_ERROR;
+        let headers = reqwest::header::HeaderMap::new();
+        log_response(&status, &headers, "plain text error", true);
+    }
+
+    #[test]
+    fn test_log_response_verbose_long_body_truncated() {
+        let status = reqwest::StatusCode::OK;
+        let headers = reqwest::header::HeaderMap::new();
+        let long_body = "x".repeat(6000);
+        log_response(&status, &headers, &long_body, true);
+    }
+
+    // --- log_stream_chunk tests ---
+
+    #[test]
+    fn test_log_stream_chunk_not_verbose() {
+        log_stream_chunk(1, "some data", false);
+    }
+
+    #[test]
+    fn test_log_stream_chunk_verbose_short() {
+        log_stream_chunk(1, "short data", true);
+    }
+
+    #[test]
+    fn test_log_stream_chunk_verbose_long() {
+        let long = "a".repeat(300);
+        log_stream_chunk(42, &long, true);
+    }
+
+    // --- log_request_to_file tests ---
+
+    #[test]
+    fn test_log_request_to_file_creates_file() {
+        let request = make_test_request();
+        let result = log_request_to_file(
+            "https://api.example.com/v1/chat",
+            &request,
+            &ModelColor::BluModel,
+            "sk-test1234567890",
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_log_request_to_file_with_invalid_url() {
+        let request = make_test_request();
+        let result = log_request_to_file(
+            "not-a-url",
+            &request,
+            &ModelColor::GrnModel,
+            "sk-short",
+        );
+        // Should succeed even with invalid URL
+        assert!(result.is_ok());
+    }
+
+    // --- log_response_to_file tests ---
+
+    #[test]
+    fn test_log_response_to_file_creates_file() {
+        let status = reqwest::StatusCode::OK;
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+
+        let result = log_response_to_file(
+            &status,
+            &headers,
+            "{\"choices\": []}",
+            1234567890,
+            &ModelColor::BluModel,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_log_response_to_file_non_json_body() {
+        let status = reqwest::StatusCode::BAD_REQUEST;
+        let headers = reqwest::header::HeaderMap::new();
+
+        let result = log_response_to_file(
+            &status,
+            &headers,
+            "not json at all",
+            9999999999,
+            &ModelColor::RedModel,
+        );
+        assert!(result.is_ok());
+    }
+
+    // --- log_raw_response_to_file tests ---
+
+    #[test]
+    fn test_log_raw_response_to_file_creates_file() {
+        let result = log_raw_response_to_file(
+            "raw response data here",
+            1234567890,
+            &ModelColor::GrnModel,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_log_raw_response_to_file_empty_content() {
+        let result = log_raw_response_to_file(
+            "",
+            1111111111,
+            &ModelColor::BluModel,
+        );
+        assert!(result.is_ok());
+    }
+}
