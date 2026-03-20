@@ -2,7 +2,7 @@
 
 use apchat_toolcore::{Tool, ToolParameters, ToolContext};
 use apchat_policy::PolicyManager;
-use apchat_memory::memory::tools::UpdateMemoryTool;
+use apchat_memory::tools::UpdateMemoryTool;
 use std::path::PathBuf;
 
 #[tokio::test]
