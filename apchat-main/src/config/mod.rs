@@ -546,6 +546,42 @@ pub fn register_webex_tools(
 /// tool registry is created and before the first user interaction.
 ///
 /// Returns the list of active MCP clients for lifecycle management.
+/// Parse a command string into tokens, handling double-quoted strings and escaped quotes.
+///
+/// - Tokens are separated by whitespace
+/// - Double-quoted strings preserve spaces (quotes are stripped)
+/// - `\"` within or outside quotes is treated as a literal double quote
+fn parse_shell_words(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' if chars.peek() == Some(&'"') => {
+                chars.next();
+                current.push('"');
+            }
+            '"' => {
+                in_quotes = !in_quotes;
+            }
+            c if c.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            c => {
+                current.push(c);
+            }
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
 pub async fn register_mcp_tools(
     registry: &mut ToolRegistry,
     flags: &FeatureFlags,
@@ -586,11 +622,12 @@ pub async fn register_mcp_tools(
     }
 
     // Register generic MCP servers
-    // Note: Command is split on whitespace. tokio::process::Command does NOT use a shell,
-    // so shell metacharacters (;, |, &&, $()) are NOT interpreted - they are passed
-    // literally as arguments. This is safe from shell injection.
+    // Each mcp_server entry is a quoted string like "npx -y some-server".
+    // parse_shell_words splits it respecting double quotes and escaped quotes.
+    // tokio::process::Command does NOT use a shell, so shell metacharacters (;, |, &&, $())
+    // are NOT interpreted - they are passed literally as arguments. This is safe from shell injection.
     for (idx, cmd) in flags.mcp_servers.iter().enumerate() {
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
+        let parts = parse_shell_words(cmd);
         if parts.is_empty() {
             print_heart_yellow(
                 &format!("⚠️  Empty MCP server command, skipping"),
@@ -599,8 +636,9 @@ pub async fn register_mcp_tools(
             continue;
         }
 
-        let command = parts[0];
-        let args: Vec<&str> = parts[1..].to_vec();
+        let command = parts[0].as_str();
+        let args: Vec<&str> = parts[1..].iter().map(|s| s.as_str()).collect();
+        let cmd_display = cmd.clone();
         let server_name = format!("mcp-{}", idx);
         let prefix = format!("mcp{}_", idx);
 
@@ -621,14 +659,14 @@ pub async fn register_mcp_tools(
                     );
                 }
                 print_heart_red(
-                    &format!("✓ MCP server '{}' started ({} tools registered with {} prefix)", cmd, tool_count, prefix),
+                    &format!("✓ MCP server '{}' started ({} tools registered with {} prefix)", cmd_display, tool_count, prefix),
                     true,
                 );
                 clients.push(client);
             }
             Err(e) => {
                 print_heart_yellow(
-                    &format!("⚠️  Failed to start MCP server '{}': {}", cmd, e),
+                    &format!("⚠️  Failed to start MCP server '{}': {}", cmd_display, e),
                     true,
                 );
             }
@@ -636,4 +674,48 @@ pub async fn register_mcp_tools(
     }
 
     clients
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_shell_words;
+
+    #[test]
+    fn test_simple_command() {
+        assert_eq!(parse_shell_words("npx -y some-server"), vec!["npx", "-y", "some-server"]);
+    }
+
+    #[test]
+    fn test_quoted_argument() {
+        assert_eq!(
+            parse_shell_words(r#"cmd "arg with spaces" other"#),
+            vec!["cmd", "arg with spaces", "other"]
+        );
+    }
+
+    #[test]
+    fn test_escaped_quotes() {
+        assert_eq!(
+            parse_shell_words(r#"cmd "say \"hello\"" arg"#),
+            vec!["cmd", r#"say "hello""#, "arg"]
+        );
+    }
+
+    #[test]
+    fn test_escaped_quote_outside_quotes() {
+        assert_eq!(
+            parse_shell_words(r#"cmd \"literal arg"#),
+            vec!["cmd", r#""literal"#, "arg"]
+        );
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_eq!(parse_shell_words(""), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_extra_whitespace() {
+        assert_eq!(parse_shell_words("  cmd   arg1   arg2  "), vec!["cmd", "arg1", "arg2"]);
+    }
 }
