@@ -88,7 +88,7 @@ async fn process_repl_command(chat: &mut APChat, message: MspcMessage, interrupt
         }
 
         // Exit commands
-        if line == "exit" || line == "quit" {
+        if line == "exit" || line == "quit" || line == "/quit" || line == "/exit" {
             print_heart_red(&format!("{}", "Goodbye - exit command!".bright_cyan()), true);
             if let Err(e) = apchat_vty::ReadlineInstance::save_history() {
                 if chat.debug_level > 0 {
