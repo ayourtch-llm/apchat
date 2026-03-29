@@ -2784,10 +2784,14 @@ impl Readline {
             }
             counter -= 1;
             if counter == 0 {
-                // During active inference (streaming), skip the periodic redraw
-                // to prevent the title bar from overwriting streaming output.
-                // The title bar will refresh once inference completes.
-                if request_counter::get_count() == 0 || self.mode == EditMode::Confirmation {
+                // During active inference (streaming) or IDLE state, skip the periodic redraw.
+                // During inference, this prevents the title bar from overwriting streaming output.
+                // During IDLE, this avoids unnecessary clock updates.
+                // The title bar will refresh on user input or when activity resumes.
+                let is_idle = request_counter::get_count() == 0
+                    && tool_counter::get_count() == 0
+                    && !compaction_counter::is_active();
+                if (!is_idle && request_counter::get_count() == 0) || self.mode == EditMode::Confirmation {
                     self.redraw(&current_prompt);
                 }
                 counter = COUNTDOWN;
