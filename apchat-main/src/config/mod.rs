@@ -213,7 +213,9 @@ pub fn initialize_tool_registry(
     // Register skill tools
     registry.register_with_categories(LoadSkillTool, vec!["skills".to_string()]);
     registry.register_with_categories(ListSkillsTool, vec!["skills".to_string()]);
-    registry.register_with_categories(FindRelevantSkillsTool, vec!["skills".to_string()]);
+    if !flags.early_superpowers {
+        registry.register_with_categories(FindRelevantSkillsTool, vec!["skills".to_string()]);
+    }
 
     // Register subagent tools
     registry.register_with_categories(LaunchSubagentTool, vec!["agent_control".to_string()]);

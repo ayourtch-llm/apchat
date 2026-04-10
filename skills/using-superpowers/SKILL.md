@@ -53,7 +53,7 @@ The following skill chains MUST be followed exactly:
    - executing-plans → REQUIRED HANDOFF → finishing-a-development-branch
 
 2. **using-superpowers Chain**:
-   - using-superpowers → REQUIRED → find_relevant_skills BEFORE announcing usage
+   - using-superpowers → REQUIRED → find_relevant_skills (if tool is available) BEFORE announcing usage
    - using-superpowers → REQUIRED → load_skill BEFORE announcing usage
 
 3. **Development Workflow Chain**:
