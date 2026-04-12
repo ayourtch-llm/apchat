@@ -17,14 +17,14 @@ impl Tool for LlmCallTool {
     }
 
     fn description(&self) -> &str {
-        "Make a one-shot call to an LLM model. Accepts model color (red/grn/blu), instruction, and optionally a file path to append to the instruction."
+        "Make a one-shot call to an LLM model. Accepts model color (red/grn/blu), instruction, and a file path to append its contents to the instruction."
     }
 
     fn parameters(&self) -> HashMap<String, ParameterDefinition> {
         HashMap::from([
             param!("model_color", "string", "Model color to call (red, grn, blu)", required),
             param!("instruction", "string", "Instruction/prompt for the LLM", required),
-            param!("file_path", "string", "Optional file path, from which to append contents to instruction", optional),
+            param!("file_path", "string", "The contents of the file at that path will be appended to the instruction.", required),
         ])
     }
 
