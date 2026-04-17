@@ -43,6 +43,11 @@ pub fn get_embedded_skills() -> HashMap<&'static str, &'static str> {
     skills.insert("crafting-instructions", include_str!("../../../skills/crafting-instructions/SKILL.md"));
     skills.insert("reviewing-ai-papers", include_str!("../../../skills/reviewing-ai-papers/SKILL.md"));
 
+    // Skills from https://github.com/ed3dai/ed3d-plugins (CC-BY-SA 4.0) - behind --ed3d-skills flag
+    skills.insert("property-based-testing", include_str!("../../../skills/property-based-testing/SKILL.md"));
+    skills.insert("functional-core-imperative-shell", include_str!("../../../skills/functional-core-imperative-shell/SKILL.md"));
+    skills.insert("writing-for-a-technical-audience", include_str!("../../../skills/writing-for-a-technical-audience/SKILL.md"));
+
     // Community skills (from https://github.com/roby2358/skills) - behind --community-skills flag
     skills.insert("socratic", include_str!("../../../skills/socratic/SKILL.md"));
     skills.insert("reverse-socratic-examination", include_str!("../../../skills/reverse-socratic-examination/SKILL.md"));

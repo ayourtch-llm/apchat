@@ -26,6 +26,7 @@ pub struct FeatureFlags {
     pub crafting_instructions: bool,
     pub reviewing_ai_papers: bool,
     pub elements_of_style: bool,
+    pub ed3d_skills: bool,
     pub self_edit: bool,
     pub diff_fuzz: bool,
     pub forecasting: bool,
